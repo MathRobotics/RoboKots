@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "robokotz"
+version = "0.0.1"
+authors = [  
+  { name="taiki-ishigaki", email="taiki.ishigaki@ieee.org" },
+]
+description = "robotics library"
+readme = "README.md"
+
+license = {text = "MIT License"}
+requires-python = ">=3.9"
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/MathRobotics/RoboKOTZ"

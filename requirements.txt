@@ -1,0 +1,9 @@
+numpy
+scipy
+sympy
+polars
+pytest
+
+matplotlib
+pillow
+ffmpeg
