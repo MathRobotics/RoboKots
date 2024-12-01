@@ -3,7 +3,7 @@ import numpy as np
 import robokots
 
 def main():
-  robot = robokots.Robot.init_from_model_file("simple_robot.ktz") 
+  robot = robokots.Robot.init_from_model_file("simple_robot.kts") 
   
   coord = [1., -2., 1.]
   veloc = [0., 0., 0.]
