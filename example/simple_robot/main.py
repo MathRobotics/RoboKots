@@ -1,9 +1,9 @@
 import numpy as np
 
-import robokotz
+import robokots
 
 def main():
-  robot = robokotz.Robot.init_from_model_file("simple_robot.ktz") 
+  robot = robokots.Robot.init_from_model_file("simple_robot.ktz") 
   
   coord = [1., -2., 1.]
   veloc = [0., 0., 0.]
@@ -27,7 +27,7 @@ def main():
   
   print(robot.state.df.df)
 
-  robokotz.show_robot(robot, robot.state)
+  robokots.show_robot(robot, robot.state)
   
 if __name__ == "__main__":
     main()
