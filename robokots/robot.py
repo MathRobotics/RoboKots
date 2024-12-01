@@ -12,18 +12,16 @@ from mathrobo import *
 from .basic import *
 from .kinematics import *
 
-from .gen_value import *
+# from .gen_value import *
+from .motion import *
 from .state import *
   
 class Robot(RobotStruct):
-
-  gen_value : RobotGenValue
   state : RobotState 
 
-  def __init__(self, links_, joints_, gen_value_, motions_, state_):
+  def __init__(self, links_, joints_, motions_, state_):
     self.joints = joints_
     self.links = links_
-    self.gen_value = gen_value_
     self.motions = motions_
     self.state = state_
     self.robot_init()
@@ -33,10 +31,9 @@ class Robot(RobotStruct):
     robot_et = ET.parse(model_file_name).getroot()
     links, joints = RobotStruct.read_model_file(robot_et)
     robot = RobotStruct(links, joints)
-    gen_value = RobotGenValue(robot)
     motinos = RobotMotions(robot)
     state = RobotState(robot)
-    return Robot(links, joints, gen_value, motinos, state)
+    return Robot(links, joints, motinos, state)
 
   def import_gen_vecs(self, vecs):
     self.gen_value.import_vecs(self, vecs)

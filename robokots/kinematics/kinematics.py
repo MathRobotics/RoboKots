@@ -8,7 +8,7 @@ from mathrobo import *
 
 from ..basic import *
 
-from ..gen_value import *
+from ..motion import *
 from ..state import *
 
 class LinkKinematics:
