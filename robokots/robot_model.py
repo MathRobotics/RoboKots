@@ -4,14 +4,24 @@
 
 import numpy as np
 
+import json
+
 import warnings
-from typing import Dict
+from typing import List, Dict
+
+warnings.simplefilter("always", UserWarning)
 
 class RobotStruct:
-  def __init__(self, links_, joints_):
+  def __init__(self, links_: List["LinkStruct"], joints_: List["JointStruct"]):
     self.joints = joints_
     self.links = links_
-
+    self.joint_num: int = 0
+    self.link_num: int = 0
+    self.dof: int = 0
+    self.joint_dof: int = 0
+    self.link_dof: int = 0
+    self.link_names: List[str] = []
+    self.joint_names: List[str] = []
     self.robot_init()
 
   def robot_init(self):
@@ -30,21 +40,17 @@ class RobotStruct:
       
     self.dof = self.joint_dof + self.link_dof
     
-    self.set_link_names()
-    self.set_joint_names()
-  
-  def set_link_names(self):
-    self.link_names = []
-    for l in self.links:
-      self.link_names.append(l.name)
-      
-  def set_joint_names(self):
-    self.joint_names = []
-    for j in self.joints:
-      self.joint_names.append(j.name)
+    self.link_names = [l.name for l in self.links]
+    self.joint_names = [j.name for j in self.joints]
+    
+  @staticmethod
+  def from_json_file(file_path: str) -> "RobotStruct":
+      with open(file_path, 'r', encoding='utf-8') as file:
+          data = json.load(file)
+      return RobotStruct.from_dict(data)
   
   @staticmethod
-  def from_json(data: Dict):  
+  def from_dict(data: Dict):  
     joints = []
     links = []
     
@@ -69,19 +75,18 @@ class RobotStruct:
     return RobotStruct(links, joints)
 
   def print_structure(self):
-    print("Links:")
-    for link in self.links:
-      print(f"  ID: {link.id}, Name: {link.name}, Type: {link.type}")
-      print(f"    COG: {link.cog}, Mass: {link.mass}")
-      print(f"    Inertia: {link.inertia}")
-      print(f"    DOF: {link.dof}")
-    
-    print("\nJoints:")
-    for joint in self.joints:
-      print(f"  ID: {joint.id}, Name: {joint.name}, Type: {joint.type}")
-      print(f"    Axis: {joint.axis}")
-      print(f"    Parent Link: {joint.parent_link}, Child Link: {joint.child_link}")
-      print(f"    DOF: {joint.dof}")
+      print(f"Robot DOF: {self.dof}")
+      print("\nLinks:")
+      for link in self.links:
+          print(f"  ID: {link.id}, Name: {link.name}, Type: {link.type}")
+          print(f"    COG: {link.cog}, Mass: {link.mass}")
+          print(f"    Inertia: {link.inertia}, DOF: {link.dof}")
+
+      print("\nJoints:")
+      for joint in self.joints:
+          print(f"  ID: {joint.id}, Name: {joint.name}, Type: {joint.type}")
+          print(f"    Axis: {joint.axis}, Parent Link: {joint.parent_link}, Child Link: {joint.child_link}")
+          print(f"    DOF: {joint.dof}")
 
 class LinkStruct:
   def __init__(self, id: int, name: str, cog: np.ndarray, mass: float, inertia: np.ndarray, type: str = "rigid"):
@@ -99,34 +104,33 @@ class LinkStruct:
       return 0
 
 class JointStruct:
-  def __init__(self, id: int, name: str, type: str, axis: np.ndarray, parent_link: int, child_link: int):
-    self.id = id
-    self.name = name
-    self.type = type
-    self.axis = axis
-    self.parent_link = parent_link
-    self.child_link = child_link
-    self.dof = self._joint_dof(self.type)
-    self.joint_select_mat = self._joint_select_mat(self.type, self.axis)
+    def __init__(self, id: int, name: str, type: str, axis: np.ndarray, parent_link: int, child_link: int):
+        self.id = id
+        self.name = name
+        self.type = type
+        self.axis = axis if np.linalg.norm(axis) > 0 else np.array([1, 0, 0])
+        self.parent_link = parent_link
+        self.child_link = child_link
+        self.dof = self._joint_dof(self.type)
+        self.joint_select_mat = self._joint_select_mat(self.type, self.axis)
 
-  @staticmethod
-  def _joint_dof(type):
-    if type == "revolution":
-      return 1
-    elif type == "fix":
-      return 0
-    else:
-      warnings.warn('Not applicable joint type', DeprecationWarning)
-      return 0
-    
-  @staticmethod
-  def _joint_select_mat(type, axis):
-    if type == 'fix':
-      return np.zeros((6,1))
-    elif type == 'revolution':
-      mat = np.zeros((6,1))
-      mat[0:3,0] = axis
-      return mat
-    else:
-      warnings.warn('Not applicable joint type', DeprecationWarning)
-      return np.zeros((6,1))
+    @staticmethod
+    def _joint_dof(type: str) -> int:
+        if type == "revolution":
+            return 1
+        elif type == "fix":
+            return 0
+        else:
+            warnings.warn(f"Unsupported joint type: {type}", UserWarning)
+            return 0
+
+    @staticmethod
+    def _joint_select_mat(type: str, axis: np.ndarray) -> np.ndarray:
+        mat = np.zeros((6, 1))
+        if type == "fix":
+            return mat
+        elif type == "revolution":
+            mat[0:3, 0] = axis
+            return mat
+        else:
+            raise warnings.warn(f"Unsupported joint type: {type}", UserWarning)
