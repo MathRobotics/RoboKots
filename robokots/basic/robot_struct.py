@@ -128,6 +128,34 @@ class RobotStruct:
     return links, joints
   
   @staticmethod
+  def read_model_file2(data):    
+    joints = []
+    links = []
+    
+    i = 0
+    dof_index = 0
+
+    for link in data["links"]:
+      l = LinkStruct()
+      l.id = link["id"]
+      l.name = link["name"]
+      l.cog = np.array(link["cog"])
+      l.mass = link["mass"]
+      l.inertia_param = link["inertia"]
+
+  
+    for joint in data["joints"]:
+      j = JointStruct()
+      j.id = joint["id"]
+      j.name = joint["name"]
+      j.joint_type = joint["type"]
+      j.axis = joint["axis"]
+      j.parent_link = joint["parent_link_id"]
+      j.child_link = joint["child_link_id"]
+
+    return links, joints
+  
+  @staticmethod
   def search_neiborhood(robot, link_id):
     link_list = []
     link = robot.links[link_id]

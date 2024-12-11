@@ -7,6 +7,8 @@ import numpy as np
 from pickle import FALSE
 import xml.etree.ElementTree as ET
 
+import json
+
 from mathrobo import *
 
 from .basic import *
@@ -34,6 +36,16 @@ class Robot(RobotStruct):
     motinos = RobotMotions(robot)
     state = RobotState(robot)
     return Robot(links, joints, motinos, state)
+
+  @staticmethod
+  def init_from_model_file2(model_file_name):
+    with open(model_file_name, 'r') as file:
+      data = json.load(file)
+      links, joints = RobotStruct.read_model_file(data)
+      robot = RobotStruct(links, joints)
+      motinos = RobotMotions(robot)
+      state = RobotState(robot)
+      return Robot(links, joints, motinos, state)
 
   def import_gen_vecs(self, vecs):
     self.gen_value.import_vecs(self, vecs)
