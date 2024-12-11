@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "robokotz"
+name = "robokots"
 version = "0.0.1"
 authors = [  
   { name="taiki-ishigaki", email="taiki.ishigaki@ieee.org" },
@@ -20,4 +20,4 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/MathRobotics/RoboKOTZ"
+Homepage = "https://github.com/MathRobotics/RoboKots"
