@@ -34,7 +34,9 @@ class RobotStruct:
     
     for j in self.joints:
       self.joint_dof += j.dof
-      
+      self.links[j.parent_link].joint_list.append(j.id)
+      self.links[j.child_link].joint_list.append(j.id)
+    
     for l in self.links:
       self.link_dof += l.dof
       
@@ -67,7 +69,7 @@ class RobotStruct:
         id=joint["id"],
         name=joint["name"],
         type=joint["type"],
-        axis=np.array(joint["axis"]),
+        axis=np.array(joint.get("axis", [0., 0., 0.])),
         parent_link=joint["parent_link_id"],
         child_link=joint["child_link_id"]
     ) for joint in data["joints"]]
@@ -81,6 +83,7 @@ class RobotStruct:
           print(f"  ID: {link.id}, Name: {link.name}, Type: {link.type}")
           print(f"    COG: {link.cog}, Mass: {link.mass}")
           print(f"    Inertia: {link.inertia}, DOF: {link.dof}")
+          print(f"    Connect joint: {link.joint_list}")
 
       print("\nJoints:")
       for joint in self.joints:
@@ -97,6 +100,7 @@ class LinkStruct:
     self.mass = mass
     self.inertia = inertia
     self.dof = self._link_dof(self.type)
+    self.joint_list = []
   
   @staticmethod
   def _link_dof(type):
