@@ -1,33 +1,30 @@
 import numpy as np
 
-import robokotz
+from robokots.robot import *
 
 def main():
-  robot = robokotz.Robot.init_from_model_file("simple_robot.ktz") 
+  robot = Robot.from_json_file("sample_robot.json")
+  robot.robot.print_structure()
   
   coord = [1., -2., 1.]
   veloc = [0., 0., 0.]
   accel = [0., 0., 0.]
   force = [0., 0., 0.]
   
-  vecs = [coord, veloc, accel, force]
   vec = []
   vec.extend(coord)
   vec.extend(veloc)
   vec.extend(accel)
   vec.extend(force)
   
-  robot.import_gen_vecs(vecs)
-  print(robot.gen_value.df.df)
-  
   robot.import_motions(vec)
   print(robot.motions.motions)
   
-  robot.update_kinematics()
+  robot.kinematics()
   
-  print(robot.state.df.df)
+  print(robot.state.state_df.df)
 
-  robokotz.show_robot(robot, robot.state)
+  robot.show_robot()
   
 if __name__ == "__main__":
     main()

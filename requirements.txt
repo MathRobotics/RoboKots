@@ -5,5 +5,3 @@ polars
 pytest
 
 matplotlib
-pillow
-ffmpeg
