@@ -9,6 +9,8 @@ import json
 import warnings
 from typing import List, Dict
 
+from mathrobo import *
+
 warnings.simplefilter("always", UserWarning)
 
 class RobotStruct:
@@ -32,13 +34,20 @@ class RobotStruct:
     self.joint_dof = 0
     self.link_dof = 0
     
-    for j in self.joints:
-      self.joint_dof += j.dof
-      self.links[j.parent_link].joint_list.append(j.id)
-      self.links[j.child_link].joint_list.append(j.id)
+    dof_index = 0
     
     for l in self.links:
+      l.set_dof_index(dof_index)
+      dof_index += l.dof
       self.link_dof += l.dof
+    
+    for j in self.joints:
+      j.set_dof_index(dof_index)
+      dof_index += j.dof
+      self.joint_dof += j.dof
+      
+      self.links[j.parent_link].joint_list.append(j.id)
+      self.links[j.child_link].joint_list.append(j.id)
       
     self.dof = self.joint_dof + self.link_dof
     
@@ -71,7 +80,11 @@ class RobotStruct:
         type=joint["type"],
         axis=np.array(joint.get("axis", [0., 0., 0.])),
         parent_link=joint["parent_link_id"],
-        child_link=joint["child_link_id"]
+        child_link=joint["child_link_id"],
+        origin=SE3.set_pos_quaternion(
+          joint.get("origin", {}).get("position", [0., 0., 0.]),
+          joint.get("origin", {}).get("orientation", [1., 0., 0., 0.])
+        )
     ) for joint in data["joints"]]
 
     return RobotStruct(links, joints)
@@ -84,14 +97,19 @@ class RobotStruct:
           print(f"    COG: {link.cog}, Mass: {link.mass}")
           print(f"    Inertia: {link.inertia}, DOF: {link.dof}")
           print(f"    Connect joint: {link.joint_list}")
+          print(f"    DOF index: {link.dof_index}")
 
       print("\nJoints:")
       for joint in self.joints:
           print(f"  ID: {joint.id}, Name: {joint.name}, Type: {joint.type}")
           print(f"    Axis: {joint.axis}, Parent Link: {joint.parent_link}, Child Link: {joint.child_link}")
           print(f"    DOF: {joint.dof}")
+          print(f"    Origin: {joint.origin.pos()}")
+          print(f"{joint.origin.rot()}")
+          print(f"    DOF index: {joint.dof_index}")
 
 class LinkStruct:
+  dof_index : int = 0
   def __init__(self, id: int, name: str, cog: np.ndarray, mass: float, inertia: np.ndarray, type: str = "rigid"):
     self.id = id
     self.name = name
@@ -101,6 +119,9 @@ class LinkStruct:
     self.inertia = inertia
     self.dof = self._link_dof(self.type)
     self.joint_list = []
+    
+  def set_dof_index(self, n):
+      self.dof_index = n
   
   @staticmethod
   def _link_dof(type):
@@ -108,7 +129,8 @@ class LinkStruct:
       return 0
 
 class JointStruct:
-    def __init__(self, id: int, name: str, type: str, axis: np.ndarray, parent_link: int, child_link: int):
+    dof_index : int = 0
+    def __init__(self, id: int, name: str, type: str, axis: np.ndarray, parent_link: int, child_link: int, origin: SE3):
         self.id = id
         self.name = name
         self.type = type
@@ -117,6 +139,10 @@ class JointStruct:
         self.child_link = child_link
         self.dof = self._joint_dof(self.type)
         self.joint_select_mat = self._joint_select_mat(self.type, self.axis)
+        self.origin = origin
+        
+    def set_dof_index(self, n):
+       self.dof_index = n
 
     @staticmethod
     def _joint_dof(type: str) -> int:
