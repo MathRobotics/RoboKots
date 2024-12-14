@@ -1,11 +1,8 @@
 #!/usr/bin/env python3.9
 # -*- coding: utf-8 -*-
-# 2024.08.14 Created by T.Ishigaki
+# 2024.12.13 Created by T.Ishigaki
 
 import numpy as np
-import warnings
-
-from .df import *
 
 class RobotMotions:
   motions : np.ndarray = np.array([])
