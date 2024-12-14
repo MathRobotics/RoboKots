@@ -3,6 +3,7 @@
 # 2024.12.13 Created by T.Ishigaki
 
 import numpy as np
+import matplotlib.pyplot as plt
 
 from mathrobo import *
 
@@ -18,7 +19,6 @@ class Robot():
     self.robot = robot_
     self.motions = motions_
     self.state = state_
-    self.robot_init()
 
   @staticmethod
   def from_json_file(model_file_name):
@@ -30,38 +30,53 @@ class Robot():
   def import_motions(self, vecs):
     self.motions.set_motion(vecs)
 
-  def __kinematics_tree(self, joint, links, motions, state_data):
-    parent = links[joint.parent_id]
-    child = links[joint.child_id]
-    frame = Kinematics.kinematics(child, joint, parent, motions, state_data)  
-    veloc = Kinematics.vel_kinematics(child, joint, parent, motions, state_data)  
-    accel = Kinematics.acc_kinematics(child, joint, parent, motions, state_data) 
-
-    # for link_id in joint.connect_link:
-    #   if LinkStruct.link_id(link) != link_id or link == None:
-    #     l = self.links[link_id]
-    #     frame = Kinematics.kinematics(l, joint, link, motions, state_data)  
-    #     veloc = Kinematics.vel_kinematics(l, joint, link, motions, state_data)  
-    #     accel = Kinematics.acc_kinematics(l, joint, link, motions, state_data) 
-      
-    #     a = SE3()
-    #     a.set_adj_mat(frame)
-
-    #     pos = a.pos()
-    #     rot_vec = RobotState.mat_to_vec(a.rot())
-        
-    #     state_data.update([(l.name + "_pos" , pos.tolist())])
-    #     state_data.update([(l.name + "_rot" , rot_vec.tolist())])
-    #     state_data.update([(l.name + "_vel" , veloc.tolist())])
-    #     state_data.update([(l.name + "_acc" , accel.tolist())])
-
-    #     for joint_id in l.connect_joint:
-    #       if joint.id != joint_id:
-    #         j = self.joints[joint_id]
-    #         self.__kinematics_tree(l, j, motions, state_data)    
-
-  def update_kinematics(self):
+  def kinematics(self):
     state_data = {}
-    self.__kinematics_tree(self.robot.joints[0], self.motions, state_data)
+    
+    world_name = self.robot.links[self.robot.joints[0].parent_link].name
+    state_data.update([(world_name + "_pos" , [0.,0.,0.])])
+    state_data.update([(world_name + "_rot" , [1.,0.,0.,0.,1.,0.,0.,0.,1.])])
+    state_data.update([(world_name + "_vel" , [0.,0.,0.,0.,0.,0.])])
+    state_data.update([(world_name + "_acc" , [0.,0.,0.,0.,0.,0.])])
+    
+    for joint in self.robot.joints:    
+      child = self.robot.links[joint.child_link]
+      
+      frame = Kinematics.kinematics(joint, self.robot.links, self.motions, state_data)  
+      veloc = Kinematics.vel_kinematics(joint, self.robot.links, self.motions, state_data)  
+      accel = Kinematics.acc_kinematics(joint, self.robot.links, self.motions, state_data) 
+      
+      a = SE3().set_adj_mat(frame)
 
+      pos = a.pos()
+      rot_vec = a.rot().ravel()
+      
+      state_data.update([(child.name + "_pos" , pos.tolist())])
+      state_data.update([(child.name + "_rot" , rot_vec.tolist())])
+      state_data.update([(child.name + "_vel" , veloc.tolist())])
+      state_data.update([(child.name + "_acc" , accel.tolist())])
+      
     self.state.import_state(state_data)
+    
+  def show_robot(self, save = False):
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
+    pos = self.state.all_link_pos(self.robot)
+    ax.scatter(pos[:,0], pos[:,1], pos[:,2], c='r', marker='o')
+
+    for joint in self.robot.joints:
+      c_id = joint.child_link
+      p_id = joint.parent_link
+      ax.plot(
+        [pos[c_id,0], pos[p_id,0]], 
+        [pos[c_id,1], pos[p_id,1]], 
+        [pos[c_id,2], pos[p_id,2]], 'b')
+
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+
+    plt.show()
+    if save:  
+      plt.savefig('simple_draw.png')

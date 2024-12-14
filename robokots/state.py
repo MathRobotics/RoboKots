@@ -3,6 +3,7 @@
 # 2024.12.13 Created by T.Ishigaki
 
 import polars as pl
+import numpy as np
 
 class RobotDF:
   def __init__(self, names_, aliases_, separator_ = "_"):
@@ -34,28 +35,10 @@ class RobotState:
   def link_state_vec(df, link, name):
     return df[link.name+"_"+name][-1].to_numpy()
   
-#   @staticmethod
-#   def vec_to_mat(mat_vec):
-#     nn = len(mat_vec)
-#     n = int(np.sqrt(nn))
-
-#     mat = np.zeros((n,n))
-#     for i in range(n):
-#       mat[i,0:n] = mat_vec[n*i:n*i+n]
-#     return mat   
-  
-#   def mat_to_vec(mat):
-#     n = len(mat)
-
-#     mat_vec = np.zeros(n*n)
-#     for i in range(n):
-#       mat_vec[n*i:n*i+n] = mat[i,0:n]
-#     return mat_vec   
-    
   @staticmethod
   def link_state_mat(df, link, name):
     mat_vec = df[link.name+"_"+name][-1].to_numpy()
-    mat = RobotState.vec_to_mat(mat_vec)
+    mat = mat_vec.reshape((3,3))
     return mat
   
   def all_state_vec(self, robot, name):
@@ -86,7 +69,7 @@ class RobotState:
 
   def link_adj_frame(self, link):
     a = SE3(self.link_rot(link), self.link_pos(link))
-    return a.adjoint()
+    return a.adj_mat()
 
   def import_state(self, data):
     self.state_df.add_row(data)
