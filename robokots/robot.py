@@ -23,9 +23,9 @@ class Robot():
   @staticmethod
   def from_json_file(model_file_name):
     robot = RobotStruct.from_json_file(model_file_name)
-    motinos = RobotMotions(robot)
+    motions = RobotMotions(robot)
     state = RobotState(robot)
-    return Robot(robot, motinos, state)
+    return Robot(robot, motions, state)
     
   def import_motions(self, vecs):
     self.motions.set_motion(vecs)
