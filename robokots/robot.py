@@ -40,16 +40,24 @@ class Robot():
     state_data.update([(world_name + "_acc" , [0.,0.,0.,0.,0.,0.])])
     
     for joint in self.robot.joints:    
+      parent = self.robot.links[joint.parent_link]
       child = self.robot.links[joint.child_link]
       
-      frame = Kinematics.kinematics(joint, self.robot.links, self.motions, state_data)  
-      veloc = Kinematics.vel_kinematics(joint, self.robot.links, self.motions, state_data)  
-      accel = Kinematics.acc_kinematics(joint, self.robot.links, self.motions, state_data) 
+      joint_coord = self.motions.joint_coord(joint)
+      joint_veloc = self.motions.joint_veloc(joint)
+      joint_accel = self.motions.joint_accel(joint)
       
-      a = SE3().set_adj_mat(frame)
+      rot = np.array(state_data[parent.name + "_rot"]).reshape((3,3))
+      p_link_frame = SE3(rot, state_data[parent.name + "_pos"]).adj_mat()
+      p_link_vel = state_data[parent.name + "_vel"]  
+      p_link_acc = state_data[parent.name + "_acc"]  
 
-      pos = a.pos()
-      rot_vec = a.rot().ravel()
+      frame = Kinematics.kinematics(joint, p_link_frame, joint_coord)  
+      veloc = Kinematics.vel_kinematics(joint, p_link_vel, joint_coord, joint_veloc)  
+      accel = Kinematics.acc_kinematics(joint, p_link_vel, p_link_acc, joint_coord, joint_veloc, joint_accel)       
+      
+      pos = frame[3,0:3]
+      rot_vec = frame[0:3,0:3].ravel()
       
       state_data.update([(child.name + "_pos" , pos.tolist())])
       state_data.update([(child.name + "_rot" , rot_vec.tolist())])
