@@ -54,46 +54,24 @@ class Kinematics:
     return rel_acc
   
   @staticmethod
-  def kinematics(joint, links, motinos, state):
-    joint_coord = motinos.joint_coord(joint)
-    parent = links[joint.parent_link]
-
-    rot = np.array(state[parent.name + "_rot"]).reshape((3,3))
-    p_link_frame = SE3(rot, state[parent.name + "_pos"]).adj_mat()
-
+  def kinematics(joint, p_link_frame, joint_coord):
     rel_frame = Kinematics.link_rel_frame(joint, joint_coord)
     frame = p_link_frame @ rel_frame
     return frame
 
   @staticmethod
-  def vel_kinematics(joint, links, motinos, state):
-    joint_coord = motinos.joint_coord(joint)
-    joint_veloc = motinos.joint_veloc(joint)
-    
-    parent = links[joint.parent_link]
-
-    link_vel = state[parent.name + "_vel"]    
-
+  def vel_kinematics(joint, p_link_vel, joint_coord, joint_veloc):
     rel_frame = Kinematics.link_rel_frame(joint, joint_coord)
     rel_vel = Kinematics.link_rel_vel(joint, joint_veloc)
     
-    vel = np.linalg.inv(rel_frame) @ link_vel  + rel_vel
+    vel = np.linalg.inv(rel_frame) @ p_link_vel  + rel_vel
     return vel
 
   @staticmethod
-  def acc_kinematics(joint, links, motinos, state):
-    joint_coord = motinos.joint_coord(joint)
-    joint_veloc = motinos.joint_veloc(joint)
-    joint_accel = motinos.joint_accel(joint)
-    
-    parent = links[joint.parent_link]
-
-    link_vel = state[parent.name + "_vel"]  
-    link_acc = state[parent.name + "_acc"]  
-
+  def acc_kinematics(joint, p_link_vel, p_link_acc, joint_coord, joint_veloc, joint_accel):
     rel_frame = Kinematics.link_rel_frame(joint, joint_coord)
     rel_vel = Kinematics.link_rel_vel(joint, joint_veloc)
     rel_acc = Kinematics.link_rel_acc(joint, joint_accel)
     
-    acc = rel_frame @ link_acc + SE3.hat_adj( rel_frame @ rel_vel ) @ link_vel + rel_acc
+    acc = rel_frame @ p_link_acc + SE3.hat_adj( rel_frame @ rel_vel ) @ p_link_vel + rel_acc
     return acc
