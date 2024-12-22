@@ -55,12 +55,6 @@ class RobotStruct:
     self.joint_names = [j.name for j in self.joints]
     
   @staticmethod
-  def from_json_file(file_path: str) -> "RobotStruct":
-      with open(file_path, 'r', encoding='utf-8') as file:
-          data = json.load(file)
-      return RobotStruct.from_dict(data)
-  
-  @staticmethod
   def from_dict(data: Dict):  
     joints = []
     links = []
@@ -88,25 +82,53 @@ class RobotStruct:
     ) for joint in data["joints"]]
 
     return RobotStruct(links, joints)
+  
+  def to_dict(self):
+    links_array = []
+    for link in self.links:
+        link_dict = {}
+        link_dict["id"] = link.id
+        link_dict["name"] = link.name
+        link_dict["type"] = link.type
+        
+        link_dict["mass"] = float(link.mass)
+        link_dict["cog"] = link.cog.tolist() if link.cog is not None else [0.0, 0.0, 0.0]
 
-  def print_structure(self):
-      print(f"Robot DOF: {self.dof}")
-      print("\nLinks:")
-      for link in self.links:
-          print(f"  ID: {link.id}, Name: {link.name}, Type: {link.type}")
-          print(f"    COG: {link.cog}, Mass: {link.mass}")
-          print(f"    Inertia: {link.inertia}, DOF: {link.dof}")
-          print(f"    Connect joint: {link.joint_list}")
-          print(f"    DOF index: {link.dof_index}")
+        if link.inertia is not None and link.inertia.shape == (6,):
+            inertia_list = link.inertia.tolist()
+        else:
+            inertia_list = [1,1,1,0,0,0]
+        link_dict["inertia"] = inertia_list
 
-      print("\nJoints:")
-      for joint in self.joints:
-          print(f"  ID: {joint.id}, Name: {joint.name}, Type: {joint.type}")
-          print(f"    Axis: {joint.axis}, Parent Link: {joint.parent_link}, Child Link: {joint.child_link}")
-          print(f"    DOF: {joint.dof}")
-          print(f"    Origin: {joint.origin.pos()}")
-          print(f"{joint.origin.rot()}")
-          print(f"    DOF index: {joint.dof_index}")
+        link_dict["geometry"] = None
+
+        links_array.append(link_dict)
+
+    joints_array = []
+    for joint in self.joints:
+        joint_dict = {}
+        joint_dict["id"] = joint.id
+        joint_dict["name"] = joint.name
+        joint_dict["type"] = joint.type
+
+        joint_dict["axis"] = joint.axis.tolist()
+
+        joint_dict["parent_link_id"] = joint.parent_link
+        joint_dict["child_link_id"] = joint.child_link
+
+        pos, quat = joint.origin.pos_quaternion()
+        origin_dict = {
+            "position": pos,
+            "orientation": quat
+        }
+        joint_dict["origin"] = origin_dict
+
+        joints_array.append(joint_dict)
+
+    return {
+        "links": links_array,
+        "joints": joints_array
+    }
 
 class LinkStruct:
   dof_index : int = 0
