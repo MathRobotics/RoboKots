@@ -10,6 +10,7 @@ from mathrobo import *
 from .motion import *
 from .state import *
 from .robot_model import *
+from .robot_io import *
 from .kinematics import *
   
 class Robot():
@@ -22,7 +23,7 @@ class Robot():
 
   @staticmethod
   def from_json_file(model_file_name):
-    robot = RobotStruct.from_json_file(model_file_name)
+    robot = RobotIO.from_json_file(model_file_name)
     motions = RobotMotions(robot)
     state = RobotState(robot)
     return Robot(robot, motions, state)
