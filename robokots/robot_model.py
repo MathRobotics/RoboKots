@@ -55,12 +55,6 @@ class RobotStruct:
     self.joint_names = [j.name for j in self.joints]
     
   @staticmethod
-  def from_json_file(file_path: str) -> "RobotStruct":
-      with open(file_path, 'r', encoding='utf-8') as file:
-          data = json.load(file)
-      return RobotStruct.from_dict(data)
-  
-  @staticmethod
   def from_dict(data: Dict):  
     joints = []
     links = []
