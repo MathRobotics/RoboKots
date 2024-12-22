@@ -56,9 +56,10 @@ class Robot():
       veloc = Kinematics.vel_kinematics(joint, p_link_vel, joint_coord, joint_veloc)  
       accel = Kinematics.acc_kinematics(joint, p_link_vel, p_link_acc, joint_coord, joint_veloc, joint_accel)       
       
-      pos = frame[3,0:3]
-      rot_vec = frame[0:3,0:3].ravel()
-      
+      tmp = SE3.set_adj_mat(frame)
+      pos = tmp.pos()
+      rot_vec = tmp.rot().ravel()
+
       state_data.update([(child.name + "_pos" , pos.tolist())])
       state_data.update([(child.name + "_rot" , rot_vec.tolist())])
       state_data.update([(child.name + "_vel" , veloc.tolist())])
