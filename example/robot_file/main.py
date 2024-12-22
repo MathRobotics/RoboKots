@@ -4,7 +4,9 @@ from robokots.robot import *
 
 def main():
   robot = Robot.from_json_file("sample_robot.json")
-  robot.robot.print_structure()
+  RobotIO.print_structure(robot.robot)
+  
+  print(robot.robot.to_dict())
   
   coord = [1., -1., 1.]
   veloc = [0., 0., 0.]
