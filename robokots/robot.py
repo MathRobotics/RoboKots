@@ -66,6 +66,24 @@ class Robot():
       
     self.state.import_state(state_data)
     
+  def __set_equall_aspect_3d(self, ax, data, margin):
+    margin = 0.1
+    ax_min = np.zeros(3)
+    ax_max = np.zeros(3)
+    box_length = np.zeros(3)
+    for i in range(3):
+      ax_min[i] = min(data[:,i])-margin
+      ax_max[i] = max(data[:,i])+margin
+      box_length[i] = ax_max[i] - ax_min[i]
+      
+    box_length_max = max((box_length[0], box_length[1], box_length[2]))
+    box_ratio = box_length_max / box_length    
+
+    ax.set_box_aspect((box_length_max,box_length_max,box_length_max))
+    ax.set_xlim3d(ax_min[0]*box_ratio[0], ax_max[0]*box_ratio[0])
+    ax.set_ylim3d(ax_min[1]*box_ratio[1], ax_max[1]*box_ratio[1])
+    ax.set_zlim3d(ax_min[2]*box_ratio[2], ax_max[2]*box_ratio[2])
+    
   def show_robot(self, save = False):
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
@@ -84,6 +102,8 @@ class Robot():
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     ax.set_zlabel('Z')
+    
+    self.__set_equall_aspect_3d(ax, pos, 0.1)
 
     plt.show()
     if save:  
