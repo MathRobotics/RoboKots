@@ -16,19 +16,19 @@ from .kinematics import *
 class Robot():
 
   def __init__(self, robot_, motions_, state_):
-    self.robot = robot_
-    self.motions = motions_
-    self.state = state_
+    self.robot_ = robot_
+    self.motions_ = motions_
+    self.state_ = state_
 
   @staticmethod
   def from_json_file(model_file_name):
-    robot = RobotIO.from_json_file(model_file_name)
-    motions = RobotMotions(robot)
-    state = RobotState(robot)
-    return Robot(robot, motions, state)
+    robot_ = RobotIO.from_json_file(model_file_name)
+    motions_ = RobotMotions(robot_)
+    state_ = RobotState(robot_)
+    return Robot(robot_, motions_, state_)
   
   def set_motion_aliases(self, aliases):
-    self.motions.set_aliases(aliases)
+    self.motions_.set_aliases(aliases)
     
   def import_motions(self, vecs):
     self.motions.set_motion(vecs)
@@ -36,19 +36,19 @@ class Robot():
   def kinematics(self):
     state_data = {}
     
-    world_name = self.robot.links[self.robot.joints[0].parent_link].name
+    world_name = self.robot_.links[self.robot_.joints[0].parent_link].name
     state_data.update([(world_name + "_pos" , [0.,0.,0.])])
     state_data.update([(world_name + "_rot" , [1.,0.,0.,0.,1.,0.,0.,0.,1.])])
     state_data.update([(world_name + "_vel" , [0.,0.,0.,0.,0.,0.])])
     state_data.update([(world_name + "_acc" , [0.,0.,0.,0.,0.,0.])])
     
-    for joint in self.robot.joints:    
-      parent = self.robot.links[joint.parent_link]
-      child = self.robot.links[joint.child_link]
+    for joint in self.robot_.joints:    
+      parent = self.robot_.links[joint.parent_link]
+      child = self.robot_.links[joint.child_link]
       
-      joint_coord = self.motions.joint_coord(joint)
-      joint_veloc = self.motions.joint_veloc(joint)
-      joint_accel = self.motions.joint_accel(joint)
+      joint_coord = self.motions_.joint_coord(joint)
+      joint_veloc = self.motions_.joint_veloc(joint)
+      joint_accel = self.motions_.joint_accel(joint)
       
       rot = np.array(state_data[parent.name + "_rot"]).reshape((3,3))
       p_link_frame = SE3(rot, state_data[parent.name + "_pos"])
@@ -67,7 +67,7 @@ class Robot():
       state_data.update([(child.name + "_vel" , veloc.tolist())])
       state_data.update([(child.name + "_acc" , accel.tolist())])
       
-    self.state.import_state(state_data)
+    self.state_.import_state(state_data)
     
   def __set_equall_aspect_3d(self, ax, data, margin):
     margin = 0.1
@@ -91,10 +91,10 @@ class Robot():
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
 
-    pos = self.state.all_link_pos(self.robot)
+    pos = self.state_.all_link_pos(self.robot_)
     ax.scatter(pos[:,0], pos[:,1], pos[:,2], c='r', marker='o')
 
-    for joint in self.robot.joints:
+    for joint in self.robot_.joints:
       c_id = joint.child_link
       p_id = joint.parent_link
       ax.plot(
