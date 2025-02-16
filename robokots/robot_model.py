@@ -25,6 +25,19 @@ class RobotStruct:
     self.link_names: List[str] = []
     self.joint_names: List[str] = []
     self.robot_init()
+    
+  def link(self, name):
+    for l in self.links:
+      if name == l.name:
+        return l
+    ValueError(f"Invalid link name: {name}")
+    return None
+  
+  def link_list(self, name_list):
+    link_list = []
+    for name in name_list:
+      link_list.append(self.link(name))
+    return link_list
 
   def robot_init(self):
     self.joint_num = len(self.joints)  
