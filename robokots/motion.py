@@ -6,12 +6,20 @@ import numpy as np
 
 class RobotMotions:
   motions : np.ndarray = np.array([])
+  ALLOWED_ALIASES = frozenset(["coord", "veloc", "accel", "force"])
 
   def __init__(self, robot, aliases_ = ["coord", "veloc", "accel", "force"]):
+    if not set(aliases_).issubset(self.ALLOWED_ALIASES):
+      raise ValueError(f"Invalid alias: {set(aliases_) - self.ALLOWED_ALIASES}")
     self.aliases = aliases_
     self.dof = robot.dof
     self.motion_num = len(self.aliases) 
     self.motions = np.zeros(self.dof * self.motion_num)
+    
+  def set_aliases(self, aliases_ = ["coord", "veloc", "accel", "force"]):
+    if not set(aliases_).issubset(self.ALLOWED_ALIASES):
+      raise ValueError(f"Invalid alias: {set(aliases_) - self.ALLOWED_ALIASES}")
+    self.aliases = aliases_
     
   def set_motion(self, vecs):
     self.motions = vecs
