@@ -31,6 +31,9 @@ class RobotState:
     state_names = robot.link_names
     self.state_df = RobotDF(state_names, aliases, separator)
     
+  def df(self):
+    return self.state_df.df
+    
   @staticmethod
   def link_state_vec(df, link, name):
     return df[link.name+"_"+name][-1].to_numpy()
