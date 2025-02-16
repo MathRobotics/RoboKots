@@ -27,11 +27,20 @@ class Robot():
     state_ = RobotState(robot_)
     return Robot(robot_, motions_, state_)
   
+  def print_structure(self):
+    RobotIO.print_structure(self.robot_)
+  
   def set_motion_aliases(self, aliases):
     self.motions_.set_aliases(aliases)
     
   def import_motions(self, vecs):
-    self.motions.set_motion(vecs)
+    self.motions_.set_motion(vecs)
+    
+  def motions(self):
+    return self.motions_.motions
+  
+  def state_df(self):
+    return self.state_.df()
 
   def kinematics(self):
     state_data = {}
