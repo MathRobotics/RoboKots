@@ -26,6 +26,9 @@ class Robot():
     motions = RobotMotions(robot)
     state = RobotState(robot)
     return Robot(robot, motions, state)
+  
+  def set_motion_aliases(self, aliases):
+    self.motions.set_aliases(aliases)
     
   def import_motions(self, vecs):
     self.motions.set_motion(vecs)
