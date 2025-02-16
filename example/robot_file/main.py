@@ -4,9 +4,7 @@ from robokots.robot import *
 
 def main():
   robot = Robot.from_json_file("sample_robot.json")
-  RobotIO.print_structure(robot.robot)
-  
-  print(robot.robot.to_dict())
+  robot.print_structure()
   
   coord = [1., -1., 1.]
   veloc = [0., 0., 0.]
@@ -20,11 +18,11 @@ def main():
   vec.extend(force)
   
   robot.import_motions(vec)
-  print(robot.motions.motions)
+  print(robot.motions())
   
   robot.kinematics()
   
-  print(robot.state.state_df.df)
+  print(robot.state_df())
 
   robot.show_robot()
   
