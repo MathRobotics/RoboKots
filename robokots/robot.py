@@ -49,7 +49,7 @@ class Robot():
       joint_accel = self.motions.joint_accel(joint)
       
       rot = np.array(state_data[parent.name + "_rot"]).reshape((3,3))
-      p_link_frame = SE3(rot, state_data[parent.name + "_pos"]).adj_mat()
+      p_link_frame = SE3(rot, state_data[parent.name + "_pos"])
       p_link_vel = state_data[parent.name + "_vel"]  
       p_link_acc = state_data[parent.name + "_acc"]  
 

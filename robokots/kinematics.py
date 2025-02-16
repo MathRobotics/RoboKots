@@ -16,7 +16,7 @@ class Kinematics:
       v = joint.joint_select_mat@joint_angle
     else:
       v = joint.joint_select_mat@np.zeros(1)
-    frame = SE3.exp_adj(v)
+    frame = SE3.set_mat(SE3.exp(v))
     return frame
   
   @staticmethod
@@ -38,19 +38,19 @@ class Kinematics:
   @staticmethod
   def link_rel_frame(joint, joint_coord):
     joint_frame = Kinematics.joint_local_frame(joint, joint_coord)
-    rel_frame =  joint.origin.adj_mat() @ joint_frame
+    rel_frame =  joint.origin @ joint_frame
     return rel_frame
 
   @staticmethod
   def link_rel_vel(joint, joint_vel):
     local_vel = Kinematics.joint_local_vel(joint, joint_vel)
-    rel_vel = np.linalg.inv(joint.origin.adj_mat()) @ local_vel
+    rel_vel = joint.origin.adj_inv() @ local_vel
     return rel_vel
   
   @staticmethod
   def link_rel_acc(joint, joint_acc):
     local_acc = Kinematics.joint_local_acc(joint, joint_acc)
-    rel_acc = np.linalg.inv(joint.origin.adj_mat()) @ local_acc
+    rel_acc = joint.origin.adj_inv() @ local_acc
     return rel_acc
   
   @staticmethod
@@ -64,7 +64,7 @@ class Kinematics:
     rel_frame = Kinematics.link_rel_frame(joint, joint_coord)
     rel_vel = Kinematics.link_rel_vel(joint, joint_veloc)
     
-    vel = np.linalg.inv(rel_frame) @ p_link_vel  + rel_vel
+    vel = rel_frame.adj_inv() @ p_link_vel  + rel_vel
     return vel
 
   @staticmethod
@@ -73,5 +73,5 @@ class Kinematics:
     rel_vel = Kinematics.link_rel_vel(joint, joint_veloc)
     rel_acc = Kinematics.link_rel_acc(joint, joint_accel)
     
-    acc = rel_frame @ p_link_acc + SE3.hat_adj( rel_frame @ rel_vel ) @ p_link_vel + rel_acc
+    acc =  rel_frame.adj_inv() @ p_link_acc + SE3.hat_adj( rel_frame @ rel_vel ) @ p_link_vel + rel_acc
     return acc
