@@ -84,6 +84,15 @@ class Robot():
       
     self.state_.import_state(state_data)
     
+  def calc_part_joint_jacob(self, target_link, joint):
+    mat = np.zeros((6,joint.dof))
+    if target_link.id == joint.child_link_id:
+      mat = joint.joint_select_mat
+    else:
+      mat = np.linalg.inv(self.state_.link_adj_frame(target_link)) \
+            @ self.state_.link_adj_frame(self.robot_.links[joint.child_link_id]) \
+            @ joint.joint_select_mat
+    return mat
   def __set_equall_aspect_3d(self, ax, data, margin):
     margin = 0.1
     ax_min = np.zeros(3)
