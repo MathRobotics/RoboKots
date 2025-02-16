@@ -21,7 +21,6 @@ def joint_local_vel(joint, joint_vel):
     vel = np.zeros(6)
   return vel
 
-
 def joint_local_acc(joint, joint_acc):
   if len(joint_acc) != 0:
     acc = joint.joint_select_mat @ joint_acc
