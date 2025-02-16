@@ -32,6 +32,9 @@ class Robot():
 
   def link_list(self, name_list):
     return self.robot_.link_list(name_list)
+  
+  def joint_list(self, name_list):
+    return self.robot_.joint_list(name_list)
 
   def motions(self):
     return self.motions_.motions  
