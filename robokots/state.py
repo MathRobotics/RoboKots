@@ -5,6 +5,8 @@
 import polars as pl
 import numpy as np
 
+from mathrobo import *
+
 class RobotDF:
   def __init__(self, names_, aliases_, separator_ = "_"):
     self.names = names_
@@ -48,23 +50,23 @@ class RobotState:
     labels = []
     for l in robot.links:
       labels.append(l.name+"_"+name) 
-    mat = [self.state_df.df[label][-1].to_list() for label in labels]
+    mat = [self.df()[label][-1].to_list() for label in labels]
     return np.array(mat)
   
   def link_pos(self, link):
-    return RobotState.link_state_vec(self.state_df(), link, "pos")
+    return RobotState.link_state_vec(self.df(), link, "pos")
   
   def all_link_pos(self, robot):
     return self.all_state_vec(robot, "pos")
   
   def link_rot(self, link):
-    return RobotState.link_state_mat(self.state_df(), link, "rot")
+    return RobotState.link_state_mat(self.df(), link, "rot")
 
   def link_vel(self, link):
-    return RobotState.link_state_vec(self.state_df(), link, "vel")
+    return RobotState.link_state_vec(self.df(), link, "vel")
 
   def link_acc(self, link):
-    return RobotState.link_state_vec(self.state_df(), link, "acc")
+    return RobotState.link_state_vec(self.df(), link, "acc")
     
   def link_frame(self, link):
     h = SE3(self.link_rot(link), self.link_pos(link))
