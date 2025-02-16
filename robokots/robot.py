@@ -29,15 +29,18 @@ class Robot():
   
   def print_structure(self):
     RobotIO.print_structure(self.robot_)
-  
+
+  def link_list(self, name_list):
+    return self.robot_.link_list(name_list)
+
+  def motions(self):
+    return self.motions_.motions  
+
   def set_motion_aliases(self, aliases):
     self.motions_.set_aliases(aliases)
     
   def import_motions(self, vecs):
     self.motions_.set_motion(vecs)
-    
-  def motions(self):
-    return self.motions_.motions
   
   def state_df(self):
     return self.state_.df()
