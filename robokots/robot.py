@@ -51,15 +51,15 @@ class Robot():
   def kinematics(self):
     state_data = {}
     
-    world_name = self.robot_.links[self.robot_.joints[0].parent_link].name
+    world_name = self.robot_.links[self.robot_.joints[0].parent_link_id].name
     state_data.update([(world_name + "_pos" , [0.,0.,0.])])
     state_data.update([(world_name + "_rot" , [1.,0.,0.,0.,1.,0.,0.,0.,1.])])
     state_data.update([(world_name + "_vel" , [0.,0.,0.,0.,0.,0.])])
     state_data.update([(world_name + "_acc" , [0.,0.,0.,0.,0.,0.])])
     
     for joint in self.robot_.joints:    
-      parent = self.robot_.links[joint.parent_link]
-      child = self.robot_.links[joint.child_link]
+      parent = self.robot_.links[joint.parent_link_id]
+      child = self.robot_.links[joint.child_link_id]
       
       joint_coord = self.motions_.joint_coord(joint)
       joint_veloc = self.motions_.joint_veloc(joint)
@@ -110,8 +110,8 @@ class Robot():
     ax.scatter(pos[:,0], pos[:,1], pos[:,2], c='r', marker='o')
 
     for joint in self.robot_.joints:
-      c_id = joint.child_link
-      p_id = joint.parent_link
+      c_id = joint.child_link_id
+      p_id = joint.parent_link_id
       ax.plot(
         [pos[c_id,0], pos[p_id,0]], 
         [pos[c_id,1], pos[p_id,1]], 

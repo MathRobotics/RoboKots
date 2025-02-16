@@ -72,8 +72,8 @@ class RobotStruct:
       dof_index += j.dof
       self.joint_dof += j.dof
       
-      self.links[j.parent_link].child_joint_list.append(j.id)
-      self.links[j.child_link].parent_joint_list.append(j.id)
+      self.links[j.parent_link_id].child_joint_id_list.append(j.id)
+      self.links[j.child_link_id].parent_joint_id_list.append(j.id)
       
     self.dof = self.joint_dof + self.link_dof
     
@@ -99,8 +99,8 @@ class RobotStruct:
         name=joint["name"],
         type=joint["type"],
         axis=np.array(joint.get("axis", [0., 0., 0.])),
-        parent_link=joint["parent_link_id"],
-        child_link=joint["child_link_id"],
+        parent_link_id=joint["parent_link_id"],
+        child_link_id=joint["child_link_id"],
         origin=SE3.set_pos_quaternion(
           joint.get("origin", {}).get("position", [0., 0., 0.]),
           joint.get("origin", {}).get("orientation", [1., 0., 0., 0.])
@@ -139,8 +139,8 @@ class RobotStruct:
 
         joint_dict["axis"] = joint.axis.tolist()
 
-        joint_dict["parent_link_id"] = joint.parent_link
-        joint_dict["child_link_id"] = joint.child_link
+        joint_dict["parent_link_id"] = joint.parent_link_id
+        joint_dict["child_link_id"] = joint.child_link_id
 
         pos, quat = joint.origin.pos_quaternion()
         origin_dict = {
@@ -166,8 +166,8 @@ class LinkStruct:
     self.mass = mass
     self.inertia = inertia
     self.dof = self._link_dof(self.type)
-    self.child_joint_list = []
-    self.parent_joint_list = []
+    self.child_joint_id_list = []
+    self.parent_joint_id_list = []
     
   def set_dof_index(self, n):
       self.dof_index = n
@@ -179,13 +179,13 @@ class LinkStruct:
 
 class JointStruct:
     dof_index : int = 0
-    def __init__(self, id: int, name: str, type: str, axis: np.ndarray, parent_link: int, child_link: int, origin: SE3):
+    def __init__(self, id: int, name: str, type: str, axis: np.ndarray, parent_link_id: int, child_link_id: int, origin: SE3):
         self.id = id
         self.name = name
         self.type = type
         self.axis = axis if np.linalg.norm(axis) > 0 else np.array([1, 0, 0])
-        self.parent_link = parent_link
-        self.child_link = child_link
+        self.parent_link_id = parent_link_id
+        self.child_link_id = child_link_id
         self.dof = self._joint_dof(self.type)
         self.joint_select_mat = self._joint_select_mat(self.type, self.axis)
         self.origin = origin
