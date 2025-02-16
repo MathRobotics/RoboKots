@@ -14,7 +14,6 @@ from .robot_io import *
 from .kinematics import *
   
 class Robot():
-  state : RobotState 
 
   def __init__(self, robot_, motions_, state_):
     self.robot = robot_
