@@ -52,9 +52,9 @@ class Robot():
       p_link_vel = state_data[parent.name + "_vel"]  
       p_link_acc = state_data[parent.name + "_acc"]  
 
-      frame = Kinematics.kinematics(joint, p_link_frame, joint_coord)  
-      veloc = Kinematics.vel_kinematics(joint, p_link_vel, joint_coord, joint_veloc)  
-      accel = Kinematics.acc_kinematics(joint, p_link_vel, p_link_acc, joint_coord, joint_veloc, joint_accel)       
+      frame = kinematics(joint, p_link_frame, joint_coord)  
+      veloc = vel_kinematics(joint, p_link_vel, joint_coord, joint_veloc)  
+      accel = acc_kinematics(joint, p_link_vel, p_link_acc, joint_coord, joint_veloc, joint_accel)       
       
       pos = frame.pos()
       rot_vec = frame.rot().ravel()
