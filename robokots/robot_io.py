@@ -36,8 +36,8 @@ class RobotIO():
           print(f"  ID: {link.id}, Name: {link.name}, Type: {link.type}")
           print(f"    COG: {link.cog}, Mass: {link.mass}")
           print(f"    Inertia: {link.inertia}, DOF: {link.dof}")
-          print(f"    Connect parent joint: {link.parent_joint_id_list}")
-          print(f"    Connect child joint: {link.child_joint_id_list}")
+          print(f"    Connect parent joint: {link.parent_joint_ids}")
+          print(f"    Connect child joint: {link.child_joint_ids}")
           print(f"    DOF index: {link.dof_index}")
 
       print("\nJoints:")
