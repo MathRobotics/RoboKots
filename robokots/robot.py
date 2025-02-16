@@ -93,6 +93,27 @@ class Robot():
             @ self.state_.link_adj_frame(self.robot_.links[joint.child_link_id]) \
             @ joint.joint_select_mat
     return mat
+
+  def __link_jacobian(self, target_link):
+    jacob = np.zeros((6,self.robot_.dof))
+    link_route = []
+    joint_route = []
+    self.robot_.route_target_link(target_link, link_route, joint_route)
+    
+    for j in joint_route:
+      joint = self.robot_.joints[j]
+      mat = self.calc_part_joint_jacob(target_link, joint)
+      jacob[:,joint.dof_index:joint.dof_index+joint.dof] = mat
+      
+    return jacob
+  
+  def link_jacobian(self, link_name_list):
+    links = self.robot_.link_list(link_name_list)
+    jacobs = np.zeros((6*len(links),self.robot_.dof))
+    for i in range(len(links)):
+      jacobs[6*i:6*(i+1),:] = self.__link_jacobian(links[i])
+    return jacobs
+    
   def __set_equall_aspect_3d(self, ax, data, margin):
     margin = 0.1
     ax_min = np.zeros(3)
