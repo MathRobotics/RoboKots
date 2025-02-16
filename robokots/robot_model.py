@@ -72,8 +72,8 @@ class RobotStruct:
       dof_index += j.dof
       self.joint_dof += j.dof
       
-      self.links[j.parent_link].joint_list.append(j.id)
-      self.links[j.child_link].joint_list.append(j.id)
+      self.links[j.parent_link].child_joint_list.append(j.id)
+      self.links[j.child_link].parent_joint_list.append(j.id)
       
     self.dof = self.joint_dof + self.link_dof
     
@@ -166,7 +166,8 @@ class LinkStruct:
     self.mass = mass
     self.inertia = inertia
     self.dof = self._link_dof(self.type)
-    self.joint_list = []
+    self.child_joint_list = []
+    self.parent_joint_list = []
     
   def set_dof_index(self, n):
       self.dof_index = n
