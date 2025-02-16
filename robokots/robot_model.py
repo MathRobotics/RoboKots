@@ -80,6 +80,15 @@ class RobotStruct:
     self.link_names = [l.name for l in self.links]
     self.joint_names = [j.name for j in self.joints]
     
+  def route_target_link(self, target_link : "LinkStruct", link_route : List, joint_route : List):
+    link_route.append(target_link.id)
+    for joint_id in target_link.parent_joint_ids:
+      self.route_target_joint(self.joints[joint_id], link_route, joint_route)
+  
+  def route_target_joint(self, target_joint : "JointStruct", link_route : List, joint_route : List):
+    joint_route.append(target_joint.id)
+    self.route_target_link(self.links[target_joint.parent_link_id], link_route, joint_route)
+    
   @staticmethod
   def from_dict(data: Dict):  
     joints = []
