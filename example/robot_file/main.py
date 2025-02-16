@@ -6,6 +6,10 @@ def main():
   robot = Robot.from_json_file("sample_robot.json")
   robot.print_structure()
   
+  link_name_list = ["world", "base","arm1","arm2","arm3"]
+  links = robot.link_list(link_name_list)
+  print(list(l.name for l in links) )
+  
   coord = [1., -1., 1.]
   veloc = [0., 0., 0.]
   accel = [0., 0., 0.]
