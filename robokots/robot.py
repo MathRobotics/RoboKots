@@ -89,7 +89,7 @@ class Robot():
     if target_link.id == joint.child_link_id:
       mat = joint.joint_select_mat
     else:
-      mat = np.linalg.inv(self.state_.link_adj_frame(target_link)) \
+      mat = self.state_.link_adj_frame(target_link).inv_adj() \
             @ self.state_.link_adj_frame(self.robot_.links[joint.child_link_id]) \
             @ joint.joint_select_mat
     return mat
