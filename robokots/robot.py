@@ -84,6 +84,12 @@ class Robot():
       
     self.state_.import_state(state_data)
     
+  def set_target_from_file(self, target_file):
+    self.target_ = RobotIO.from_target_json(target_file)
+    
+  def print_targets(self):
+    RobotIO.print_targets(self.target_)
+    
   def calc_part_joint_jacob(self, target_link, joint):
     mat = np.zeros((6,joint.dof))
     if target_link.id == joint.child_link_id:
