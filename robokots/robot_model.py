@@ -164,6 +164,26 @@ class RobotStruct:
         "links": links_array,
         "joints": joints_array
     }
+  
+  def print(self):
+      print(f"Robot DOF: {self.dof}")
+      print("\nLinks:")
+      for link in self.links:
+          print(f"  ID: {link.id}, Name: {link.name}, Type: {link.type}")
+          print(f"    COG: {link.cog}, Mass: {link.mass}")
+          print(f"    Inertia: {link.inertia}, DOF: {link.dof}")
+          print(f"    Connect parent joint: {link.parent_joint_ids}")
+          print(f"    Connect child joint: {link.child_joint_ids}")
+          print(f"    DOF index: {link.dof_index}")
+
+      print("\nJoints:")
+      for joint in self.joints:
+          print(f"  ID: {joint.id}, Name: {joint.name}, Type: {joint.type}")
+          print(f"    Axis: {joint.axis}, Parent Link: {joint.parent_link_id}, Child Link: {joint.child_link_id}")
+          print(f"    DOF: {joint.dof}")
+          print(f"    Origin: {joint.origin.pos()}")
+          print(f"{joint.origin.rot()}")
+          print(f"    DOF index: {joint.dof_index}\n")
 
 class LinkStruct:
   dof_index : int = 0
