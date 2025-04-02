@@ -1,0 +1,24 @@
+{
+  "targets":[
+    {
+      "type": "pos",
+      "link": "base",
+      "pos" : [0,1,0]
+    },
+    {
+      "type": "pos",
+      "link": "arm1",
+      "pos" : [0,0,1]
+    },
+    {
+      "type": "pos",
+      "link": "arm2",
+      "pos" : [1,0,0]
+    },
+    {
+      "type": "pos",
+      "link": "arm3",
+      "pos" : [1,2,3]
+    }
+  ]
+}
