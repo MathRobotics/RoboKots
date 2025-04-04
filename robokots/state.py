@@ -70,11 +70,12 @@ class RobotState:
     
   def link_frame(self, link):
     h = SE3(self.link_rot(link), self.link_pos(link))
-    return h.mat()
+    return h
 
-  def link_adj_frame(self, link):
-    a = SE3(self.link_rot(link), self.link_pos(link))
-    return a.adj_mat()
+  def link_rel_frame(self, base_link, target_link):
+    h = SE3(self.link_rot(target_link), self.link_pos(target_link)).inv() \
+        @ SE3(self.link_rot(base_link), self.link_pos(base_link))
+    return h
 
   def import_state(self, data):
     self.state_df.add_row(data)
