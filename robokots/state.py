@@ -37,45 +37,75 @@ class RobotState:
     return self.state_df.df
     
   @staticmethod
-  def link_state_vec(df, link, name):
-    return df[link.name+"_"+name][-1].to_numpy()
+  def link_state_vec(df, link_name, type):
+    return df[link_name+"_"+type][-1].to_numpy()
   
   @staticmethod
-  def link_state_mat(df, link, name):
-    mat_vec = df[link.name+"_"+name][-1].to_numpy()
+  def link_state_mat(df, link_name, type):
+    mat_vec = df[link_name+"_"+type][-1].to_numpy()
     mat = mat_vec.reshape((3,3))
     return mat
   
-  def all_state_vec(self, robot, name):
+  def all_state_vec(self, robot, type):
     labels = []
     for l in robot.links:
-      labels.append(l.name+"_"+name) 
+      labels.append(l.name+"_"+type) 
     mat = [self.df()[label][-1].to_list() for label in labels]
     return np.array(mat)
   
-  def link_pos(self, link):
-    return RobotState.link_state_vec(self.df(), link, "pos")
+  def link_pos(self, link_name):
+    return RobotState.link_state_vec(self.df(), link_name, "pos")
   
   def all_link_pos(self, robot):
     return self.all_state_vec(robot, "pos")
   
-  def link_rot(self, link):
-    return RobotState.link_state_mat(self.df(), link, "rot")
+  def link_rot(self, link_name):
+    return RobotState.link_state_mat(self.df(), link_name, "rot")
 
-  def link_vel(self, link):
-    return RobotState.link_state_vec(self.df(), link, "vel")
+  def link_vel(self, link_name):
+    return RobotState.link_state_vec(self.df(), link_name, "vel")
 
-  def link_acc(self, link):
-    return RobotState.link_state_vec(self.df(), link, "acc")
+  def link_acc(self, link_name):
+    return RobotState.link_state_vec(self.df(), link_name, "acc")
     
-  def link_frame(self, link):
-    h = SE3(self.link_rot(link), self.link_pos(link))
+  def link_frame(self, link_name):
+    h = SE3(self.link_rot(link_name), self.link_pos(link_name))
     return h
 
-  def link_rel_frame(self, base_link, target_link):
-    h = SE3(self.link_rot(target_link), self.link_pos(target_link)).inv() \
-        @ SE3(self.link_rot(base_link), self.link_pos(base_link))
+  def link_rel_frame(self, base_link_name, target_link_name):
+    h = SE3(self.link_rot(target_link_name), self.link_pos(target_link_name)).inv() \
+        @ SE3(self.link_rot(base_link_name), self.link_pos(base_link_name))
     return h
+
+  def extract_link_info(self, type, link_name, frame = "dummy", rel_frame = 'dummy'):
+    if type == "pos":
+      return self.link_pos(link_name)
+    elif type == "rot":
+      return self.link_rot(link_name)
+    elif type == "vel":
+      return self.link_vel(link_name)
+    elif type == "acc":
+      return self.link_acc(link_name)
+    elif type == "frame":
+      return self.link_frame(link_name)
+    else:
+      raise ValueError(f"Invalid type: {set(type)}")
+    
+  def extract_joint_info(self, type, name, frame = "dummy", rel_frame = 'dummy'):
+    'dummy'
+    
+  def extract_total_info(self, type, name, frame = "dummy", rel_frame = 'dummy'):
+    'dummy'
+  
+  def extract_info(self, group, type, name, frame = "dummy", rel_frame = 'dummy'):
+    if group == "link":
+      return self.extract_link_info(type, name, frame, rel_frame)
+    elif group == "joint":
+      return self.extract_link_info(type, name, frame, rel_frame)
+    elif group == "total":
+      return self.extract_link_info(type, name, frame, rel_frame)
+    else:
+      raise ValueError(f"Invalid group: {set(group)}")
 
   def import_state(self, data):
     self.state_df.add_row(data)

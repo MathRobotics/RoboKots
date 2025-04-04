@@ -10,7 +10,7 @@ def main():
     robot.print_targets()
 
     coord = [1., -1., 1.]
-    veloc = [0., 0., 0.]
+    veloc = [1., 2., 3.]
     accel = [0., 0., 0.]
     
     vec = []
@@ -22,7 +22,8 @@ def main():
     
     robot.kinematics()
 
-    print(robot.link_jacobian_target())
+    print(robot.state_target_link_vel())
+
   
 if __name__ == "__main__":
     main()

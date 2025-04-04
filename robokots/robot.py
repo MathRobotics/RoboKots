@@ -48,6 +48,15 @@ class Robot():
   def state_df(self):
     return self.state_.df()
   
+  def state_link_info(self, type, name):
+    return self.state_.extract_info('link', type, name)
+
+  def state_link_info_list(self, type, name_list):
+    return [self.state_.extract_info('link', type, name) for name in name_list]
+  
+  def state_target_link_info(self, type):
+    return self.state_link_info_list(type, self.target_.target_names)
+
   def kinematics(self):
     self.state_.import_state(f_kinematics(self.robot_, self.motions_))
     
