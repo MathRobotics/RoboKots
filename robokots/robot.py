@@ -11,7 +11,7 @@ from .motion import *
 from .state import *
 from .robot_model import *
 from .robot_io import *
-from .kinematics import *
+from .forward import *
   
 class Robot():
 
