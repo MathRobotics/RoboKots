@@ -55,10 +55,7 @@ def __link_jacobian(robot, state, target_link):
   
   for j in joint_route:
     joint = robot.joints[j]
-    if target_link.id == joint.child_link_id:
-      mat = joint.joint_select_mat
-    else:
-      mat = part_link_jacob(joint, state.link_rel_frame(robot.links[joint.child_link_id], target_link))
+    mat = target_part_link_jacob(target_link, joint, state.link_rel_frame(robot.links[joint.parent_link_id], target_link))
     jacob[:,joint.dof_index:joint.dof_index+joint.dof] = mat
     
   return jacob
