@@ -76,6 +76,18 @@ class RobotState:
     h = SE3(self.link_rot(target_link), self.link_pos(target_link)).inv() \
         @ SE3(self.link_rot(base_link), self.link_pos(base_link))
     return h
+  
+  def extract_info(self, robot, type, name):
+    if type == "link_pos":
+      return self.link_pos(robot.link(name))
+    elif type == "link_rot":
+      return self.link_rot(robot.link(name))
+    elif type == "link_vel":
+      return self.link_vel(robot.link(name))
+    elif type == "link_acc":
+      return self.link_acc(robot.link(name))
+    elif type == "link_frame":
+      return self.link_frame(robot.link(name))
 
   def import_state(self, data):
     self.state_df.add_row(data)

@@ -23,8 +23,7 @@ def io_save_json(data: Dict, file_path: str):
             json.dump(data, file, indent=4)
     except Exception as e:
         raise IOError(f"Failed to write JSON file: {e}")
-    
-@staticmethod
+
 def io_from_json_file(file_path: str) -> "RobotStruct":
     data = io_load_json(file_path)
     return RobotStruct.from_dict(data)
