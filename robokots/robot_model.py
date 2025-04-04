@@ -4,8 +4,6 @@
 
 import numpy as np
 
-import json
-
 import warnings
 from typing import List, Dict
 
