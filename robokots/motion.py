@@ -30,6 +30,20 @@ class RobotMotions:
         return i
     return None
   
+  def gen_values(self, name):
+    m_index = self.motion_index(name)
+    offset = self.dof * m_index
+    return self.motions[offset : offset + self.dof]
+
+  def coord(self):
+    return self.gen_values("coord")
+
+  def veloc(self):
+    return self.gen_values("veloc")
+    
+  def accel(self):
+    return self.gen_values("accel")
+    
   def gen_value(self, joint, name):
     m_index = self.motion_index(name)
     offset = self.dof * m_index + joint.dof_index
