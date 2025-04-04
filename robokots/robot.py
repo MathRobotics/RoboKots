@@ -22,13 +22,13 @@ class Robot():
 
   @staticmethod
   def from_json_file(model_file_name):
-    robot_ = RobotIO.from_json_file(model_file_name)
+    robot_ = io_from_json_file(model_file_name)
     motions_ = RobotMotions(robot_)
     state_ = RobotState(robot_)
     return Robot(robot_, motions_, state_)
   
   def print_structure(self):
-    RobotIO.print_structure(self.robot_)
+    io_print_structure(self.robot_)
 
   def link_list(self, name_list):
     return self.robot_.link_list(name_list)
@@ -85,10 +85,10 @@ class Robot():
     self.state_.import_state(state_data)
     
   def set_target_from_file(self, target_file):
-    self.target_ = RobotIO.from_target_json(target_file)
+    self.target_ = io_from_target_json(target_file)
     
   def print_targets(self):
-    RobotIO.print_targets(self.target_)
+    io_print_targets(self.target_)
     
   def calc_part_joint_jacob(self, target_link, joint):
     mat = np.zeros((6,joint.dof))
