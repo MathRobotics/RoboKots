@@ -63,3 +63,7 @@ def acc_kinematics(joint, p_link_vel, p_link_acc, joint_coord, joint_veloc, join
   
   acc =  rel_frame.mat_inv_adj() @ p_link_acc + SE3.hat_adj( rel_frame @ rel_vel ) @ p_link_vel + rel_acc
   return acc
+
+def part_link_jacob(joint, rel_frame):
+  return rel_frame.mat_adj() @ joint.joint_select_mat
+
