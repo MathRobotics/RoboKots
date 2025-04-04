@@ -59,6 +59,9 @@ class Robot():
   
   def link_jacobian(self, link_name_list):
     return f_link_jacobian(self.robot_, self.state_, link_name_list)
+  
+  def link_jacobian_target(self):
+    return f_link_jacobian(self.robot_, self.state_, self.target_.target_names)
 
   def __set_equall_aspect_3d(self, ax, data, margin):
     margin = 0.1
