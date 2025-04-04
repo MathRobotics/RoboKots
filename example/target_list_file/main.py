@@ -22,8 +22,9 @@ def main():
     
     robot.kinematics()
 
-    print(robot.state_target_link_vel())
+    print(robot.state_target_link_info('vel'))
 
+    print(robot.link_jacobian_target()@robot.motion("veloc"))
   
 if __name__ == "__main__":
     main()
