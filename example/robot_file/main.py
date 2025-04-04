@@ -17,13 +17,11 @@ def main():
   coord = [1., -1., 1.]
   veloc = [0., 0., 0.]
   accel = [0., 0., 0.]
-  force = [0., 0., 0.]
   
   vec = []
   vec.extend(coord)
   vec.extend(veloc)
   vec.extend(accel)
-  vec.extend(force)
   
   robot.import_motions(vec)
   print(robot.motions())
