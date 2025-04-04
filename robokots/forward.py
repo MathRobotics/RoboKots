@@ -11,7 +11,7 @@ from .kinematics import *
 
 from mathrobo import *
 
-def f_kinematics(robot, motions, state):
+def f_kinematics(robot, motions):
   state_data = {}
   
   world_name = robot.links[robot.joints[0].parent_link_id].name
@@ -45,4 +45,4 @@ def f_kinematics(robot, motions, state):
     state_data.update([(child.name + "_vel" , veloc.tolist())])
     state_data.update([(child.name + "_acc" , accel.tolist())])
     
-  state.import_state(state_data)
+  return state_data
