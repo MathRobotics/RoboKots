@@ -4,62 +4,45 @@
 # forward computation module from motion and robot_model to state
 
 import numpy as np
+from .robot_model import *
+from .motion import *
+from .state import *
+from .kinematics import *
 
 from mathrobo import *
 
-def joint_local_frame(joint, joint_angle):
-  if len(joint_angle) != 0:
-    v = joint.joint_select_mat@joint_angle
-  else:
-    v = joint.joint_select_mat@np.zeros(1)
-  frame = SE3.set_mat(SE3.exp(v))
-  return frame
-
-def joint_local_vel(joint, joint_vel):
-  if len(joint_vel) != 0:
-    vel = joint.joint_select_mat @ joint_vel
-  else:
-    vel = np.zeros(6)
-  return vel
-
-def joint_local_acc(joint, joint_acc):
-  if len(joint_acc) != 0:
-    acc = joint.joint_select_mat @ joint_acc
-  else:
-    acc = np.zeros(6)
-  return acc
-
-def link_rel_frame(joint, joint_coord):
-  joint_frame = joint_local_frame(joint, joint_coord)
-  rel_frame =  joint.origin @ joint_frame
-  return rel_frame
-
-def link_rel_vel(joint, joint_vel):
-  local_vel = joint_local_vel(joint, joint_vel)
-  rel_vel = joint.origin.mat_inv_adj() @ local_vel
-  return rel_vel
-
-def link_rel_acc(joint, joint_acc):
-  local_acc = joint_local_acc(joint, joint_acc)
-  rel_acc = joint.origin.mat_inv_adj() @ local_acc
-  return rel_acc
-
-def kinematics(joint, p_link_frame, joint_coord):
-  rel_frame = link_rel_frame(joint, joint_coord)
-  frame = p_link_frame @ rel_frame
-  return frame
-
-def vel_kinematics(joint, p_link_vel, joint_coord, joint_veloc):
-  rel_frame = link_rel_frame(joint, joint_coord)
-  rel_vel = link_rel_vel(joint, joint_veloc)
+def f_kinematics(robot, motions, state):
+  state_data = {}
   
-  vel = rel_frame.mat_inv_adj() @ p_link_vel  + rel_vel
-  return vel
-
-def acc_kinematics(joint, p_link_vel, p_link_acc, joint_coord, joint_veloc, joint_accel):
-  rel_frame = link_rel_frame(joint, joint_coord)
-  rel_vel = link_rel_vel(joint, joint_veloc)
-  rel_acc = link_rel_acc(joint, joint_accel)
+  world_name = robot.links[robot.joints[0].parent_link_id].name
+  state_data.update([(world_name + "_pos" , [0.,0.,0.])])
+  state_data.update([(world_name + "_rot" , [1.,0.,0.,0.,1.,0.,0.,0.,1.])])
+  state_data.update([(world_name + "_vel" , [0.,0.,0.,0.,0.,0.])])
+  state_data.update([(world_name + "_acc" , [0.,0.,0.,0.,0.,0.])])
   
-  acc =  rel_frame.mat_inv_adj() @ p_link_acc + SE3.hat_adj( rel_frame @ rel_vel ) @ p_link_vel + rel_acc
-  return acc
+  for joint in robot.joints:    
+    parent = robot.links[joint.parent_link_id]
+    child = robot.links[joint.child_link_id]
+    
+    joint_coord = motions.joint_coord(joint)
+    joint_veloc = motions.joint_veloc(joint)
+    joint_accel = motions.joint_accel(joint)
+    
+    rot = np.array(state_data[parent.name + "_rot"]).reshape((3,3))
+    p_link_frame = SE3(rot, state_data[parent.name + "_pos"])
+    p_link_vel = state_data[parent.name + "_vel"]  
+    p_link_acc = state_data[parent.name + "_acc"]  
+
+    frame = kinematics(joint, p_link_frame, joint_coord)  
+    veloc = vel_kinematics(joint, p_link_vel, joint_coord, joint_veloc)  
+    accel = acc_kinematics(joint, p_link_vel, p_link_acc, joint_coord, joint_veloc, joint_accel)       
+    
+    pos = frame.pos()
+    rot_vec = frame.rot().ravel()
+
+    state_data.update([(child.name + "_pos" , pos.tolist())])
+    state_data.update([(child.name + "_rot" , rot_vec.tolist())])
+    state_data.update([(child.name + "_vel" , veloc.tolist())])
+    state_data.update([(child.name + "_acc" , accel.tolist())])
+    
+  state.import_state(state_data)

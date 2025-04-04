@@ -47,42 +47,9 @@ class Robot():
   
   def state_df(self):
     return self.state_.df()
-
+  
   def kinematics(self):
-    state_data = {}
-    
-    world_name = self.robot_.links[self.robot_.joints[0].parent_link_id].name
-    state_data.update([(world_name + "_pos" , [0.,0.,0.])])
-    state_data.update([(world_name + "_rot" , [1.,0.,0.,0.,1.,0.,0.,0.,1.])])
-    state_data.update([(world_name + "_vel" , [0.,0.,0.,0.,0.,0.])])
-    state_data.update([(world_name + "_acc" , [0.,0.,0.,0.,0.,0.])])
-    
-    for joint in self.robot_.joints:    
-      parent = self.robot_.links[joint.parent_link_id]
-      child = self.robot_.links[joint.child_link_id]
-      
-      joint_coord = self.motions_.joint_coord(joint)
-      joint_veloc = self.motions_.joint_veloc(joint)
-      joint_accel = self.motions_.joint_accel(joint)
-      
-      rot = np.array(state_data[parent.name + "_rot"]).reshape((3,3))
-      p_link_frame = SE3(rot, state_data[parent.name + "_pos"])
-      p_link_vel = state_data[parent.name + "_vel"]  
-      p_link_acc = state_data[parent.name + "_acc"]  
-
-      frame = kinematics(joint, p_link_frame, joint_coord)  
-      veloc = vel_kinematics(joint, p_link_vel, joint_coord, joint_veloc)  
-      accel = acc_kinematics(joint, p_link_vel, p_link_acc, joint_coord, joint_veloc, joint_accel)       
-      
-      pos = frame.pos()
-      rot_vec = frame.rot().ravel()
-
-      state_data.update([(child.name + "_pos" , pos.tolist())])
-      state_data.update([(child.name + "_rot" , rot_vec.tolist())])
-      state_data.update([(child.name + "_vel" , veloc.tolist())])
-      state_data.update([(child.name + "_acc" , accel.tolist())])
-      
-    self.state_.import_state(state_data)
+    f_kinematics(self.robot_, self.motions_, self.state_)
     
   def set_target_from_file(self, target_file):
     self.target_ = io_from_target_json(target_file)
