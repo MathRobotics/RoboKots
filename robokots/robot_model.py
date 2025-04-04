@@ -25,6 +25,32 @@ class RobotStruct:
     self.link_names: List[str] = []
     self.joint_names: List[str] = []
     self.robot_init()
+    
+  def link(self, name):
+    for l in self.links:
+      if name == l.name:
+        return l
+    ValueError(f"Invalid link name: {name}")
+    return None
+  
+  def link_list(self, name_list):
+    link_list = []
+    for name in name_list:
+      link_list.append(self.link(name))
+    return link_list
+
+  def joint(self, name):
+    for l in self.joints:
+      if name == l.name:
+        return l
+    ValueError(f"Invalid joint name: {name}")
+    return None
+  
+  def joint_list(self, name_list):
+    joint_list = []
+    for name in name_list:
+      joint_list.append(self.joint(name))
+    return joint_list
 
   def robot_init(self):
     self.joint_num = len(self.joints)  
@@ -46,13 +72,22 @@ class RobotStruct:
       dof_index += j.dof
       self.joint_dof += j.dof
       
-      self.links[j.parent_link].joint_list.append(j.id)
-      self.links[j.child_link].joint_list.append(j.id)
+      self.links[j.parent_link_id].child_joint_ids.append(j.id)
+      self.links[j.child_link_id].parent_joint_ids.append(j.id)
       
     self.dof = self.joint_dof + self.link_dof
     
     self.link_names = [l.name for l in self.links]
     self.joint_names = [j.name for j in self.joints]
+    
+  def route_target_link(self, target_link : "LinkStruct", link_route : List, joint_route : List):
+    link_route.append(target_link.id)
+    for joint_id in target_link.parent_joint_ids:
+      self.route_target_joint(self.joints[joint_id], link_route, joint_route)
+  
+  def route_target_joint(self, target_joint : "JointStruct", link_route : List, joint_route : List):
+    joint_route.append(target_joint.id)
+    self.route_target_link(self.links[target_joint.parent_link_id], link_route, joint_route)
     
   @staticmethod
   def from_dict(data: Dict):  
@@ -73,8 +108,8 @@ class RobotStruct:
         name=joint["name"],
         type=joint["type"],
         axis=np.array(joint.get("axis", [0., 0., 0.])),
-        parent_link=joint["parent_link_id"],
-        child_link=joint["child_link_id"],
+        parent_link_id=joint["parent_link_id"],
+        child_link_id=joint["child_link_id"],
         origin=SE3.set_pos_quaternion(
           joint.get("origin", {}).get("position", [0., 0., 0.]),
           joint.get("origin", {}).get("orientation", [1., 0., 0., 0.])
@@ -113,8 +148,8 @@ class RobotStruct:
 
         joint_dict["axis"] = joint.axis.tolist()
 
-        joint_dict["parent_link_id"] = joint.parent_link
-        joint_dict["child_link_id"] = joint.child_link
+        joint_dict["parent_link_id"] = joint.parent_link_id
+        joint_dict["child_link_id"] = joint.child_link_id
 
         pos, quat = joint.origin.pos_quaternion()
         origin_dict = {
@@ -129,6 +164,26 @@ class RobotStruct:
         "links": links_array,
         "joints": joints_array
     }
+  
+  def print(self):
+      print(f"Robot DOF: {self.dof}")
+      print("\nLinks:")
+      for link in self.links:
+          print(f"  ID: {link.id}, Name: {link.name}, Type: {link.type}")
+          print(f"    COG: {link.cog}, Mass: {link.mass}")
+          print(f"    Inertia: {link.inertia}, DOF: {link.dof}")
+          print(f"    Connect parent joint: {link.parent_joint_ids}")
+          print(f"    Connect child joint: {link.child_joint_ids}")
+          print(f"    DOF index: {link.dof_index}")
+
+      print("\nJoints:")
+      for joint in self.joints:
+          print(f"  ID: {joint.id}, Name: {joint.name}, Type: {joint.type}")
+          print(f"    Axis: {joint.axis}, Parent Link: {joint.parent_link_id}, Child Link: {joint.child_link_id}")
+          print(f"    DOF: {joint.dof}")
+          print(f"    Origin: {joint.origin.pos()}")
+          print(f"{joint.origin.rot()}")
+          print(f"    DOF index: {joint.dof_index}\n")
 
 class LinkStruct:
   dof_index : int = 0
@@ -140,7 +195,8 @@ class LinkStruct:
     self.mass = mass
     self.inertia = inertia
     self.dof = self._link_dof(self.type)
-    self.joint_list = []
+    self.child_joint_ids = []
+    self.parent_joint_ids = []
     
   def set_dof_index(self, n):
       self.dof_index = n
@@ -152,13 +208,13 @@ class LinkStruct:
 
 class JointStruct:
     dof_index : int = 0
-    def __init__(self, id: int, name: str, type: str, axis: np.ndarray, parent_link: int, child_link: int, origin: SE3):
+    def __init__(self, id: int, name: str, type: str, axis: np.ndarray, parent_link_id: int, child_link_id: int, origin: SE3):
         self.id = id
         self.name = name
         self.type = type
         self.axis = axis if np.linalg.norm(axis) > 0 else np.array([1, 0, 0])
-        self.parent_link = parent_link
-        self.child_link = child_link
+        self.parent_link_id = parent_link_id
+        self.child_link_id = child_link_id
         self.dof = self._joint_dof(self.type)
         self.joint_select_mat = self._joint_select_mat(self.type, self.axis)
         self.origin = origin

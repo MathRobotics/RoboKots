@@ -6,6 +6,7 @@ import json
 from typing import Dict
 
 from .robot_model import *
+from .target import *
 
 class RobotIO():
   def load_json(file_path: str) -> Dict:
@@ -30,20 +31,12 @@ class RobotIO():
       return RobotStruct.from_dict(data)
 
   def print_structure(robot : RobotStruct):
-      print(f"Robot DOF: {robot.dof}")
-      print("\nLinks:")
-      for link in robot.links:
-          print(f"  ID: {link.id}, Name: {link.name}, Type: {link.type}")
-          print(f"    COG: {link.cog}, Mass: {link.mass}")
-          print(f"    Inertia: {link.inertia}, DOF: {link.dof}")
-          print(f"    Connect joint: {link.joint_list}")
-          print(f"    DOF index: {link.dof_index}")
-
-      print("\nJoints:")
-      for joint in robot.joints:
-          print(f"  ID: {joint.id}, Name: {joint.name}, Type: {joint.type}")
-          print(f"    Axis: {joint.axis}, Parent Link: {joint.parent_link}, Child Link: {joint.child_link}")
-          print(f"    DOF: {joint.dof}")
-          print(f"    Origin: {joint.origin.pos()}")
-          print(f"{joint.origin.rot()}")
-          print(f"    DOF index: {joint.dof_index}")
+      robot.print()
+          
+  @staticmethod
+  def from_target_json(file_path: str) -> "TargetList":
+      data = RobotIO.load_json(file_path)
+      return TargetList.from_dict(data)
+  
+  def print_targets(t_list : TargetList):
+      t_list.print()
