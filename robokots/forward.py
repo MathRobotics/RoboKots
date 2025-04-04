@@ -46,3 +46,26 @@ def f_kinematics(robot, motions):
     state_data.update([(child.name + "_acc" , accel.tolist())])
     
   return state_data
+
+def __link_jacobian(robot, state, target_link):
+  jacob = np.zeros((6,robot.dof))
+  link_route = []
+  joint_route = []
+  robot.route_target_link(target_link, link_route, joint_route)
+  
+  for j in joint_route:
+    joint = robot.joints[j]
+    if target_link.id == joint.child_link_id:
+      mat = joint.joint_select_mat
+    else:
+      mat = part_link_jacob(joint, state.link_rel_frame(robot.links[joint.child_link_id], target_link))
+    jacob[:,joint.dof_index:joint.dof_index+joint.dof] = mat
+    
+  return jacob
+  
+def f_link_jacobian(robot, state, link_name_list):
+  links = robot.link_list(link_name_list)
+  jacobs = np.zeros((6*len(links),robot.dof))
+  for i in range(len(links)):
+    jacobs[6*i:6*(i+1),:] = __link_jacobian(robot, state, links[i])
+  return jacobs
