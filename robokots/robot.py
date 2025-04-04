@@ -49,7 +49,7 @@ class Robot():
     return self.state_.df()
   
   def kinematics(self):
-    f_kinematics(self.robot_, self.motions_, self.state_)
+    self.state_.import_state(f_kinematics(self.robot_, self.motions_))
     
   def set_target_from_file(self, target_file):
     self.target_ = io_from_target_json(target_file)
