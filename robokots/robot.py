@@ -44,6 +44,9 @@ class Robot():
     
   def import_motions(self, vecs):
     self.motions_.set_motion(vecs)
+    
+  def motion(self, name):
+    return self.motions_.gen_values(name)
   
   def state_df(self):
     return self.state_.df()
