@@ -22,9 +22,12 @@ def main():
     
     robot.kinematics()
 
-    print(robot.state_target_link_info('vel'))
+    fk_vel = robot.state_target_link_info('vel')
+    jacob_vel = robot.link_jacobian_target()@robot.motion("veloc")
 
-    print(robot.link_jacobian_target()@robot.motion("veloc"))
+    for i in range(len(fk_vel)):
+      print(fk_vel[i])
+      print(jacob_vel[6*i:6*(i+1)])
   
 if __name__ == "__main__":
     main()
