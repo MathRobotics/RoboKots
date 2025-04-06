@@ -5,7 +5,7 @@
 
 import numpy as np
 
-from mathrobo import *
+from mathrobo import SE3
 
 def joint_local_frame(joint, joint_angle):
   if len(joint_angle) != 0:

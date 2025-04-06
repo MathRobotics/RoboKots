@@ -6,8 +6,6 @@ from typing import List, Dict
 
 import numpy as np
 
-from mathrobo import *
-
 class Target:
   def __init__(self, type: str, link_name: str, pos: np.ndarray):
     self.type = type

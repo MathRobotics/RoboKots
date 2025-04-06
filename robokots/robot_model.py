@@ -7,7 +7,7 @@ import numpy as np
 import warnings
 from typing import List, Dict
 
-from mathrobo import *
+from mathrobo import SE3
 
 warnings.simplefilter("always", UserWarning)
 
