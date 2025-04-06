@@ -5,7 +5,7 @@
 import polars as pl
 import numpy as np
 
-from mathrobo import *
+from mathrobo import SE3
 
 class RobotDF:
   def __init__(self, names_, aliases_, separator_ = "_"):
