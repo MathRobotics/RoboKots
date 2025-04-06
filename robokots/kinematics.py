@@ -69,7 +69,7 @@ def part_link_jacob(joint, rel_frame):
 
 def target_part_link_jacob(target_link, joint, rel_frame):
   if target_link.id == joint.child_link_id:
-    mat = joint.joint_select_mat
+    mat = joint.origin.mat_inv_adj() @ joint.joint_select_mat
   else:
     mat = part_link_jacob(joint, rel_frame)  
   return mat
