@@ -4,12 +4,11 @@
 # forward computation module from motion and robot_model to state
 
 import numpy as np
+
 from .robot_model import *
 from .motion import *
 from .state import *
 from .kinematics import *
-
-from mathrobo import *
 
 def f_kinematics(robot, motions):
   state_data = {}

@@ -3,9 +3,6 @@
 # 2024.12.13 Created by T.Ishigaki
 
 import numpy as np
-import matplotlib.pyplot as plt
-
-from mathrobo import *
 
 from .motion import *
 from .state import *
