@@ -54,7 +54,8 @@ def __link_jacobian(robot, state, target_link):
   
   for j in joint_route:
     joint = robot.joints[j]
-    mat = target_part_link_jacob(target_link, joint, state.link_rel_frame(robot.links[joint.parent_link_id].name, target_link.name))
+    rel_frame = state.link_rel_frame(robot.links[joint.child_link_id].name, target_link.name)
+    mat = target_part_link_jacob(target_link, joint, rel_frame)
     jacob[:,joint.dof_index:joint.dof_index+joint.dof] = mat
     
   return jacob

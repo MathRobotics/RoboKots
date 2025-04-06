@@ -27,7 +27,10 @@ class Robot():
   
   def print_structure(self):
     io_print_structure(self.robot_)
-
+    
+  def dof(self):
+    return self.robot_.dof
+  
   def link_list(self, name_list):
     return self.robot_.link_list(name_list)
   

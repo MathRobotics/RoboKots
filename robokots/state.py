@@ -73,8 +73,8 @@ class RobotState:
     return h
 
   def link_rel_frame(self, base_link_name, target_link_name):
-    h = SE3(self.link_rot(target_link_name), self.link_pos(target_link_name)).inv() \
-        @ SE3(self.link_rot(base_link_name), self.link_pos(base_link_name))
+    h = SE3(self.link_rot(base_link_name), self.link_pos(base_link_name)).inv() \
+        @ SE3(self.link_rot(target_link_name), self.link_pos(target_link_name))
     return h
 
   def extract_link_info(self, type, link_name, frame = "dummy", rel_frame = 'dummy'):
