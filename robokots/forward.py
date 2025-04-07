@@ -9,6 +9,7 @@ from .robot_model import *
 from .motion import *
 from .state import *
 from .kinematics import *
+from .dynamics import *
 
 def f_kinematics(robot, motions):
   state_data = {}
@@ -66,3 +67,39 @@ def f_link_jacobian(robot, state, link_name_list):
   for i in range(len(links)):
     jacobs[6*i:6*(i+1),:] = __link_jacobian(robot, state, links[i])
   return jacobs
+
+def f_dynamics(robot, motions):
+  state_data = {}
+  
+  state_data = f_kinematics(robot, motions)
+
+  world_name = robot.links[robot.joints[0].parent_link_id].name
+  state_data.update([(world_name + "_force" , [0.,0.,0.,0.,0.,0.])])
+  state_data.update([(world_name + "_torque" , [0.,0.,0.,0.,0.,0.])])
+
+  for joint in reversed(robot.joints):    
+    parent = robot.links[joint.parent_link_id]
+    child = robot.links[joint.child_link_id]
+    
+    joint_coord = motions.joint_coord(joint)
+
+    inertia = spatial_inertia(child.mass, child.inertia, child.cog)
+
+    link_veloc = state_data[child.name + "_vel"]
+    link_accel = state_data[child.name + "_acc"]
+    
+    link_force = link_dynamics(inertia, link_veloc, link_accel)  
+    state_data.update([(child.name + "_link_force" , link_force.tolist())])
+    
+    rel_frame = link_rel_frame(joint, joint_coord)
+
+    p_joint_force = np.zeros(6)
+    for id in child.child_joint_ids:
+      p_joint_force += state_data[robot.joints[id].name + "_joint_force"]
+
+    joint_force, joint_torque = joint_dynamics(joint, rel_frame, p_joint_force, link_force)
+    
+    state_data.update([(joint.name + "_joint_force" , joint_force.tolist())])
+    state_data.update([(joint.name + "_joint_torque" , joint_torque.tolist())])
+    
+  return state_data
