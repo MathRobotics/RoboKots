@@ -24,10 +24,13 @@ def main():
   vec.extend(accel)
   
   robot.import_motions(vec)
+  print(robot.motions())
   
   robot.kinematics()
   
-  robot.show_robot()
+  print(robot.state_df())
+  
+  print(robot.link_jacobian(["arm1","arm2","arm3"]))
   
 if __name__ == "__main__":
     main()

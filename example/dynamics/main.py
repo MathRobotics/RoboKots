@@ -24,10 +24,11 @@ def main():
   vec.extend(accel)
   
   robot.import_motions(vec)
+  print(robot.motions())
   
-  robot.kinematics()
+  robot.dynamics()
   
-  robot.show_robot()
+  print(robot.state_df())
   
 if __name__ == "__main__":
     main()
