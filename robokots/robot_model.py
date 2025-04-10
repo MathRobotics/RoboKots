@@ -222,7 +222,7 @@ class JointStruct:
 
     @staticmethod
     def _joint_dof(type: str) -> int:
-        if type == "revolution":
+        if type == "revolute":
             return 1
         elif type == "fix":
             return 0
@@ -235,7 +235,7 @@ class JointStruct:
         mat = np.zeros((6, 1))
         if type == "fix":
             return mat
-        elif type == "revolution":
+        elif type == "revolute":
             mat[0:3, 0] = axis
             return mat
         else:
