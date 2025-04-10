@@ -8,10 +8,8 @@ import numpy as np
 from mathrobo import SE3
 
 class RobotDF:
-  def __init__(self, names_, aliases_, separator_ = "_"):
+  def __init__(self, names_):
     self.names = names_
-    self.aliases = aliases_
-    self.separator = separator_
 
     self.df = pl.DataFrame()
     self.set_df()
@@ -22,16 +20,24 @@ class RobotDF:
     
   def set_df(self):
     for name in self.names:
-      for a in self.aliases:
-        alias_name = name + self.separator + a
-        self.df = self.df.with_columns([pl.Series(name=alias_name, dtype=pl.List(pl.Float64))])
+      self.df = self.df.with_columns([pl.Series(name=name, dtype=pl.List(pl.Float64))])
 
 class RobotState:
   state_df : RobotDF
   
-  def __init__(self, robot, aliases = ["pos", "rot", "vel", "acc"], separator = "_"):
-    state_names = robot.link_names
-    self.state_df = RobotDF(state_names, aliases, separator)
+  def __init__(self, robot, l_aliases = ["pos", "rot", "vel", "acc"], j_aliases = [], separator = "_"):
+    names = []
+    if len(l_aliases) != 0:
+      for l_name in robot.link_names:
+        for al in l_aliases:
+          names.append(l_name + separator + al)
+    
+    if len(j_aliases) != 0:
+      for j_name in robot.joint_names:
+        for al in j_aliases:
+          names.append(j_name + separator + al)
+
+    self.state_df = RobotDF(names)
     
   def df(self):
     return self.state_df.df
@@ -101,9 +107,9 @@ class RobotState:
     if group == "link":
       return self.extract_link_info(type, name, frame, rel_frame)
     elif group == "joint":
-      return self.extract_link_info(type, name, frame, rel_frame)
+      return self.extract_joint_info(type, name, frame, rel_frame)
     elif group == "total":
-      return self.extract_link_info(type, name, frame, rel_frame)
+      return self.extract_total_info(type, name, frame, rel_frame)
     else:
       raise ValueError(f"Invalid group: {set(group)}")
 
