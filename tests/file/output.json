@@ -1,0 +1,60 @@
+{
+    "links": [
+        {
+            "id": 0,
+            "name": "link1",
+            "mass": 1.0,
+            "cog": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "inertia": [
+                1.0,
+                1.0,
+                1.0
+            ]
+        },
+        {
+            "id": 1,
+            "name": "link2",
+            "mass": 2.0,
+            "cog": [
+                1.0,
+                1.0,
+                1.0
+            ],
+            "inertia": [
+                2.0,
+                2.0,
+                2.0
+            ]
+        }
+    ],
+    "joints": [
+        {
+            "id": 0,
+            "name": "joint1",
+            "type": "revolute",
+            "parent_link_id": 0,
+            "child_link_id": 1,
+            "axis": [
+                0,
+                0,
+                1
+            ]
+        },
+        {
+            "id": 1,
+            "name": "joint2",
+            "type": "revolute",
+            "parent_link_id": 1,
+            "child_link_id": 0,
+            "axis": [
+                1,
+                0,
+                0
+            ]
+        }
+    ]
+}
