@@ -15,7 +15,7 @@ class RobotDF:
     self.set_df()
     
   def add_row(self, data):
-    new_row = pl.DataFrame([data])
+    new_row = pl.DataFrame([data], schema=self.df.schema)
     self.df = self.df.vstack(new_row)
     
   def set_df(self):
