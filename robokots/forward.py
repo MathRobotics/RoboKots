@@ -103,7 +103,7 @@ def f_dynamics(robot, motions):
     for id in child.child_joint_ids:
       p_joint_force += state_data[robot.joints[id].name + "_joint_force"]
 
-    joint_force, joint_torque = joint_dynamics(joint, rel_frame, p_joint_force, link_force)
+    joint_torque, joint_force = joint_dynamics(joint, rel_frame, p_joint_force, link_force)
     
     state_data.update([(joint.name + "_joint_force" , joint_force.tolist())])
     state_data.update([(joint.name + "_joint_torque" , joint_torque.tolist())])

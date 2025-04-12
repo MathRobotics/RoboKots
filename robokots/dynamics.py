@@ -72,4 +72,4 @@ def joint_dynamics(joint, rel_frame, p_joint_force, link_force):
     """
     joint_force = rel_frame.mat_inv_adj() @ p_joint_force - link_force
     joint_torque = joint.joint_select_mat.T @ joint_force
-    return joint_force, joint_torque
+    return joint_torque, joint_torque
