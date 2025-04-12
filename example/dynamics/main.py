@@ -3,7 +3,7 @@ import numpy as np
 from robokots.robot import *
 
 def main():
-  robot = Robot.from_json_file("../model/sample_robot.json")
+  robot = Robot.from_json_file("../model/sample_robot.json", "dynamics")
   robot.print_structure()
   
   link_name_list = ["world","base","arm1","arm2","arm3"]
@@ -24,10 +24,11 @@ def main():
   vec.extend(accel)
   
   robot.import_motions(vec)
+  print(robot.motions())
   
-  robot.kinematics()
+  robot.dynamics()
   
-  robot.show_robot()
+  print(robot.state_df())
   
 if __name__ == "__main__":
     main()

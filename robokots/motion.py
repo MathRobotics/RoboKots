@@ -6,9 +6,9 @@ import numpy as np
 
 class RobotMotions:
   motions : np.ndarray = np.array([])
-  ALLOWED_ALIASES = frozenset(["coord", "veloc", "accel", "force"])
+  ALLOWED_ALIASES = frozenset(["coord", "veloc", "accel"])
 
-  def __init__(self, robot, aliases_ = ["coord", "veloc", "accel", "force"]):
+  def __init__(self, robot, aliases_ = ["coord", "veloc", "accel"]):
     if not set(aliases_).issubset(self.ALLOWED_ALIASES):
       raise ValueError(f"Invalid alias: {set(aliases_) - self.ALLOWED_ALIASES}")
     self.aliases = aliases_
@@ -16,7 +16,7 @@ class RobotMotions:
     self.motion_num = len(self.aliases) 
     self.motions = np.zeros(self.dof * self.motion_num)
     
-  def set_aliases(self, aliases_ = ["coord", "veloc", "accel", "force"]):
+  def set_aliases(self, aliases_ = ["coord", "veloc", "accel"]):
     if not set(aliases_).issubset(self.ALLOWED_ALIASES):
       raise ValueError(f"Invalid alias: {set(aliases_) - self.ALLOWED_ALIASES}")
     self.aliases = aliases_
@@ -30,6 +30,20 @@ class RobotMotions:
         return i
     return None
   
+  def gen_values(self, name):
+    m_index = self.motion_index(name)
+    offset = self.dof * m_index
+    return self.motions[offset : offset + self.dof]
+
+  def coord(self):
+    return self.gen_values("coord")
+
+  def veloc(self):
+    return self.gen_values("veloc")
+    
+  def accel(self):
+    return self.gen_values("accel")
+    
   def gen_value(self, joint, name):
     m_index = self.motion_index(name)
     offset = self.dof * m_index + joint.dof_index
@@ -43,9 +57,6 @@ class RobotMotions:
   
   def joint_accel(self, joint):
     return self.gen_value(joint, "accel")
-  
-  def joint_force(self, joint):
-    return self.gen_value(joint, "force")
 
   def link_coord(self, link):
     return self.gen_value(link, "coord")
@@ -55,6 +66,3 @@ class RobotMotions:
   
   def link_accel(self, link):
     return self.gen_value(link, "accel")
-  
-  def link_force(self, link):
-    return self.gen_value(link, "force")

@@ -6,8 +6,6 @@ from typing import List, Dict
 
 import numpy as np
 
-from mathrobo import *
-
 class Target:
   def __init__(self, type: str, link_name: str, pos: np.ndarray):
     self.type = type
@@ -21,6 +19,9 @@ class TargetList:
   def __init__(self, targets_: List["Target"]):
     self.targets = targets_
     self.target_num = len(self.targets)  
+    self.target_names = [t.link_name for t in self.targets]
+    self.target_types = [t.type for t in self.targets]
+    self.target_positions = [t.pos for t in self.targets]
     
     index = 0
     for t in self.targets:

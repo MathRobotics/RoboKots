@@ -1,10 +1,11 @@
 #!/usr/bin/env python3.9
 # -*- coding: utf-8 -*-
-# 2024.12.13 Created by T.Ishigaki
+# 2025.04.05 Created by T.Ishigaki
+# kinematics module
 
 import numpy as np
 
-from mathrobo import *
+from mathrobo import SE3
 
 def joint_local_frame(joint, joint_angle):
   if len(joint_angle) != 0:
@@ -35,12 +36,12 @@ def link_rel_frame(joint, joint_coord):
 
 def link_rel_vel(joint, joint_vel):
   local_vel = joint_local_vel(joint, joint_vel)
-  rel_vel = joint.origin.inv_adj() @ local_vel
+  rel_vel = joint.origin.mat_inv_adj() @ local_vel
   return rel_vel
 
 def link_rel_acc(joint, joint_acc):
   local_acc = joint_local_acc(joint, joint_acc)
-  rel_acc = joint.origin.inv_adj() @ local_acc
+  rel_acc = joint.origin.mat_inv_adj() @ local_acc
   return rel_acc
 
 def kinematics(joint, p_link_frame, joint_coord):
@@ -52,7 +53,7 @@ def vel_kinematics(joint, p_link_vel, joint_coord, joint_veloc):
   rel_frame = link_rel_frame(joint, joint_coord)
   rel_vel = link_rel_vel(joint, joint_veloc)
   
-  vel = rel_frame.inv_adj() @ p_link_vel  + rel_vel
+  vel = rel_frame.mat_inv_adj() @ p_link_vel  + rel_vel
   return vel
 
 def acc_kinematics(joint, p_link_vel, p_link_acc, joint_coord, joint_veloc, joint_accel):
@@ -60,5 +61,11 @@ def acc_kinematics(joint, p_link_vel, p_link_acc, joint_coord, joint_veloc, join
   rel_vel = link_rel_vel(joint, joint_veloc)
   rel_acc = link_rel_acc(joint, joint_accel)
   
-  acc =  rel_frame.inv_adj() @ p_link_acc + SE3.hat_adj( rel_frame @ rel_vel ) @ p_link_vel + rel_acc
+  acc =  rel_frame.mat_inv_adj() @ p_link_acc + SE3.hat_adj( rel_frame @ rel_vel ) @ p_link_vel + rel_acc
   return acc
+
+def part_link_jacob(joint, rel_frame):
+  return rel_frame.mat_inv_adj() @ joint.origin.mat_inv_adj() @ joint.joint_select_mat
+
+
+
