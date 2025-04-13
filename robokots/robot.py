@@ -23,14 +23,22 @@ class Robot():
   @staticmethod
   def from_json_file(model_file_name, order_=3, dim_=3):
     robot_ = io_from_json_file(model_file_name)
-    motions_ = RobotMotions(robot_)
+
+    m_aliases = []
+    l_aliases = []
+    j_aliases = []
+    
     if order_ == 1:
+      m_aliases = ["coord"]
       l_aliases = ["pos", "rot"]
     elif order_ == 2:
+      m_aliases = ["coord", "veloc"]
       l_aliases = ["pos", "rot", "vel"]
     elif order_ > 2:
+      m_aliases = ["coord", "veloc", "accel"]
       l_aliases = ["pos", "rot", "vel", "acc"]
       for i in range(order_-3):
+        m_aliases.append("accel"+str(i+1))
         l_aliases.append("acc_diff"+str(i+1))
         
     l_aliases.append("link_force")
@@ -41,6 +49,7 @@ class Robot():
       j_aliases.append("joint_torque_diff"+str(i+1))
       j_aliases.append("joint_force_diff"+str(i+1))
       
+    motions_ = RobotMotions(robot_, m_aliases)
     state_ = RobotState(robot_, l_aliases, j_aliases)
 
     return Robot(robot_, motions_, state_, order_, dim_)
