@@ -13,14 +13,33 @@ from .state import *
 from .kinematics import *
 from .dynamics import *
 
+def cmtm_to_state(cmtm, name):
+  state_data = {}
+  mat = cmtm.elem_mat()
+  veloc = cmtm.elem_vecs(0)
+  accel = cmtm.elem_vecs(1)
+  
+  pos = mat[:3,3]
+  rot_vec = mat[:3,:3].ravel()
+  
+  state = [
+      (name+"_pos" , pos.tolist()),
+      (name+"_rot" , rot_vec.tolist()),
+      (name+"_vel" , veloc.tolist()),
+      (name+"_acc" , accel.tolist())
+  ]
+  
+  return state
+
 def f_kinematics(robot, motions):
   state_data = {}
+  state_cmtm = {}
   
   world_name = robot.links[robot.joints[0].parent_link_id].name
-  state_data.update([(world_name + "_pos" , [0.,0.,0.])])
-  state_data.update([(world_name + "_rot" , [1.,0.,0.,0.,1.,0.,0.,0.,1.])])
-  state_data.update([(world_name + "_vel" , [0.,0.,0.,0.,0.,0.])])
-  state_data.update([(world_name + "_acc" , [0.,0.,0.,0.,0.,0.])])
+  state_cmtm.update([(world_name, CMTM.eye(SE3))])
+  
+  state = cmtm_to_state(state_cmtm[world_name], world_name)
+  state_data.update(state)
   
   for joint in robot.joints:    
     parent = robot.links[joint.parent_link_id]
@@ -30,29 +49,15 @@ def f_kinematics(robot, motions):
     joint_veloc = motions.joint_veloc(joint)
     joint_accel = motions.joint_accel(joint)
     
-    rot = np.array(state_data[parent.name + "_rot"]).reshape((3,3))
-    p_link_frame = SE3(rot, state_data[parent.name + "_pos"])
-    p_link_vel = state_data[parent.name + "_vel"]  
-    p_link_acc = state_data[parent.name + "_acc"]  
-    
-    p_link_cmtm = CMTM[SE3](p_link_frame, np.array((p_link_vel, p_link_acc)))
+    p_link_cmtm = state_cmtm[parent.name]
     rel_cmtm = link_rel_cmtm(joint, joint_coord, joint_veloc, joint_accel)
     
     link_cmtm = p_link_cmtm @ rel_cmtm
+
+    state_cmtm.update([(child.name, link_cmtm)])
     
-    frame = link_cmtm.mat()
-    veloc = link_cmtm.elem_vecs(0)
-    accel = link_cmtm.elem_vecs(1)     
-    
-    pos = frame[:3,3]
-    rot_vec = frame[:3,:3].ravel()
-    
-    state_data.update([
-        (child.name + "_pos" , pos.tolist()),
-        (child.name + "_rot" , rot_vec.tolist()),
-        (child.name + "_vel" , veloc.tolist()),
-        (child.name + "_acc" , accel.tolist())
-    ])
+    state = cmtm_to_state(link_cmtm, child.name)
+    state_data.update(state)
     
   return state_data
 
