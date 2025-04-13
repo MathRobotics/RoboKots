@@ -13,17 +13,21 @@ from .forward import *
   
 class Robot():
 
-  def __init__(self, robot_, motions_, state_):
+  def __init__(self, robot_, motions_, state_, level_):
     self.robot_ = robot_
     self.motions_ = motions_
     self.state_ = state_
+    self.level_ = level_
 
   @staticmethod
-  def from_json_file(model_file_name):
+  def from_json_file(model_file_name, level_="kinematics"):
     robot_ = io_from_json_file(model_file_name)
     motions_ = RobotMotions(robot_)
-    state_ = RobotState(robot_)
-    return Robot(robot_, motions_, state_)
+    if level_ == "kinematics":
+      state_ = RobotState(robot_)
+    elif level_ == "dynamics":
+      state_ = RobotState(robot_, l_aliases=["pos", "rot", "vel", "acc","link_force"],j_aliases=["joint_torque", "joint_force"])
+    return Robot(robot_, motions_, state_, level_)
   
   def print_structure(self):
     io_print_structure(self.robot_)
@@ -63,6 +67,9 @@ class Robot():
 
   def kinematics(self):
     self.state_.import_state(f_kinematics(self.robot_, self.motions_))
+  
+  def dynamics(self):
+    self.state_.import_state(f_dynamics(self.robot_, self.motions_))
     
   def set_target_from_file(self, target_file):
     self.target_ = io_from_target_json(target_file)

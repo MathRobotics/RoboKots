@@ -3,7 +3,7 @@ import numpy as np
 from robokots.robot import *
 
 def main():
-  robot = Robot.from_json_file("../model/sample_robot.json")
+  robot = Robot.from_json_file("../model/sample_robot.json", "dynamics")
   robot.print_structure()
   
   link_name_list = ["world","base","arm1","arm2","arm3"]
@@ -26,13 +26,9 @@ def main():
   robot.import_motions(vec)
   print(robot.motions())
   
-  robot.kinematics()
+  robot.dynamics()
   
   print(robot.state_df())
-  
-  print(robot.link_jacobian(["arm1","arm2","arm3"]))
-
-  robot.show_robot()
   
 if __name__ == "__main__":
     main()

@@ -31,8 +31,6 @@ def main():
   print(robot.state_df())
   
   print(robot.link_jacobian(["arm1","arm2","arm3"]))
-
-  robot.show_robot()
   
 if __name__ == "__main__":
     main()
