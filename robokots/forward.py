@@ -34,18 +34,25 @@ def f_kinematics(robot, motions):
     p_link_frame = SE3(rot, state_data[parent.name + "_pos"])
     p_link_vel = state_data[parent.name + "_vel"]  
     p_link_acc = state_data[parent.name + "_acc"]  
-
-    frame = kinematics(joint, p_link_frame, joint_coord)  
-    veloc = vel_kinematics(joint, p_link_vel, joint_coord, joint_veloc)  
-    accel = acc_kinematics(joint, p_link_vel, p_link_acc, joint_coord, joint_veloc, joint_accel)       
     
-    pos = frame.pos()
-    rot_vec = frame.rot().ravel()
-
-    state_data.update([(child.name + "_pos" , pos.tolist())])
-    state_data.update([(child.name + "_rot" , rot_vec.tolist())])
-    state_data.update([(child.name + "_vel" , veloc.tolist())])
-    state_data.update([(child.name + "_acc" , accel.tolist())])
+    p_link_cmtm = CMTM[SE3](p_link_frame, np.array((p_link_vel, p_link_acc)))
+    rel_cmtm = link_rel_cmtm(joint, joint_coord, joint_veloc, joint_accel)
+    
+    link_cmtm = p_link_cmtm @ rel_cmtm
+    
+    frame = link_cmtm.mat()
+    veloc = link_cmtm.elem_vecs(0)
+    accel = link_cmtm.elem_vecs(1)     
+    
+    pos = frame[:3,3]
+    rot_vec = frame[:3,:3].ravel()
+    
+    state_data.update([
+        (child.name + "_pos" , pos.tolist()),
+        (child.name + "_rot" , rot_vec.tolist()),
+        (child.name + "_vel" , veloc.tolist()),
+        (child.name + "_acc" , accel.tolist())
+    ])
     
   return state_data
 
