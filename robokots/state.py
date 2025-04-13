@@ -43,46 +43,48 @@ class RobotState:
 
     self.state_df = RobotDF(names)
     
-  def df(self):
+  def df(self) -> pl.DataFrame:
+    if self.state_df.df.is_empty():
+      raise ValueError("DataFrame is empty. Please add data first.")
     return self.state_df.df
     
   @staticmethod
-  def link_state_vec(df, link_name : str, type : str):
+  def link_state_vec(df, link_name : str, type : str) -> np.ndarray:
     return df[link_name+"_"+type][-1].to_numpy()
   
   @staticmethod
-  def link_state_mat(df, link_name : str, type : str):
+  def link_state_mat(df, link_name : str, type : str) -> np.ndarray:
     mat_vec = df[link_name+"_"+type][-1].to_numpy()
     mat = mat_vec.reshape((3,3))
     return mat
   
-  def all_state_vec(self, robot : RobotStruct, type : str):
+  def all_state_vec(self, robot : RobotStruct, type : str) -> np.ndarray:
     labels = []
     for l in robot.links:
       labels.append(l.name+"_"+type) 
     mat = [self.df()[label][-1].to_list() for label in labels]
     return np.array(mat)
   
-  def link_pos(self, link_name : str):
+  def link_pos(self, link_name : str) -> np.ndarray:
     return RobotState.link_state_vec(self.df(), link_name, "pos")
   
-  def all_link_pos(self, robot : RobotStruct):
+  def all_link_pos(self, robot : RobotStruct) -> np.ndarray:
     return self.all_state_vec(robot, "pos")
   
-  def link_rot(self, link_name : str):
+  def link_rot(self, link_name : str) -> np.ndarray:
     return RobotState.link_state_mat(self.df(), link_name, "rot")
 
-  def link_vel(self, link_name : str):
+  def link_vel(self, link_name : str) -> np.ndarray:
     return RobotState.link_state_vec(self.df(), link_name, "vel")
 
-  def link_acc(self, link_name : str):
+  def link_acc(self, link_name : str) -> np.ndarray:
     return RobotState.link_state_vec(self.df(), link_name, "acc")
     
-  def link_frame(self, link_name : str):
+  def link_frame(self, link_name : str) -> SE3:
     h = SE3(self.link_rot(link_name), self.link_pos(link_name))
     return h
 
-  def link_rel_frame(self, base_link_name : str, target_link_name : str):
+  def link_rel_frame(self, base_link_name : str, target_link_name : str) -> SE3:
     h = SE3(self.link_rot(base_link_name), self.link_pos(base_link_name)).inv() \
         @ SE3(self.link_rot(target_link_name), self.link_pos(target_link_name))
     return h
