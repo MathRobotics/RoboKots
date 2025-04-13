@@ -5,6 +5,8 @@
 
 import numpy as np
 
+from mathrobo import SE3, CMTM
+
 from .robot_model import *
 from .motion import *
 from .state import *
