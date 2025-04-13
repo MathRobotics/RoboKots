@@ -12,10 +12,10 @@ def test_joint_local_frame():
     # Create a mock joint with a specific joint_select_mat
     joint = MockJoint(np.array([[0, 1, 0, 0, 0, 0]]).T)
 
-    # Test with non-zero joint_angle
-    joint_angle = np.array([np.pi/4])
-    expected_frame = SE3.set_mat(SE3.exp(joint.joint_select_mat @ joint_angle))
-    result_frame = joint_local_frame(joint, joint_angle)
+    # Test with non-zero joint_coord
+    joint_coord = np.array([np.pi/4])
+    expected_frame = SE3.set_mat(SE3.exp(joint.joint_select_mat @ joint_coord))
+    result_frame = joint_local_frame(joint, joint_coord)
     assert np.allclose(result_frame.mat(), expected_frame.mat())
     
 def test_joint_local_vel():
@@ -135,7 +135,7 @@ def test_rel_cmtm():
     assert np.allclose(result_cmtm.elem_vecs(0), expected_vel)
     assert np.allclose(result_cmtm.elem_vecs(1), expected_acc)
 
-def test_link_cmtm():
+def test_kinematics_cmtm():
     # Create a mock joint with a specific joint_select_mat
     joint = MockJoint(np.array([[0, 1, 0, 0, 0, 0]]).T)
 
@@ -155,7 +155,7 @@ def test_link_cmtm():
                    (joint.joint_select_mat @ joint_veloc)) @ p_link_vel + \
                    (joint.origin.mat_inv_adj() @ (joint.joint_select_mat @ joint_accel))
 
-    result_cmtm = link_cmtm(joint, p_link_cmtm, joint_angle, joint_veloc, joint_accel)
+    result_cmtm = kinematics_cmtm(joint, p_link_cmtm, joint_angle, joint_veloc, joint_accel)
 
     assert np.allclose(result_cmtm.elem_mat(), expected_frame.mat())
     assert np.allclose(result_cmtm.elem_vecs(0), expected_vel)
