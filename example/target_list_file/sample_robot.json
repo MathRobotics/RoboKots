@@ -52,7 +52,7 @@
     {
       "id": 1,
       "name": "joint1",
-      "type": "revolution",
+      "type": "revolute",
       "parent_link_id": 1,
       "child_link_id": 2,
       "axis": [0, 0, 1],
@@ -65,7 +65,7 @@
     {
       "id": 2,
       "name": "joint2",
-      "type": "revolution",
+      "type": "revolute",
       "parent_link_id": 2,
       "child_link_id": 3,
       "axis": [0, 0, 1],
@@ -78,7 +78,7 @@
     {
       "id": 3,
       "name": "joint3",
-      "type": "revolution",
+      "type": "revolute",
       "parent_link_id": 3,
       "child_link_id": 4,
       "axis": [0, 0, 1],
