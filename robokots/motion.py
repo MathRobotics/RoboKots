@@ -26,7 +26,7 @@ class RobotMotions:
   def set_motion(self, vecs):
     self.motions = vecs
     
-  def motion_index(self, name : str):
+  def motion_index(self, name : str) -> int:
     if name not in self.aliases:
       raise ValueError(f"Invalid alias: {name}")
     for i in range(len(self.aliases)):
