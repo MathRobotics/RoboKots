@@ -6,7 +6,7 @@ import numpy as np
 
 class RobotMotions:
   motions : np.ndarray = np.array([])
-  ALLOWED_ALIASES = frozenset(["coord", "veloc", "accel"])
+  ALLOWED_ALIASES = frozenset(["coord", "veloc", "accel", "accel_diff1", "accel_diff2", "accel_diff3"])
 
   def __init__(self, robot, aliases_ = ["coord", "veloc", "accel"]):
     if not set(aliases_).issubset(self.ALLOWED_ALIASES):
