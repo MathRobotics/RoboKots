@@ -4,16 +4,26 @@
 
 import numpy as np
 
-from .motion import *
-from .state import *
-from .robot_model import *
+from .motion import RobotMotions
+from .state import RobotState
+from .robot_model import RobotStruct
+
 from .robot_io import *
 from .robot_drow import *
+
 from .forward import *
+
+from .target import TargetList
   
 class Robot():
-
-  def __init__(self, robot_, motions_, state_, order_, dim_):
+  robot_ : RobotStruct
+  motions_ : RobotMotions
+  state_ : RobotState
+  target_ : TargetList
+  order_ : int
+  dim_ : int
+  
+  def __init__(self, robot_ : RobotStruct, motions_ : RobotMotions, state_ : RobotState, order_ : int, dim_ : int):
     self.robot_ = robot_
     self.motions_ = motions_
     self.state_ = state_
@@ -21,7 +31,7 @@ class Robot():
     self.dim_ = dim_
 
   @staticmethod
-  def from_json_file(model_file_name, order_=3, dim_=3):
+  def from_json_file(model_file_name : str, order_=3, dim_=3) -> "Robot":
     robot_ = io_from_json_file(model_file_name)
 
     m_aliases = []
@@ -60,34 +70,34 @@ class Robot():
   def dof(self):
     return self.robot_.dof
   
-  def link_list(self, name_list):
+  def link_list(self, name_list : list[str]):
     return self.robot_.link_list(name_list)
   
-  def joint_list(self, name_list):
+  def joint_list(self, name_list : list[str]):
     return self.robot_.joint_list(name_list)
 
   def motions(self):
     return self.motions_.motions  
 
-  def set_motion_aliases(self, aliases):
+  def set_motion_aliases(self, aliases : list[str]):
     self.motions_.set_aliases(aliases)
     
-  def import_motions(self, vecs):
+  def import_motions(self, vecs : list[float]):
     self.motions_.set_motion(vecs)
     
-  def motion(self, name):
+  def motion(self, name : str):
     return self.motions_.gen_values(name)
   
   def state_df(self):
     return self.state_.df()
   
-  def state_link_info(self, type, name):
+  def state_link_info(self, type : str, name : str):
     return self.state_.extract_info('link', type, name)
 
-  def state_link_info_list(self, type, name_list):
+  def state_link_info_list(self, type : str, name_list : list[str]):
     return [self.state_.extract_info('link', type, name) for name in name_list]
   
-  def state_target_link_info(self, type):
+  def state_target_link_info(self, type : str):
     return self.state_link_info_list(type, self.target_.target_names)
 
   def kinematics(self):
@@ -96,13 +106,21 @@ class Robot():
   def dynamics(self):
     self.state_.import_state(f_dynamics(self.robot_, self.motions_))
     
-  def set_target_from_file(self, target_file):
+  def set_target_from_file(self, target_file : str):
+    if not target_file:
+      raise ValueError("target_file is empty")
+    if not isinstance(target_file, str):
+      raise TypeError("target_file must be a string")
     self.target_ = io_from_target_json(target_file)
     
   def print_targets(self):
     io_print_targets(self.target_)
   
-  def link_jacobian(self, link_name_list):
+  def link_jacobian(self, link_name_list : list[str]):
+    if not link_name_list:
+      raise ValueError("link_name_list is empty")
+    if not all(link_name in self.robot_.link_names for link_name in link_name_list):
+      raise ValueError("link_name_list contains invalid link names")
     return f_link_jacobian(self.robot_, self.state_, link_name_list)
   
   def link_jacobian_target(self):
