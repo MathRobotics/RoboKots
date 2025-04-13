@@ -7,14 +7,18 @@ import numpy as np
 
 from mathrobo import SE3
 
+from .robot_model import RobotStruct
+
 class RobotDF:
-  def __init__(self, names_):
+  df : pl.DataFrame
+  names : list
+  def __init__(self, names_ : list):
     self.names = names_
 
     self.df = pl.DataFrame()
     self.set_df()
     
-  def add_row(self, data):
+  def add_row(self, data : dict):
     new_row = pl.DataFrame([data], schema=self.df.schema)
     self.df = self.df.vstack(new_row)
     
@@ -25,7 +29,7 @@ class RobotDF:
 class RobotState:
   state_df : RobotDF
   
-  def __init__(self, robot, l_aliases = ["pos", "rot", "vel", "acc"], j_aliases = [], separator = "_"):
+  def __init__(self, robot : RobotStruct, l_aliases = ["pos", "rot", "vel", "acc"], j_aliases = [], separator = "_"):
     names = []
     if len(l_aliases) != 0:
       for l_name in robot.link_names:
@@ -43,47 +47,47 @@ class RobotState:
     return self.state_df.df
     
   @staticmethod
-  def link_state_vec(df, link_name, type):
+  def link_state_vec(df, link_name : str, type : str):
     return df[link_name+"_"+type][-1].to_numpy()
   
   @staticmethod
-  def link_state_mat(df, link_name, type):
+  def link_state_mat(df, link_name : str, type : str):
     mat_vec = df[link_name+"_"+type][-1].to_numpy()
     mat = mat_vec.reshape((3,3))
     return mat
   
-  def all_state_vec(self, robot, type):
+  def all_state_vec(self, robot : RobotStruct, type : str):
     labels = []
     for l in robot.links:
       labels.append(l.name+"_"+type) 
     mat = [self.df()[label][-1].to_list() for label in labels]
     return np.array(mat)
   
-  def link_pos(self, link_name):
+  def link_pos(self, link_name : str):
     return RobotState.link_state_vec(self.df(), link_name, "pos")
   
-  def all_link_pos(self, robot):
+  def all_link_pos(self, robot : RobotStruct):
     return self.all_state_vec(robot, "pos")
   
-  def link_rot(self, link_name):
+  def link_rot(self, link_name : str):
     return RobotState.link_state_mat(self.df(), link_name, "rot")
 
-  def link_vel(self, link_name):
+  def link_vel(self, link_name : str):
     return RobotState.link_state_vec(self.df(), link_name, "vel")
 
-  def link_acc(self, link_name):
+  def link_acc(self, link_name : str):
     return RobotState.link_state_vec(self.df(), link_name, "acc")
     
-  def link_frame(self, link_name):
+  def link_frame(self, link_name : str):
     h = SE3(self.link_rot(link_name), self.link_pos(link_name))
     return h
 
-  def link_rel_frame(self, base_link_name, target_link_name):
+  def link_rel_frame(self, base_link_name : str, target_link_name : str):
     h = SE3(self.link_rot(base_link_name), self.link_pos(base_link_name)).inv() \
         @ SE3(self.link_rot(target_link_name), self.link_pos(target_link_name))
     return h
 
-  def extract_link_info(self, type, link_name, frame = "dummy", rel_frame = 'dummy'):
+  def extract_link_info(self, type : str, link_name : str, frame = "dummy", rel_frame = 'dummy'):
     if type == "pos":
       return self.link_pos(link_name)
     elif type == "rot":
@@ -97,13 +101,27 @@ class RobotState:
     else:
       raise ValueError(f"Invalid type: {set(type)}")
     
-  def extract_joint_info(self, type, name, frame = "dummy", rel_frame = 'dummy'):
+  def extract_joint_info(self, type : str, name : str, frame = "dummy", rel_frame = 'dummy'):
     'dummy'
     
-  def extract_total_info(self, type, name, frame = "dummy", rel_frame = 'dummy'):
+  def extract_total_info(self, type : str, name : str, frame = "dummy", rel_frame = 'dummy'):
     'dummy'
   
-  def extract_info(self, group, type, name, frame = "dummy", rel_frame = 'dummy'):
+  def extract_info(self, group : str, type : str, name : str, frame = "dummy", rel_frame = 'dummy'):
+    '''
+    group : str
+      link
+      joint
+      total
+    type : str
+      pos
+      rot
+      vel
+      acc
+      frame
+    name : str
+      link name or joint name
+    '''
     if group == "link":
       return self.extract_link_info(type, name, frame, rel_frame)
     elif group == "joint":
@@ -113,5 +131,5 @@ class RobotState:
     else:
       raise ValueError(f"Invalid group: {set(group)}")
 
-  def import_state(self, data):
+  def import_state(self, data : dict):
     self.state_df.add_row(data)
