@@ -7,7 +7,9 @@ import numpy as np
 
 from mathrobo import SO3, SE3
 
-def inertia(i_vec):
+from .robot_model import JointStruct
+
+def inertia(i_vec : np.ndarray) -> np.ndarray:
     """
     Calculate the inertia tensor of a rigid body.
     Args:
@@ -15,6 +17,9 @@ def inertia(i_vec):
     Returns:
         numpy.ndarray: 3x3 inertia tensor matrix.
     """
+    if i_vec.shape != (6,):
+        raise ValueError("i_vec must be a 6x1 vector")  
+      
     i = np.eye(3)
     i[0,0] = i_vec[0]
     i[1,1] = i_vec[1]
@@ -26,7 +31,7 @@ def inertia(i_vec):
     return i
 
 
-def spatial_inertia(m, i, c):
+def spatial_inertia(m : float, i : np.ndarray, c : np.ndarray) -> np.ndarray:
     """
     Calculate the spatial inertia matrix of a rigid body.
     Args:
@@ -45,7 +50,7 @@ def spatial_inertia(m, i, c):
     i_mat[0:3,3:6] = -m * c_hat
     return i_mat
 
-def link_dynamics(inertia, veloc, accel):
+def link_dynamics(inertia : np.ndarray, veloc : np.ndarray, accel : np.ndarray) -> np.ndarray:
     """
     Calculate the inverse dynamics of a link.
     Args:
@@ -58,7 +63,7 @@ def link_dynamics(inertia, veloc, accel):
     force = inertia @ accel - SE3.hat_adj(veloc).T @ inertia @ veloc
     return force
 
-def joint_dynamics(joint, rel_frame, p_joint_force, link_force):
+def joint_dynamics(joint : JointStruct, rel_frame : SE3, p_joint_force : np.ndarray, link_force : np.ndarray) -> tuple:
     """
     Calculate the joint dynamics.
     Args:
