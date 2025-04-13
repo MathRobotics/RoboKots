@@ -71,7 +71,7 @@ def link_rel_cmtm(joint, joint_coord, joint_vel, joint_acc):
   frame = link_rel_frame(joint, joint_coord)
   vel = link_rel_vel(joint, joint_vel)
   acc = link_rel_acc(joint, joint_acc)
-  vec = np.concatenate((vel, acc))
+  vec = np.array((vel, acc))
   m = CMTM[SE3](frame, vec)
   return m
 
