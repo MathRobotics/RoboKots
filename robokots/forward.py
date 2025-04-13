@@ -92,8 +92,7 @@ def f_dynamics(robot, motions):
   world_name = robot.links[robot.joints[0].parent_link_id].name
   state_data.update([(world_name + "_link_force" , [0.,0.,0.,0.,0.,0.])])
 
-  for joint in reversed(robot.joints):    
-    parent = robot.links[joint.parent_link_id]
+  for joint in reversed(robot.joints):
     child = robot.links[joint.child_link_id]
     
     joint_coord = motions.joint_coord(joint)
