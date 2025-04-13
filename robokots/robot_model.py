@@ -24,27 +24,27 @@ class RobotStruct:
     self.joint_names: List[str] = []
     self.robot_init()
     
-  def link(self, name):
+  def link(self, name : str) -> "LinkStruct":
     for l in self.links:
       if name == l.name:
         return l
     ValueError(f"Invalid link name: {name}")
     return None
   
-  def link_list(self, name_list):
+  def link_list(self, name_list : list[str]) -> List["LinkStruct"]:
     link_list = []
     for name in name_list:
       link_list.append(self.link(name))
     return link_list
 
-  def joint(self, name):
+  def joint(self, name : str) -> "JointStruct":
     for l in self.joints:
       if name == l.name:
         return l
     ValueError(f"Invalid joint name: {name}")
     return None
   
-  def joint_list(self, name_list):
+  def joint_list(self, name_list : list[str]) -> List["JointStruct"]:
     joint_list = []
     for name in name_list:
       joint_list.append(self.joint(name))
@@ -116,7 +116,7 @@ class RobotStruct:
 
     return RobotStruct(links, joints)
   
-  def to_dict(self):
+  def to_dict(self) -> Dict:
     links_array = []
     for link in self.links:
         link_dict = {}
@@ -196,11 +196,13 @@ class LinkStruct:
     self.child_joint_ids = []
     self.parent_joint_ids = []
     
-  def set_dof_index(self, n):
-      self.dof_index = n
+  def set_dof_index(self, n : int):
+    if n < 0:
+      raise ValueError(f"Invalid DOF index: {n}")
+    self.dof_index = n
   
   @staticmethod
-  def _link_dof(type):
+  def _link_dof(type) -> int:
     if type == "rigid":
       return 0
 
@@ -217,8 +219,10 @@ class JointStruct:
         self.joint_select_mat = self._joint_select_mat(self.type, self.axis)
         self.origin = origin
         
-    def set_dof_index(self, n):
-       self.dof_index = n
+    def set_dof_index(self, n : int):
+      if n < 0:
+        raise ValueError(f"Invalid DOF index: {n}")
+      self.dof_index = n
 
     @staticmethod
     def _joint_dof(type: str) -> int:
