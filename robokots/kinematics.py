@@ -5,11 +5,11 @@
 
 import numpy as np
 
-from mathrobo import SE3
+from mathrobo import SE3, CMTM
 
-def joint_local_frame(joint, joint_angle):
-  if len(joint_angle) != 0:
-    v = joint.joint_select_mat@joint_angle
+def joint_local_frame(joint, joint_coord):
+  if len(joint_coord) != 0:
+    v = joint.joint_select_mat@joint_coord
   else:
     v = joint.joint_select_mat@np.zeros(1)
   frame = SE3.set_mat(SE3.exp(v))
@@ -67,5 +67,15 @@ def acc_kinematics(joint, p_link_vel, p_link_acc, joint_coord, joint_veloc, join
 def part_link_jacob(joint, rel_frame):
   return rel_frame.mat_inv_adj() @ joint.origin.mat_inv_adj() @ joint.joint_select_mat
 
+def link_rel_cmtm(joint, joint_coord, joint_vel, joint_acc):
+  frame = link_rel_frame(joint, joint_coord)
+  vel = link_rel_vel(joint, joint_vel)
+  acc = link_rel_acc(joint, joint_acc)
+  vec = np.array((vel, acc))
+  m = CMTM[SE3](frame, vec)
+  return m
 
-
+def kinematics_cmtm(joint, p_link_cmtm, joint_coord, joint_veloc, joint_accel):
+  rel_m = link_rel_cmtm(joint, joint_coord, joint_veloc, joint_accel)
+  m = rel_m @ p_link_cmtm
+  return m
