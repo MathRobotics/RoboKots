@@ -4,11 +4,13 @@
 
 import numpy as np
 
+from .robot_model import RobotStruct, JointStruct, LinkStruct
+
 class RobotMotions:
   motions : np.ndarray = np.array([])
   ALLOWED_ALIASES = frozenset(["coord", "veloc", "accel", "accel_diff1", "accel_diff2", "accel_diff3"])
 
-  def __init__(self, robot, aliases_ = ["coord", "veloc", "accel"]):
+  def __init__(self, robot : RobotStruct, aliases_ = ["coord", "veloc", "accel"]):
     if not set(aliases_).issubset(self.ALLOWED_ALIASES):
       raise ValueError(f"Invalid alias: {set(aliases_) - self.ALLOWED_ALIASES}")
     self.aliases = aliases_
@@ -24,13 +26,14 @@ class RobotMotions:
   def set_motion(self, vecs):
     self.motions = vecs
     
-  def motion_index(self, name):
+  def motion_index(self, name : str):
+    if name not in self.aliases:
+      raise ValueError(f"Invalid alias: {name}")
     for i in range(len(self.aliases)):
       if name == self.aliases[i]:
         return i
-    return None
   
-  def gen_values(self, name):
+  def gen_values(self, name : str):
     m_index = self.motion_index(name)
     offset = self.dof * m_index
     return self.motions[offset : offset + self.dof]
@@ -44,25 +47,25 @@ class RobotMotions:
   def accel(self):
     return self.gen_values("accel")
     
-  def gen_value(self, joint, name):
+  def gen_value(self, joint : JointStruct, name : str):
     m_index = self.motion_index(name)
     offset = self.dof * m_index + joint.dof_index
     return self.motions[offset : offset + joint.dof]
   
-  def joint_coord(self, joint):
+  def joint_coord(self, joint : JointStruct):
     return self.gen_value(joint, "coord")
   
-  def joint_veloc(self, joint):
+  def joint_veloc(self, joint : JointStruct):
     return self.gen_value(joint, "veloc")
   
-  def joint_accel(self, joint):
+  def joint_accel(self, joint : JointStruct):
     return self.gen_value(joint, "accel")
 
-  def link_coord(self, link):
+  def link_coord(self, link : LinkStruct):
     return self.gen_value(link, "coord")
   
-  def link_veloc(self, link):
+  def link_veloc(self, link : LinkStruct):
     return self.gen_value(link, "veloc")
   
-  def link_accel(self, link):
+  def link_accel(self, link : LinkStruct):
     return self.gen_value(link, "accel")
