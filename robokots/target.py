@@ -12,7 +12,7 @@ class Target:
     self.link_name = link_name
     self.pos = pos
     
-  def set_index(self, i):
+  def set_index(self, i : int):
     self.index = i    
 
 class TargetList:
@@ -29,7 +29,7 @@ class TargetList:
       index += 1
     
   @staticmethod
-  def from_dict(data: Dict):  
+  def from_dict(data: Dict) -> "TargetList":  
     targets = []
     
     targets = [Target(
