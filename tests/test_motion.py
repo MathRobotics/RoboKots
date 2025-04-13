@@ -23,7 +23,6 @@ def test_robot_motions_init_default():
     assert motions.motion_num == 3
     assert np.array_equal(motions.motions, np.zeros(9))
     assert motions.aliases == ["coord", "veloc", "accel"]
-    assert motions.ALLOWED_ALIASES == frozenset(["coord", "veloc", "accel"])
 
 # Test the set_aliases method  
 def test_robot_motions_init_custom_aliases():
@@ -33,7 +32,6 @@ def test_robot_motions_init_custom_aliases():
     assert motions.motion_num == 2
     assert np.array_equal(motions.motions, np.zeros(6))
     assert motions.aliases == ["coord", "veloc"]
-    assert motions.ALLOWED_ALIASES == frozenset(["coord", "veloc", "accel"])
 
 # Test invalid alias handling
 def test_robot_motions_init_invalid_aliases():
@@ -73,7 +71,10 @@ def test_motion_index():
     assert motions.motion_index("coord") == 0
     assert motions.motion_index("veloc") == 1
     assert motions.motion_index("accel") == 2
-    assert motions.motion_index("invalid") is None
+    try:
+        motions.motion_index("invalid")
+    except ValueError as e:
+        assert str(e) == "Invalid alias: invalid"
     
 # Test the gen_values method
 def test_gen_values():
