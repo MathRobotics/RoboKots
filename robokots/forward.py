@@ -7,14 +7,13 @@ import numpy as np
 
 from mathrobo import SE3, CMTM
 
-from .robot_model import *
-from .motion import *
-from .state import *
+from .robot_model import RobotStruct, LinkStruct, JointStruct
+from .motion import RobotMotions
+from .state import RobotState
 from .kinematics import *
 from .dynamics import *
 
-def cmtm_to_state(cmtm, name):
-  state_data = {}
+def cmtm_to_state(cmtm : CMTM, name : str) -> dict:
   mat = cmtm.elem_mat()
   veloc = cmtm.elem_vecs(0)
   accel = cmtm.elem_vecs(1)
@@ -31,7 +30,7 @@ def cmtm_to_state(cmtm, name):
   
   return state
 
-def f_kinematics(robot, motions):
+def f_kinematics(robot : RobotStruct, motions : RobotMotions) -> dict:
   state_data = {}
   state_cmtm = {}
   
@@ -61,14 +60,14 @@ def f_kinematics(robot, motions):
     
   return state_data
 
-def __target_part_link_jacob(target_link, joint, rel_frame):
+def __target_part_link_jacob(target_link : LinkStruct, joint : JointStruct, rel_frame : SE3) -> np.ndarray:
   if target_link.id == joint.child_link_id:
     mat = joint.origin.mat_inv_adj() @ joint.joint_select_mat
   else:
     mat = part_link_jacob(joint, rel_frame)  
   return mat
 
-def __link_jacobian(robot, state, target_link):
+def __link_jacobian(robot, state : RobotState, target_link : LinkStruct) -> np.ndarray:
   jacob = np.zeros((6,robot.dof))
   link_route = []
   joint_route = []
@@ -82,14 +81,14 @@ def __link_jacobian(robot, state, target_link):
     
   return jacob
   
-def f_link_jacobian(robot, state, link_name_list):
+def f_link_jacobian(robot : RobotStruct, state : RobotState, link_name_list : list[str]) -> np.ndarray:
   links = robot.link_list(link_name_list)
   jacobs = np.zeros((6*len(links),robot.dof))
   for i in range(len(links)):
     jacobs[6*i:6*(i+1),:] = __link_jacobian(robot, state, links[i])
   return jacobs
 
-def f_dynamics(robot, motions):
+def f_dynamics(robot : RobotStruct, motions : RobotMotions) -> dict:
   state_data = {}
   
   state_data = f_kinematics(robot, motions)
