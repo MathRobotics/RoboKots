@@ -38,7 +38,7 @@ class Robot():
       m_aliases = ["coord", "veloc", "accel"]
       l_aliases = ["pos", "rot", "vel", "acc"]
       for i in range(order_-3):
-        m_aliases.append("accel"+str(i+1))
+        m_aliases.append("accel_diff"+str(i+1))
         l_aliases.append("acc_diff"+str(i+1))
         
     l_aliases.append("link_force")
