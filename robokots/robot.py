@@ -13,21 +13,37 @@ from .forward import *
   
 class Robot():
 
-  def __init__(self, robot_, motions_, state_, level_):
+  def __init__(self, robot_, motions_, state_, order_, dim_):
     self.robot_ = robot_
     self.motions_ = motions_
     self.state_ = state_
-    self.level_ = level_
+    self.order_ = order_
+    self.dim_ = dim_
 
   @staticmethod
-  def from_json_file(model_file_name, level_="kinematics"):
+  def from_json_file(model_file_name, order_=3, dim_=3):
     robot_ = io_from_json_file(model_file_name)
     motions_ = RobotMotions(robot_)
-    if level_ == "kinematics":
-      state_ = RobotState(robot_)
-    elif level_ == "dynamics":
-      state_ = RobotState(robot_, l_aliases=["pos", "rot", "vel", "acc","link_force"],j_aliases=["joint_torque", "joint_force"])
-    return Robot(robot_, motions_, state_, level_)
+    if order_ == 1:
+      l_aliases = ["pos", "rot"]
+    elif order_ == 2:
+      l_aliases = ["pos", "rot", "vel"]
+    elif order_ > 2:
+      l_aliases = ["pos", "rot", "vel", "acc"]
+      for i in range(order_-3):
+        l_aliases.append("acc_diff"+str(i+1))
+        
+    l_aliases.append("link_force")
+    j_aliases=["joint_torque", "joint_force"]
+    
+    for i in range(order_-3):
+      l_aliases.append("link_force_diff"+str(i+1))
+      j_aliases.append("joint_torque_diff"+str(i+1))
+      j_aliases.append("joint_force_diff"+str(i+1))
+      
+    state_ = RobotState(robot_, l_aliases, j_aliases)
+
+    return Robot(robot_, motions_, state_, order_, dim_)
   
   def print_structure(self):
     io_print_structure(self.robot_)
