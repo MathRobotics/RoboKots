@@ -5,7 +5,7 @@
 import polars as pl
 import numpy as np
 
-from mathrobo import SE3
+from mathrobo import SE3, CMTM
 
 from .robot_model import RobotStruct
 
@@ -83,12 +83,23 @@ class RobotState:
   def link_frame(self, link_name : str) -> SE3:
     h = SE3(self.link_rot(link_name), self.link_pos(link_name))
     return h
+  
+  def link_cmtm(self, link_name : str) -> CMTM:
+    h = SE3(self.link_rot(link_name), self.link_pos(link_name))
+    veloc = self.link_vel(link_name)
+    accel = self.link_acc(link_name)
+    vec = np.array((veloc, accel))
+    cmtm = CMTM[SE3](h, vec)
+    return cmtm
 
   def link_rel_frame(self, base_link_name : str, target_link_name : str) -> SE3:
-    h = SE3(self.link_rot(base_link_name), self.link_pos(base_link_name)).inv() \
-        @ SE3(self.link_rot(target_link_name), self.link_pos(target_link_name))
+    h = self.link_frame(base_link_name).inv() @ self.link_frame(target_link_name)
     return h
-
+  
+  def link_rel_cmtm(self, base_link_name : str, target_link_name : str) -> CMTM:
+    x = self.link_cmtm(base_link_name).inv() @ self.link_cmtm(target_link_name)
+    return x
+  
   def extract_link_info(self, type : str, link_name : str, frame = "dummy", rel_frame = 'dummy'):
     if type == "pos":
       return self.link_pos(link_name)
