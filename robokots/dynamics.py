@@ -76,5 +76,5 @@ def joint_dynamics(joint : JointStruct, rel_frame : SE3, p_joint_force : np.ndar
         numpy.ndarray: joint torque vector.
     """
     joint_force = rel_frame.mat_inv_adj() @ p_joint_force - link_force
-    joint_torque = joint.joint_select_mat.T @ joint_force
+    joint_torque = joint.select_mat.T @ joint_force
     return joint_torque, joint_torque

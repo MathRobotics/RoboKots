@@ -81,7 +81,7 @@ def f_kinematics(robot : RobotStruct, motions : RobotMotions) -> dict:
 
 def __target_part_link_jacob(target_link : LinkStruct, joint : JointStruct, rel_frame : SE3) -> np.ndarray:
   if target_link.id == joint.child_link_id:
-    mat = joint.origin.mat_inv_adj() @ joint.joint_select_mat
+    mat = joint.origin.mat_inv_adj() @ joint.select_mat
   else:
     mat = part_link_jacob(joint, rel_frame)  
   return mat

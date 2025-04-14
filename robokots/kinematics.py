@@ -11,22 +11,22 @@ from .robot_model import JointStruct
 
 def joint_local_frame(joint : JointStruct, joint_coord : np.ndarray) -> SE3:  
   if len(joint_coord) != 0:
-    v = joint.joint_select_mat@joint_coord
+    v = joint.select_mat@joint_coord
   else:
-    v = joint.joint_select_mat@np.zeros(1)
+    v = joint.select_mat@np.zeros(1)
   frame = SE3.set_mat(SE3.exp(v))
   return frame
 
 def joint_local_vel(joint : JointStruct, joint_vel : np.ndarray) -> np.ndarray:
   if len(joint_vel) != 0:
-    vel = joint.joint_select_mat @ joint_vel
+    vel = joint.select_mat @ joint_vel
   else:
     vel = np.zeros(6)
   return vel
 
 def joint_local_acc(joint : JointStruct, joint_acc : np.ndarray) -> np.ndarray:
   if len(joint_acc) != 0:
-    acc = joint.joint_select_mat @ joint_acc
+    acc = joint.select_mat @ joint_acc
   else:
     acc = np.zeros(6)
   return acc
@@ -67,7 +67,7 @@ def acc_kinematics(joint : JointStruct, p_link_vel : np.ndarray, p_link_acc : np
   return acc
 
 def part_link_jacob(joint : JointStruct, rel_frame : np.ndarray) -> np.ndarray:
-  return rel_frame.mat_inv_adj() @ joint.origin.mat_inv_adj() @ joint.joint_select_mat
+  return rel_frame.mat_inv_adj() @ joint.origin.mat_inv_adj() @ joint.select_mat
 
 def link_rel_cmtm(joint : JointStruct, joint_coord : np.ndarray, joint_vel : np.ndarray, joint_acc : np.ndarray) -> CMTM:
   frame = link_rel_frame(joint, joint_coord)

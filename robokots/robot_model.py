@@ -216,7 +216,7 @@ class JointStruct:
         self.parent_link_id = parent_link_id
         self.child_link_id = child_link_id
         self.dof = self._joint_dof(self.type)
-        self.joint_select_mat = self._joint_select_mat(self.type, self.axis)
+        self.select_mat = self._select_mat(self.type, self.axis)
         self.origin = origin
         
     def set_dof_index(self, n : int):
@@ -235,7 +235,7 @@ class JointStruct:
             return 0
 
     @staticmethod
-    def _joint_select_mat(type: str, axis: np.ndarray) -> np.ndarray:
+    def _select_mat(type: str, axis: np.ndarray) -> np.ndarray:
         mat = np.zeros((6, 1))
         if type == "fix":
             return mat
