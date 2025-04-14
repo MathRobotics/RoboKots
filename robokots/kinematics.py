@@ -81,3 +81,6 @@ def kinematics_cmtm(joint : JointStruct, p_link_cmtm : CMTM, joint_coord : np.nd
   rel_m = link_rel_cmtm(joint, joint_coord, joint_veloc, joint_accel)
   m = p_link_cmtm @ rel_m
   return m
+
+def part_link_cmtm_jacob(joint : JointStruct, rel_cmtm : CMTM) -> np.ndarray:
+  return rel_cmtm.mat_inv_adj() @ joint.origin_cmtm.mat_inv_adj() @ joint.select_mat_cmtm
