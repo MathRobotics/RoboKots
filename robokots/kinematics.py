@@ -79,5 +79,5 @@ def link_rel_cmtm(joint : JointStruct, joint_coord : np.ndarray, joint_vel : np.
 
 def kinematics_cmtm(joint : JointStruct, p_link_cmtm : CMTM, joint_coord : np.ndarray, joint_veloc : np.ndarray, joint_accel : np.ndarray) -> CMTM:
   rel_m = link_rel_cmtm(joint, joint_coord, joint_veloc, joint_accel)
-  m = rel_m @ p_link_cmtm
+  m = p_link_cmtm @ rel_m
   return m
