@@ -7,7 +7,7 @@ import numpy as np
 import warnings
 from typing import List, Dict
 
-from mathrobo import SE3
+from mathrobo import SE3, CMTM
 
 warnings.simplefilter("always", UserWarning)
 
@@ -217,7 +217,12 @@ class JointStruct:
         self.child_link_id = child_link_id
         self.dof = self._joint_dof(self.type)
         self.select_mat = self._select_mat(self.type, self.axis)
+        self.select_mat_cmtm = np.zeros((6*3, self.dof*3))
+        self.select_mat_cmtm[0:6, :self.dof] = self.select_mat
+        self.select_mat_cmtm[6:12, self.dof:self.dof*2] = self.select_mat
+        self.select_mat_cmtm[12:18, self.dof*2:self.dof*3] = self.select_mat
         self.origin = origin
+        self.origin_cmtm = CMTM[SE3](origin, np.zeros((2,6)))
         
     def set_dof_index(self, n : int):
       if n < 0:
