@@ -107,6 +107,34 @@ def f_link_jacobian(robot : RobotStruct, state : RobotState, link_name_list : li
     jacobs[6*i:6*(i+1),:] = __link_jacobian(robot, state, links[i])
   return jacobs
 
+def __target_part_link_cmtm_jacob(target_link : LinkStruct, joint : JointStruct, rel_cmtm : CMTM) -> np.ndarray:
+  if target_link.id == joint.child_link_id:
+    mat = joint.origin.mat_inv_adj() @ joint.select_mat
+  else:
+    mat = part_link_cmtm_jacob(joint, rel_cmtm)  
+  return mat
+
+def __link_cmtm_jacobian(robot, state : RobotState, target_link : LinkStruct) -> np.ndarray:
+  jacob = np.zeros((6*3,robot.dof))
+  link_route = []
+  joint_route = []
+  robot.route_target_link(target_link, link_route, joint_route)
+  
+  for j in joint_route:
+    joint = robot.joints[j]
+    rel_cmtm = state.link_rel_cmtm(robot.links[joint.child_link_id].name, target_link.name)
+    mat = __target_part_link_cmtm_jacob(target_link, joint, rel_cmtm)
+    jacob[:,joint.dof_index*3:(joint.dof_index+joint.dof)*3] = mat
+    
+  return jacob
+
+def f_link_cmtm_jacobian(robot : RobotStruct, state : RobotState, link_name_list : list[str]) -> np.ndarray:
+  links = robot.link_list(link_name_list)
+  jacobs = np.zeros((6*3*len(links),robot.dof))
+  for i in range(len(links)):
+    jacobs[6*3*i:6*3*(i+1),:] = __link_cmtm_jacobian(robot, state, links[i])
+  return jacobs
+
 def f_dynamics(robot : RobotStruct, motions : RobotMotions) -> dict:
   state_data = {}
   
