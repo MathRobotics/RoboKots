@@ -14,6 +14,14 @@ from .kinematics import *
 from .dynamics import *
 
 def cmtm_to_state(cmtm : CMTM, name : str) -> dict:
+  '''
+  Convert CMTM to state data
+  Args:
+    cmtm (CMTM): CMTM object
+    name (str): name of the link
+  Returns:
+    dict: state data
+  '''
   mat = cmtm.elem_mat()
   veloc = cmtm.elem_vecs(0)
   accel = cmtm.elem_vecs(1)
@@ -31,12 +39,23 @@ def cmtm_to_state(cmtm : CMTM, name : str) -> dict:
   return state
 
 def f_kinematics(robot : RobotStruct, motions : RobotMotions) -> dict:
+  '''
+  Forward kinematics computation
+  Args:
+    robot (RobotStruct): robot model
+    motions (RobotMotions): robot motion
+  Returns:
+    dict: state data
+  '''
+  
   state_data = {}
   state_cmtm = {}
-  
+
+  # Initialize CMTM for the world link
+  # The world link is the parent of the first joint
   world_name = robot.links[robot.joints[0].parent_link_id].name
   state_cmtm.update([(world_name, CMTM.eye(SE3))])
-  
+ 
   state = cmtm_to_state(state_cmtm[world_name], world_name)
   state_data.update(state)
   
@@ -50,11 +69,11 @@ def f_kinematics(robot : RobotStruct, motions : RobotMotions) -> dict:
     
     p_link_cmtm = state_cmtm[parent.name]
     rel_cmtm = link_rel_cmtm(joint, joint_coord, joint_veloc, joint_accel)
-    
-    link_cmtm = p_link_cmtm @ rel_cmtm
 
+    link_cmtm = p_link_cmtm @ rel_cmtm
+    # Update CMTM for the child link
     state_cmtm.update([(child.name, link_cmtm)])
-    
+
     state = cmtm_to_state(link_cmtm, child.name)
     state_data.update(state)
     
