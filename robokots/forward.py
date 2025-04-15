@@ -109,13 +109,13 @@ def f_link_jacobian(robot : RobotStruct, state : RobotState, link_name_list : li
 
 def __target_part_link_cmtm_jacob(target_link : LinkStruct, joint : JointStruct, rel_cmtm : CMTM) -> np.ndarray:
   if target_link.id == joint.child_link_id:
-    mat = joint.origin.mat_inv_adj() @ joint.select_mat
+    mat = joint.origin_cmtm.mat_inv_adj() @ joint.select_mat_cmtm
   else:
     mat = part_link_cmtm_jacob(joint, rel_cmtm)  
   return mat
 
 def __link_cmtm_jacobian(robot, state : RobotState, target_link : LinkStruct) -> np.ndarray:
-  jacob = np.zeros((6*3,robot.dof))
+  jacob = np.zeros((6*3,robot.dof*3))
   link_route = []
   joint_route = []
   robot.route_target_link(target_link, link_route, joint_route)
@@ -130,7 +130,7 @@ def __link_cmtm_jacobian(robot, state : RobotState, target_link : LinkStruct) ->
 
 def f_link_cmtm_jacobian(robot : RobotStruct, state : RobotState, link_name_list : list[str]) -> np.ndarray:
   links = robot.link_list(link_name_list)
-  jacobs = np.zeros((6*3*len(links),robot.dof))
+  jacobs = np.zeros((6*3*len(links),robot.dof*3))
   for i in range(len(links)):
     jacobs[6*3*i:6*3*(i+1),:] = __link_cmtm_jacobian(robot, state, links[i])
   return jacobs
