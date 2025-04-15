@@ -31,7 +31,7 @@ class Kots():
     self.dim_ = dim_
 
   @staticmethod
-  def from_json_file(model_file_name : str, order_=3, dim_=3) -> "Robot":
+  def from_json_file(model_file_name : str, order_=3, dim_=3) -> "Kots":
     robot_ = io_from_json_file(model_file_name)
 
     m_aliases = []
