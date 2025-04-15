@@ -99,7 +99,7 @@ class RobotState:
   def link_rel_cmtm(self, base_link_name : str, target_link_name : str) -> CMTM:
     x = self.link_cmtm(base_link_name).inv() @ self.link_cmtm(target_link_name)
     return x
-  
+  #specific 3d-CMTM
   def extract_link_info(self, type : str, link_name : str, frame = "dummy", rel_frame = 'dummy'):
     if type == "pos":
       return self.link_pos(link_name)
