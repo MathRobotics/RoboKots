@@ -125,6 +125,16 @@ class Robot():
   
   def link_jacobian_target(self):
     return f_link_jacobian(self.robot_, self.state_, self.target_.target_names)
+  
+  def link_cmtm_jacobian(self, link_name_list : list[str]):
+    if not link_name_list:
+      raise ValueError("link_name_list is empty")
+    if not all(link_name in self.robot_.link_names for link_name in link_name_list):
+      raise ValueError("link_name_list contains invalid link names")
+    return f_link_cmtm_jacobian(self.robot_, self.state_, link_name_list)
+  
+  def link_cmtm_jacobian_target(self):
+    return f_link_cmtm_jacobian(self.robot_, self.state_, self.target_.target_names)
       
   def show_robot(self, save = False):
     conectivity = np.zeros((self.robot_.joint_num, 2), dtype='int64')
