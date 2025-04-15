@@ -218,11 +218,13 @@ class JointStruct:
         self.dof = self._joint_dof(self.type)
         self.select_mat = self._select_mat(self.type, self.axis)
         self.select_indeces = np.argmax(self.select_mat, axis=0)
+        #specific 3d-CMTM
         self.select_mat_cmtm = np.zeros((6*3, self.dof*3))
         self.select_mat_cmtm[0:6, :self.dof] = self.select_mat
         self.select_mat_cmtm[6:12, self.dof:self.dof*2] = self.select_mat
         self.select_mat_cmtm[12:18, self.dof*2:self.dof*3] = self.select_mat
         self.origin = origin
+        #specific 3d-CMTM
         self.origin_cmtm = CMTM[SE3](origin, np.zeros((2,6)))
         
     def set_dof_index(self, n : int):
@@ -240,6 +242,7 @@ class JointStruct:
             warnings.warn(f"Unsupported joint type: {type}", UserWarning)
             return 0
 
+    #specific for 1 DOF joint or fix joint
     @staticmethod
     def _select_mat(type: str, axis: np.ndarray) -> np.ndarray:
         mat = np.zeros((6, 1))
