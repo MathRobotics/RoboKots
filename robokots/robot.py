@@ -217,6 +217,7 @@ class JointStruct:
         self.child_link_id = child_link_id
         self.dof = self._joint_dof(self.type)
         self.select_mat = self._select_mat(self.type, self.axis)
+        self.select_indeces = np.argmax(self.select_mat, axis=0)
         self.select_mat_cmtm = np.zeros((6*3, self.dof*3))
         self.select_mat_cmtm[0:6, :self.dof] = self.select_mat
         self.select_mat_cmtm[6:12, self.dof:self.dof*2] = self.select_mat
@@ -249,3 +250,19 @@ class JointStruct:
             return mat
         else:
             raise warnings.warn(f"Unsupported joint type: {type}", UserWarning)
+        
+    def selector(self, mat: np.ndarray) -> np.ndarray:
+        return mat[:, self.select_indeces]
+    
+    #specific for 3D space (magic number 6)
+    def scatter(self, mat: np.ndarray) -> np.ndarray:
+        result = np.zeros((6, mat.shape[1]))
+        if mat.shape[1] != self.dof:
+            raise ValueError(f"Invalid input vector length: {len(mat)}")
+        for i in range(self.dof):
+            row = self.select_indeces[i]
+            print(f"row: {row}")
+            result[row] += mat[i]
+        return result
+
+        
