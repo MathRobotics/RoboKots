@@ -111,8 +111,13 @@ def f_link_jacobian(robot : RobotStruct, state : RobotState, link_name_list : li
 
 # specific 3d space (magic number 6)
 def __target_part_link_cmtm_jacob(target_link : LinkStruct, joint : JointStruct, rel_cmtm : CMTM) -> np.ndarray:
+  mat = np.zeros((rel_cmtm._n * 6, rel_cmtm._n * joint.dof))
   if target_link.id == joint.child_link_id:
-    mat = joint.origin_cmtm.mat_inv_adj() @ joint.select_mat_cmtm
+    tmp = joint.origin_cmtm.mat_inv_adj()
+    for i in range(rel_cmtm._n):
+      mat[i*6:(i+1)*6] = joint.selector(tmp[i*6:(i+1)*6])
+    mat[0:6, :joint.dof] = joint.select_mat
+    # mat = joint.origin_cmtm.mat_inv_adj() @ joint.select_mat_cmtm
   else:
     mat = part_link_cmtm_jacob(joint, rel_cmtm)  
   return mat
