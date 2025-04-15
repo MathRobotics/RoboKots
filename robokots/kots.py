@@ -15,7 +15,7 @@ from .forward import *
 
 from .target import TargetList
   
-class Robot():
+class Kots():
   robot_ : RobotStruct
   motions_ : RobotMotions
   state_ : RobotState
