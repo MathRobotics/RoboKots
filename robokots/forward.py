@@ -7,7 +7,7 @@ import numpy as np
 
 from mathrobo import SE3, CMTM
 
-from .robot_model import RobotStruct, LinkStruct, JointStruct
+from .robot import RobotStruct, LinkStruct, JointStruct
 from .motion import RobotMotions
 from .state import RobotState
 from .kinematics import *

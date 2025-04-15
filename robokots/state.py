@@ -7,7 +7,7 @@ import numpy as np
 
 from mathrobo import SE3, CMTM
 
-from .robot_model import RobotStruct
+from .robot import RobotStruct
 
 class RobotDF:
   df : pl.DataFrame

@@ -4,7 +4,7 @@
 
 import numpy as np
 
-from .robot_model import RobotStruct, JointStruct, LinkStruct
+from .robot import RobotStruct, JointStruct, LinkStruct
 
 class RobotMotions:
   motions : np.ndarray = np.array([])

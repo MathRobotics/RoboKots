@@ -1,6 +1,6 @@
 import numpy as np
 
-from robokots.robot import *
+from robokots.kots import *
 
 def main():
     robot = Robot.from_json_file("../model/sample_robot.json")

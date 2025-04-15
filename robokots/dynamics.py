@@ -7,7 +7,7 @@ import numpy as np
 
 from mathrobo import SO3, SE3
 
-from .robot_model import JointStruct
+from .robot import JointStruct
 
 def inertia(i_vec : np.ndarray) -> np.ndarray:
     """

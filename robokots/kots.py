@@ -1,0 +1,146 @@
+#!/usr/bin/env python3.9
+# -*- coding: utf-8 -*-
+# 2024.12.13 Created by T.Ishigaki
+
+import numpy as np
+
+from .motion import RobotMotions
+from .state import RobotState
+from .robot import RobotStruct
+
+from .robot_io import *
+from .robot_drow import *
+
+from .forward import *
+
+from .target import TargetList
+  
+class Robot():
+  robot_ : RobotStruct
+  motions_ : RobotMotions
+  state_ : RobotState
+  target_ : TargetList
+  order_ : int
+  dim_ : int
+  
+  def __init__(self, robot_ : RobotStruct, motions_ : RobotMotions, state_ : RobotState, order_ : int, dim_ : int):
+    self.robot_ = robot_
+    self.motions_ = motions_
+    self.state_ = state_
+    self.order_ = order_
+    self.dim_ = dim_
+
+  @staticmethod
+  def from_json_file(model_file_name : str, order_=3, dim_=3) -> "Robot":
+    robot_ = io_from_json_file(model_file_name)
+
+    m_aliases = []
+    l_aliases = []
+    j_aliases = []
+    
+    if order_ == 1:
+      m_aliases = ["coord"]
+      l_aliases = ["pos", "rot"]
+    elif order_ == 2:
+      m_aliases = ["coord", "veloc"]
+      l_aliases = ["pos", "rot", "vel"]
+    elif order_ > 2:
+      m_aliases = ["coord", "veloc", "accel"]
+      l_aliases = ["pos", "rot", "vel", "acc"]
+      for i in range(order_-3):
+        m_aliases.append("accel_diff"+str(i+1))
+        l_aliases.append("acc_diff"+str(i+1))
+        
+    l_aliases.append("link_force")
+    j_aliases=["joint_torque", "joint_force"]
+    
+    for i in range(order_-3):
+      l_aliases.append("link_force_diff"+str(i+1))
+      j_aliases.append("joint_torque_diff"+str(i+1))
+      j_aliases.append("joint_force_diff"+str(i+1))
+      
+    motions_ = RobotMotions(robot_, m_aliases)
+    state_ = RobotState(robot_, l_aliases, j_aliases)
+
+    return Robot(robot_, motions_, state_, order_, dim_)
+  
+  def print_structure(self):
+    io_print_structure(self.robot_)
+    
+  def dof(self):
+    return self.robot_.dof
+  
+  def link_list(self, name_list : list[str]):
+    return self.robot_.link_list(name_list)
+  
+  def joint_list(self, name_list : list[str]):
+    return self.robot_.joint_list(name_list)
+
+  def motions(self):
+    return self.motions_.motions  
+
+  def set_motion_aliases(self, aliases : list[str]):
+    self.motions_.set_aliases(aliases)
+    
+  def import_motions(self, vecs : list[float]):
+    self.motions_.set_motion(vecs)
+    
+  def motion(self, name : str):
+    return self.motions_.gen_values(name)
+  
+  def state_df(self):
+    return self.state_.df()
+  
+  def state_link_info(self, type : str, name : str):
+    return self.state_.extract_info('link', type, name)
+
+  def state_link_info_list(self, type : str, name_list : list[str]):
+    return [self.state_.extract_info('link', type, name) for name in name_list]
+  
+  def state_target_link_info(self, type : str):
+    return self.state_link_info_list(type, self.target_.target_names)
+
+  def kinematics(self):
+    self.state_.import_state(f_kinematics(self.robot_, self.motions_))
+  
+  def dynamics(self):
+    self.state_.import_state(f_dynamics(self.robot_, self.motions_))
+    
+  def set_target_from_file(self, target_file : str):
+    if not target_file:
+      raise ValueError("target_file is empty")
+    if not isinstance(target_file, str):
+      raise TypeError("target_file must be a string")
+    self.target_ = io_from_target_json(target_file)
+    
+  def print_targets(self):
+    io_print_targets(self.target_)
+  
+  def link_jacobian(self, link_name_list : list[str]):
+    if not link_name_list:
+      raise ValueError("link_name_list is empty")
+    if not all(link_name in self.robot_.link_names for link_name in link_name_list):
+      raise ValueError("link_name_list contains invalid link names")
+    return f_link_jacobian(self.robot_, self.state_, link_name_list)
+  
+  def link_jacobian_target(self):
+    return f_link_jacobian(self.robot_, self.state_, self.target_.target_names)
+  
+  def link_cmtm_jacobian(self, link_name_list : list[str]):
+    if not link_name_list:
+      raise ValueError("link_name_list is empty")
+    if not all(link_name in self.robot_.link_names for link_name in link_name_list):
+      raise ValueError("link_name_list contains invalid link names")
+    return f_link_cmtm_jacobian(self.robot_, self.state_, link_name_list)
+  
+  def link_cmtm_jacobian_target(self):
+    return f_link_cmtm_jacobian(self.robot_, self.state_, self.target_.target_names)
+      
+  def show_robot(self, save = False):
+    conectivity = np.zeros((self.robot_.joint_num, 2), dtype='int64')
+    for i in range(self.robot_.joint_num):
+      joint = self.robot_.joints[i]
+      conectivity[i, 0] = joint.child_link_id
+      conectivity[i, 1] = joint.parent_link_id
+
+    d_show_robot(conectivity, self.state_.all_link_pos(self.robot_), save)

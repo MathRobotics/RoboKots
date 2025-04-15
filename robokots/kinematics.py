@@ -7,7 +7,7 @@ import numpy as np
 
 from mathrobo import SE3, CMTM
 
-from .robot_model import JointStruct
+from .robot import JointStruct
 
 def joint_local_frame(joint : JointStruct, joint_coord : np.ndarray) -> SE3:  
   if len(joint_coord) != 0:
