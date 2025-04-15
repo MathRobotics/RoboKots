@@ -62,7 +62,7 @@ class Kots():
     motions_ = RobotMotions(robot_, m_aliases)
     state_ = RobotState(robot_, l_aliases, j_aliases)
 
-    return Robot(robot_, motions_, state_, order_, dim_)
+    return Kots(robot_, motions_, state_, order_, dim_)
   
   def print_structure(self):
     io_print_structure(self.robot_)
