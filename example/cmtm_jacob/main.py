@@ -3,11 +3,11 @@ import numpy as np
 from robokots.kots import *
 
 def main():
-    robot = Kots.from_json_file("../model/sample_robot.json")
-    robot.print_structure()
+    kots = Kots.from_json_file("../model/sample_robot.json")
+    kots.print_structure()
   
-    robot.set_target_from_file("target_list.json")
-    robot.print_targets()
+    kots.set_target_from_file("target_list.json")
+    kots.print_targets()
 
     coord = [1., -1., 1.]
     veloc = [1., 2., 3.]
@@ -17,11 +17,11 @@ def main():
     vec.extend(coord)
     vec.extend(veloc)
     vec.extend(accel)    
-    robot.import_motions(vec)
+    kots.import_motions(vec)
     
-    robot.kinematics()
+    kots.kinematics()
 
-    print(robot.link_cmtm_jacobian_target())
+    print(kots.link_cmtm_jacobian_target())
   
 if __name__ == "__main__":
     main()
