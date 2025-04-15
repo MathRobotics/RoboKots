@@ -3,7 +3,7 @@ import numpy as np
 from robokots.kots import *
 
 def main():
-    robot = Robot.from_json_file("../model/sample_robot.json")
+    robot = Kots.from_json_file("../model/sample_robot.json")
     robot.print_structure()
   
     robot.set_target_from_file("target_list.json")
@@ -16,8 +16,7 @@ def main():
     vec = []
     vec.extend(coord)
     vec.extend(veloc)
-    vec.extend(accel)
-    
+    vec.extend(accel)    
     robot.import_motions(vec)
     
     robot.kinematics()

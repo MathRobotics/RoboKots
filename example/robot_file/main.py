@@ -3,7 +3,7 @@ import numpy as np
 from robokots.kots import *
 
 def main():
-  robot = Robot.from_json_file("../model/sample_robot.json")
+  robot = Kots.from_json_file("../model/sample_robot.json")
   robot.print_structure()
   
   link_name_list = ["world","base","arm1","arm2","arm3"]
