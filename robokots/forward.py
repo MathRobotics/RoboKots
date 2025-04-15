@@ -13,6 +13,7 @@ from .state import RobotState
 from .kinematics import *
 from .dynamics import *
 
+#specific 3d-CMTM
 def cmtm_to_state(cmtm : CMTM, name : str) -> dict:
   '''
   Convert CMTM to state data
@@ -38,6 +39,7 @@ def cmtm_to_state(cmtm : CMTM, name : str) -> dict:
   
   return state
 
+#specific 3d-CMTM
 def f_kinematics(robot : RobotStruct, motions : RobotMotions) -> dict:
   '''
   Forward kinematics computation
