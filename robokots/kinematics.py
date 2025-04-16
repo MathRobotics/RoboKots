@@ -85,13 +85,11 @@ def kinematics_cmtm(joint : JointStruct, p_link_cmtm : CMTM, joint_coord : np.nd
   return m
 
 # specific 3D space (magic number 6)
-# specific 3d-CMTM (use origin_cmtm)
 def part_link_cmtm_jacob(joint : JointStruct, rel_cmtm : CMTM) -> np.ndarray:
   mat = np.zeros((rel_cmtm._n * 6, rel_cmtm._n * joint.dof))
-  tmp_cmtm = joint.origin_cmtm @ rel_cmtm
+  origin_cmtm = CMTM[SE3](joint.origin, np.zeros((rel_cmtm._n-1,6)))
+  tmp_cmtm = origin_cmtm @ rel_cmtm
   tmp = tmp_cmtm.mat_inv_adj()
   for i in range(rel_cmtm._n):
     mat[i*6:(i+1)*6] = joint.selector(tmp[i*6:(i+1)*6])
-  mat[0:6, :joint.dof] = joint.select_mat
   return mat
-  # return rel_cmtm.mat_inv_adj() @ joint.origin_cmtm.mat_inv_adj() @ joint.select_mat_cmtm
