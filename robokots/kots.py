@@ -116,25 +116,26 @@ class Kots():
   def print_targets(self):
     io_print_targets(self.target_)
   
-  def link_jacobian(self, link_name_list : list[str]):
+  def link_jacobian(self, link_name_list : list[str], order = 3):
+    if order < 1:
+      raise ValueError("order must be greater than 0")
+    if order > self.order_:
+      raise ValueError(f"order must be less than or equal to {self.order_}")
+
     if not link_name_list:
       raise ValueError("link_name_list is empty")
     if not all(link_name in self.robot_.link_names for link_name in link_name_list):
       raise ValueError("link_name_list contains invalid link names")
-    return f_link_jacobian(self.robot_, self.state_, link_name_list)
+
+    if order == 1:
+      return f_link_jacobian(self.robot_, self.state_, link_name_list)
+    else:
+      return f_link_cmtm_jacobian(self.robot_, self.state_, link_name_list, order)
   
-  def link_jacobian_target(self):
-    return f_link_jacobian(self.robot_, self.state_, self.target_.target_names)
-  
-  def link_cmtm_jacobian(self, link_name_list : list[str]):
-    if not link_name_list:
-      raise ValueError("link_name_list is empty")
-    if not all(link_name in self.robot_.link_names for link_name in link_name_list):
-      raise ValueError("link_name_list contains invalid link names")
-    return f_link_cmtm_jacobian(self.robot_, self.state_, link_name_list)
-  
-  def link_cmtm_jacobian_target(self):
-    return f_link_cmtm_jacobian(self.robot_, self.state_, self.target_.target_names)
+  def link_jacobian_target(self, order = 3):
+    if not self.target_:
+      raise ValueError("target_ is not set")
+    return self.link_cmtm_jacobian(self.target_.target_names, order)
       
   def show_robot(self, save = False):
     conectivity = np.zeros((self.robot_.joint_num, 2), dtype='int64')
