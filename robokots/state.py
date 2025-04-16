@@ -31,6 +31,9 @@ class RobotState:
   
   def __init__(self, robot : RobotStruct, l_aliases = ["pos", "rot", "vel", "acc"], j_aliases = [], separator = "_"):
     names = []
+    self.l_aliases = l_aliases
+    self.j_aliases = j_aliases
+    self.separator = separator  
     if len(l_aliases) != 0:
       for l_name in robot.link_names:
         for al in l_aliases:
@@ -84,11 +87,27 @@ class RobotState:
     h = SE3(self.link_rot(link_name), self.link_pos(link_name))
     return h
   
-  def link_cmtm(self, link_name : str) -> CMTM:
-    h = SE3(self.link_rot(link_name), self.link_pos(link_name))
-    veloc = self.link_vel(link_name)
-    accel = self.link_acc(link_name)
-    vec = np.array((veloc, accel))
+  def link_values(self, link_name : str, order : int) -> dict:
+    if order < 1:
+      raise ValueError(f"Invalid order: {order}. Must be over 1.")
+    
+    d = []
+    d.append(self.link_frame(link_name))
+    if order > 1:
+      d.append(self.link_vel(link_name))
+    if order > 2:
+      d.append(self.link_acc(link_name))
+    if order > 3:
+      for i in range(order-3):
+        d.append(RobotState.link_state_vec(self.df(), link_name, "acc_diff"+str(i+1)))
+    return d
+  
+  def link_cmtm(self, link_name : str, order) -> CMTM:
+    vec = np.zeros((order-1, 6))
+    state = self.link_values(link_name, order)
+    h = state[0]
+    for i in range(1, order):
+      vec[i-1] = state[i]
     cmtm = CMTM[SE3](h, vec)
     return cmtm
 
@@ -96,8 +115,8 @@ class RobotState:
     h = self.link_frame(base_link_name).inv() @ self.link_frame(target_link_name)
     return h
   
-  def link_rel_cmtm(self, base_link_name : str, target_link_name : str) -> CMTM:
-    x = self.link_cmtm(base_link_name).inv() @ self.link_cmtm(target_link_name)
+  def link_rel_cmtm(self, base_link_name : str, target_link_name : str, order : int) -> CMTM:
+    x = self.link_cmtm(base_link_name, order).inv() @ self.link_cmtm(target_link_name, order)
     return x
   #specific 3d-CMTM
   def extract_link_info(self, type : str, link_name : str, frame = "dummy", rel_frame = 'dummy'):
