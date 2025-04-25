@@ -5,7 +5,7 @@
 
 import numpy as np
 
-from mathrobo import SO3, SE3
+from mathrobo import SO3, SE3, CMTM
 
 from .robot import JointStruct
 
@@ -50,6 +50,17 @@ def spatial_inertia(m : float, i : np.ndarray, c : np.ndarray) -> np.ndarray:
     i_mat[0:3,3:6] = -m * c_hat
     return i_mat
 
+def link_momentum(inertia : np.ndarray, veloc : np.ndarray) -> np.ndarray:
+    """
+    Calculate the momentum of a link.
+    Args:
+        inertia (numpy.ndarray): 6x6 spatial inertia matrix of the link.
+        veloc (numpy.ndarray): 6x1 spatial velocity vector of the link.
+    Returns:
+        numpy.ndarray: 6x1 spatial momentum vector of the link.
+    """
+    return inertia @ veloc
+
 def link_dynamics(inertia : np.ndarray, veloc : np.ndarray, accel : np.ndarray) -> np.ndarray:
     """
     Calculate the inverse dynamics of a link.
@@ -60,7 +71,7 @@ def link_dynamics(inertia : np.ndarray, veloc : np.ndarray, accel : np.ndarray) 
     Returns:
         numpy.ndarray: 6x1 spatial force vector acting on the link.
     """
-    force = inertia @ accel - SE3.hat_adj(veloc).T @ inertia @ veloc
+    force = link_momentum(inertia, accel) - SE3.hat_adj(veloc).T @ link_momentum(inertia, veloc)
     return force
 
 def joint_dynamics(joint : JointStruct, rel_frame : SE3, p_joint_force : np.ndarray, link_force : np.ndarray) -> tuple:
@@ -77,4 +88,39 @@ def joint_dynamics(joint : JointStruct, rel_frame : SE3, p_joint_force : np.ndar
     """
     joint_force = rel_frame.mat_inv_adj() @ p_joint_force - link_force
     joint_torque = joint.select_mat.T @ joint_force
+    return joint_torque, joint_torque
+
+def link_mometum_cmtm(inertia : np.ndarray, vecs : np.ndarray) -> np.ndarray:
+    """
+    Calculate the link momentum and centripetal momentum.
+    Args:
+        inertia (numpy.ndarray): 6x6 spatial inertia matrix of the link.
+        vecs (numpy.ndarray): 6xn spatial vectors of the link.
+    Returns:
+        numpy.ndarray: 6xn spatial momentum vectors of the link.
+    """
+    return inertia @ vecs.T
+
+def link_dynamics_cmtm(inertia : np.ndarray, vecs : np.ndarray) -> np.ndarray:
+    """
+    Calculate the link force and centripetal momentum.
+    Args:
+        momentum (numpy.ndarray): 6xn spatial momentum vectors of the link.
+        vecs (numpy.ndarray): 6xn spatial vectors of the link.
+    Returns:
+        numpy.ndarray: 6xn spatial force vectors of the link.
+    """
+    n = vecs.shape[0]
+    frac = np.ones((n,1))
+    for i in range(1,n):
+        frac[i] = frac[i-1] * i
+
+    ## remain : implement frac
+    return link_momentum(inertia, vecs[1:]) - CMTM.hat_adj(SE3, vecs[:-1]).T @ link_momentum(inertia, vecs[:-1])
+
+def joint_dynamics_cmtm(joint : JointStruct, rel_cmtm : CMTM, p_joint_force : np.ndarray, link_force : np.ndarray) -> tuple:
+    joint_force = rel_cmtm.mat_inv_adj() @ p_joint_force - link_force
+    joint_torque = np.zeros(joint.dof*rel_cmtm._n)
+    for i in range(rel_cmtm._n):
+        joint_torque[i*6:(i+1)*6] = joint.selector(joint_force[i*6:(i+1)*6])
     return joint_torque, joint_torque
