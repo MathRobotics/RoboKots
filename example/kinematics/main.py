@@ -1,17 +1,17 @@
 import numpy as np
 
-from robokots.robot import *
+from robokots.kots import *
 
 def main():
-  robot = Robot.from_json_file("../model/sample_robot.json")
-  robot.print_structure()
+  kots = Kots.from_json_file("../model/sample_robot.json")
+  kots.print_structure()
   
   link_name_list = ["world","base","arm1","arm2","arm3"]
-  links = robot.link_list(link_name_list)
+  links = kots.link_list(link_name_list)
   print(list(l.type for l in links) )
 
   joint_name_list = ["root","joint1","joint2","joint3"]
-  joints = robot.joint_list(joint_name_list)
+  joints = kots.joint_list(joint_name_list)
   print(list(j.type for j in joints) )
   
   coord = [1., -1., 1.]
@@ -23,14 +23,14 @@ def main():
   vec.extend(veloc)
   vec.extend(accel)
   
-  robot.import_motions(vec)
-  print(robot.motions())
+  kots.import_motions(vec)
+  print(kots.motions())
   
-  robot.kinematics()
+  kots.kinematics()
   
-  print(robot.state_df())
+  print(kots.state_df())
   
-  print(robot.link_jacobian(["arm1","arm2","arm3"]))
+  print(kots.link_jacobian(["arm1","arm2","arm3"]))
   
 if __name__ == "__main__":
     main()

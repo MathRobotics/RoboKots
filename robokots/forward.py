@@ -5,20 +5,61 @@
 
 import numpy as np
 
-from .robot_model import *
-from .motion import *
-from .state import *
+from mathrobo import SE3, CMTM
+
+from .robot import RobotStruct, LinkStruct, JointStruct
+from .motion import RobotMotions
+from .state import RobotState
 from .kinematics import *
 from .dynamics import *
 
-def f_kinematics(robot, motions):
-  state_data = {}
+#specific 3d-CMTM
+def cmtm_to_state(cmtm : CMTM, name : str) -> dict:
+  '''
+  Convert CMTM to state data
+  Args:
+    cmtm (CMTM): CMTM object
+    name (str): name of the link
+  Returns:
+    dict: state data
+  '''
+  mat = cmtm.elem_mat()
+  veloc = cmtm.elem_vecs(0)
+  accel = cmtm.elem_vecs(1)
   
+  pos = mat[:3,3]
+  rot_vec = mat[:3,:3].ravel()
+  
+  state = [
+      (name+"_pos" , pos.tolist()),
+      (name+"_rot" , rot_vec.tolist()),
+      (name+"_vel" , veloc.tolist()),
+      (name+"_acc" , accel.tolist())
+  ]
+  
+  return state
+
+#specific 3d-CMTM
+def f_kinematics(robot : RobotStruct, motions : RobotMotions) -> dict:
+  '''
+  Forward kinematics computation
+  Args:
+    robot (RobotStruct): robot model
+    motions (RobotMotions): robot motion
+  Returns:
+    dict: state data
+  '''
+  
+  state_data = {}
+  state_cmtm = {}
+
+  # Initialize CMTM for the world link
+  # The world link is the parent of the first joint
   world_name = robot.links[robot.joints[0].parent_link_id].name
-  state_data.update([(world_name + "_pos" , [0.,0.,0.])])
-  state_data.update([(world_name + "_rot" , [1.,0.,0.,0.,1.,0.,0.,0.,1.])])
-  state_data.update([(world_name + "_vel" , [0.,0.,0.,0.,0.,0.])])
-  state_data.update([(world_name + "_acc" , [0.,0.,0.,0.,0.,0.])])
+  state_cmtm.update([(world_name, CMTM.eye(SE3))])
+ 
+  state = cmtm_to_state(state_cmtm[world_name], world_name)
+  state_data.update(state)
   
   for joint in robot.joints:    
     parent = robot.links[joint.parent_link_id]
@@ -28,33 +69,26 @@ def f_kinematics(robot, motions):
     joint_veloc = motions.joint_veloc(joint)
     joint_accel = motions.joint_accel(joint)
     
-    rot = np.array(state_data[parent.name + "_rot"]).reshape((3,3))
-    p_link_frame = SE3(rot, state_data[parent.name + "_pos"])
-    p_link_vel = state_data[parent.name + "_vel"]  
-    p_link_acc = state_data[parent.name + "_acc"]  
+    p_link_cmtm = state_cmtm[parent.name]
+    rel_cmtm = link_rel_cmtm(joint, joint_coord, joint_veloc, joint_accel)
 
-    frame = kinematics(joint, p_link_frame, joint_coord)  
-    veloc = vel_kinematics(joint, p_link_vel, joint_coord, joint_veloc)  
-    accel = acc_kinematics(joint, p_link_vel, p_link_acc, joint_coord, joint_veloc, joint_accel)       
-    
-    pos = frame.pos()
-    rot_vec = frame.rot().ravel()
+    link_cmtm = p_link_cmtm @ rel_cmtm
+    # Update CMTM for the child link
+    state_cmtm.update([(child.name, link_cmtm)])
 
-    state_data.update([(child.name + "_pos" , pos.tolist())])
-    state_data.update([(child.name + "_rot" , rot_vec.tolist())])
-    state_data.update([(child.name + "_vel" , veloc.tolist())])
-    state_data.update([(child.name + "_acc" , accel.tolist())])
+    state = cmtm_to_state(link_cmtm, child.name)
+    state_data.update(state)
     
   return state_data
 
-def __target_part_link_jacob(target_link, joint, rel_frame):
+def __target_part_link_jacob(target_link : LinkStruct, joint : JointStruct, rel_frame : SE3) -> np.ndarray:
   if target_link.id == joint.child_link_id:
-    mat = joint.origin.mat_inv_adj() @ joint.joint_select_mat
+    mat = joint.origin.mat_inv_adj() @ joint.select_mat
   else:
     mat = part_link_jacob(joint, rel_frame)  
   return mat
 
-def __link_jacobian(robot, state, target_link):
+def __link_jacobian(robot, state : RobotState, target_link : LinkStruct) -> np.ndarray:
   jacob = np.zeros((6,robot.dof))
   link_route = []
   joint_route = []
@@ -68,14 +102,84 @@ def __link_jacobian(robot, state, target_link):
     
   return jacob
   
-def f_link_jacobian(robot, state, link_name_list):
+def f_link_jacobian(robot : RobotStruct, state : RobotState, link_name_list : list[str]) -> np.ndarray:
   links = robot.link_list(link_name_list)
   jacobs = np.zeros((6*len(links),robot.dof))
   for i in range(len(links)):
     jacobs[6*i:6*(i+1),:] = __link_jacobian(robot, state, links[i])
   return jacobs
 
-def f_dynamics(robot, motions):
+# specific 3d space (magic number 6)
+def __target_part_link_cmtm_jacob(target_link : LinkStruct, joint : JointStruct, rel_cmtm : CMTM) -> np.ndarray:
+  mat = np.zeros((rel_cmtm._n * 6, rel_cmtm._n * joint.dof))
+  if target_link.id == joint.child_link_id:
+    origin_cmtm = CMTM[SE3](joint.origin, np.zeros((rel_cmtm._n-1,6)))
+    tmp = origin_cmtm.mat_inv_adj()
+    for i in range(rel_cmtm._n):
+      mat[i*6:(i+1)*6] = joint.selector(tmp[i*6:(i+1)*6])
+  else:
+    mat = part_link_cmtm_jacob(joint, rel_cmtm)  
+  return mat
+
+# specific 3d space (magic number 6)
+def __link_cmtm_jacobian(robot, state : RobotState, target_link : LinkStruct, order : int) -> np.ndarray:
+  jacob = np.zeros((6*order,robot.dof*order))
+  link_route = []
+  joint_route = []
+  robot.route_target_link(target_link, link_route, joint_route)
+  
+  for j in joint_route:
+    joint = robot.joints[j]
+    rel_cmtm = state.link_rel_cmtm(robot.links[joint.child_link_id].name, target_link.name, order)
+    mat = __target_part_link_cmtm_jacob(target_link, joint, rel_cmtm)
+    jacob[:,joint.dof_index*order:(joint.dof_index+joint.dof)*order] = mat
+    
+  return jacob
+
+# specific 3d space (magic number 6)
+def f_link_cmtm_jacobian(robot : RobotStruct, state : RobotState, link_name_list : list[str], order = 3) -> np.ndarray:
+  links = robot.link_list(link_name_list)
+  jacobs = np.zeros((6*order*len(links),robot.dof*order))
+  for i in range(len(links)):
+    jacobs[6*order*i:6*order*(i+1),:] = __link_cmtm_jacobian(robot, state, links[i], order)
+  return jacobs
+
+# specific 3d space (magic number 6)
+def f_dynamics(robot : RobotStruct, motions : RobotMotions) -> dict:
+  state_data = {}
+  
+  state_data = f_kinematics(robot, motions)
+
+  # world_name = robot.links[robot.joints[0].parent_link_id].name
+  # state_data.update([(world_name + "_link_force" , [0.,0.,0.,0.,0.,0.])])
+
+  for joint in reversed(robot.joints):
+    child = robot.links[joint.child_link_id]
+    
+    joint_coord = motions.joint_coord(joint)
+
+    inertia = spatial_inertia(child.mass, child.inertia, child.cog)
+
+    link_veloc = state_data[child.name + "_vel"]
+    link_accel = state_data[child.name + "_acc"]
+    
+    link_force = link_dynamics(inertia, link_veloc, link_accel)  
+    state_data.update([(child.name + "_link_force" , link_force.tolist())])
+    
+    rel_frame = link_rel_frame(joint, joint_coord)
+
+    p_joint_force = np.zeros(6)
+    for id in child.child_joint_ids:
+      p_joint_force += state_data[robot.joints[id].name + "_joint_force"]
+
+    joint_torque, joint_force = joint_dynamics(joint, rel_frame, p_joint_force, link_force)
+    
+    state_data.update([(joint.name + "_joint_force" , joint_force.tolist())])
+    state_data.update([(joint.name + "_joint_torque" , joint_torque.tolist())])
+    
+  return state_data
+
+def f_dynamics_cmtm(robot : RobotStruct, motions : RobotMotions) -> dict:
   state_data = {}
   
   state_data = f_kinematics(robot, motions)
@@ -83,8 +187,7 @@ def f_dynamics(robot, motions):
   world_name = robot.links[robot.joints[0].parent_link_id].name
   state_data.update([(world_name + "_link_force" , [0.,0.,0.,0.,0.,0.])])
 
-  for joint in reversed(robot.joints):    
-    parent = robot.links[joint.parent_link_id]
+  for joint in reversed(robot.joints):
     child = robot.links[joint.child_link_id]
     
     joint_coord = motions.joint_coord(joint)

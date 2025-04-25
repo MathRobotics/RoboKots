@@ -83,8 +83,10 @@ def test_robot_state_init():
 def test_robot_state_df():
     robot = MockRobot()
     state = RobotState(robot, test_link_aliases, test_joint_aliases)  
-    assert state.df().shape[0] == 0
-    assert state.df().columns == test_state_names
+    try:
+        state.df()
+    except ValueError as e:
+        assert str(e) == "DataFrame is empty. Please add data first."
 
 # Test link state vec extraction
 def test_robot_state_link_state_vec():

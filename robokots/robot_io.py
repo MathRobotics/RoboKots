@@ -5,7 +5,7 @@
 import json
 from typing import Dict
 
-from .robot_model import *
+from .robot import *
 from .target import *
 
 def io_load_json(file_path: str) -> Dict:
