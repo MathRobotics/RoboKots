@@ -69,6 +69,9 @@ class Kots():
     
   def dof(self):
     return self.robot_.dof
+
+  def order(self):
+    return self.order_
   
   def link_list(self, name_list : list[str]):
     return self.robot_.link_list(name_list)
@@ -82,7 +85,7 @@ class Kots():
   def set_motion_aliases(self, aliases : list[str]):
     self.motions_.set_aliases(aliases)
     
-  def import_motions(self, vecs : list[float]):
+  def import_motions(self, vecs : np.ndarray):
     self.motions_.set_motion(vecs)
     
   def motion(self, name : str):
