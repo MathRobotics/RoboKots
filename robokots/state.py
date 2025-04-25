@@ -102,7 +102,7 @@ class RobotState:
         d.append(RobotState.link_state_vec(self.df(), link_name, "acc_diff"+str(i+1)))
     return d
   
-  def link_cmtm(self, link_name : str, order) -> CMTM:
+  def link_cmtm(self, link_name : str, order = 3) -> CMTM:
     vec = np.zeros((order-1, 6))
     state = self.link_values(link_name, order)
     h = state[0]
@@ -118,6 +118,7 @@ class RobotState:
   def link_rel_cmtm(self, base_link_name : str, target_link_name : str, order : int) -> CMTM:
     x = self.link_cmtm(base_link_name, order).inv() @ self.link_cmtm(target_link_name, order)
     return x
+
   #specific 3d-CMTM
   def extract_link_info(self, type : str, link_name : str, frame = "dummy", rel_frame = 'dummy'):
     if type == "pos":
@@ -130,6 +131,8 @@ class RobotState:
       return self.link_acc(link_name)
     elif type == "frame":
       return self.link_frame(link_name)
+    elif type == "cmtm":
+      return self.link_cmtm(link_name)
     else:
       raise ValueError(f"Invalid type: {set(type)}")
     
