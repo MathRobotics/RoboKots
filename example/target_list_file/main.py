@@ -23,7 +23,7 @@ def main():
     kots.kinematics()
 
     fk_vel = kots.state_target_link_info('vel')
-    jacob_vel = kots.link_jacobian_target()@kots.motion("veloc")
+    jacob_vel = kots.link_jacobian_target(1)@kots.motion("veloc")
 
     for i in range(len(fk_vel)):
       print(fk_vel[i])
