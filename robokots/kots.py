@@ -138,7 +138,7 @@ class Kots():
   def link_jacobian_target(self, order = 3):
     if not self.target_:
       raise ValueError("target_ is not set")
-    return self.link_cmtm_jacobian(self.target_.target_names, order)
+    return self.link_jacobian(self.target_.target_names, order)
       
   def show_robot(self, save = False):
     conectivity = np.zeros((self.robot_.joint_num, 2), dtype='int64')
