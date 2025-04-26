@@ -1,0 +1,9 @@
+{
+  "targets":[
+    {
+      "type": "pos",
+      "link": "arm2",
+      "pos" : [0,0,0]
+    }
+  ]
+}
