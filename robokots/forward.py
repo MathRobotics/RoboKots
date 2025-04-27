@@ -14,7 +14,7 @@ from .kinematics import *
 from .dynamics import *
 
 #specific 3d-CMTM
-def cmtm_to_state(cmtm : CMTM, name : str) -> dict:
+def cmtm_to_state(cmtm : CMTM, name : str, order = 3) -> dict:
   '''
   Convert CMTM to state data
   Args:
@@ -23,24 +23,42 @@ def cmtm_to_state(cmtm : CMTM, name : str) -> dict:
   Returns:
     dict: state data
   '''
-  mat = cmtm.elem_mat()
-  veloc = cmtm.elem_vecs(0)
-  accel = cmtm.elem_vecs(1)
-  
-  pos = mat[:3,3]
-  rot_vec = mat[:3,:3].ravel()
-  
-  state = [
-      (name+"_pos" , pos.tolist()),
-      (name+"_rot" , rot_vec.tolist()),
-      (name+"_vel" , veloc.tolist()),
-      (name+"_acc" , accel.tolist())
-  ]
-  
+  if order < 1 and order > 3:
+    raise ValueError("order must be 1, 2 or 3")
+
+  state = []
+
+  if 1:
+    mat = cmtm.elem_mat()
+    pos = mat[:3,3]
+    rot_vec = mat[:3,:3].ravel()
+    state.append((name+"_pos" , pos.tolist()))
+    state.append((name+"_rot" , rot_vec.tolist()))
+    if order > 1:
+      veloc = cmtm.elem_vecs(0)
+      state.append((name+"_vel" , veloc.tolist()))
+    if order > 2:
+      accel = cmtm.elem_vecs(1)
+      state.append((name+"_acc" , accel.tolist()))
+  else:
+    mat = cmtm.elem_mat()
+    veloc = cmtm.elem_vecs(0)
+    accel = cmtm.elem_vecs(1)
+    
+    pos = mat[:3,3]
+    rot_vec = mat[:3,:3].ravel()
+
+    state = [
+        (name+"_pos" , pos.tolist()),
+        (name+"_rot" , rot_vec.tolist()),
+        (name+"_vel" , veloc.tolist()),
+        (name+"_acc" , accel.tolist())
+    ]
+    
   return state
 
 #specific 3d-CMTM
-def f_kinematics(robot : RobotStruct, motions : RobotMotions) -> dict:
+def f_kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict:
   '''
   Forward kinematics computation
   Args:
@@ -56,27 +74,25 @@ def f_kinematics(robot : RobotStruct, motions : RobotMotions) -> dict:
   # Initialize CMTM for the world link
   # The world link is the parent of the first joint
   world_name = robot.links[robot.joints[0].parent_link_id].name
-  state_cmtm.update([(world_name, CMTM.eye(SE3))])
+  state_cmtm.update([(world_name, CMTM.eye(SE3, order-1))])
  
-  state = cmtm_to_state(state_cmtm[world_name], world_name)
+  state = cmtm_to_state(state_cmtm[world_name], world_name, order)
   state_data.update(state)
   
   for joint in robot.joints:    
     parent = robot.links[joint.parent_link_id]
     child = robot.links[joint.child_link_id]
-    
-    joint_coord = motions.joint_coord(joint)
-    joint_veloc = motions.joint_veloc(joint)
-    joint_accel = motions.joint_accel(joint)
-    
+
+    joint_motions = motions.joint_motions(joint)
+
     p_link_cmtm = state_cmtm[parent.name]
-    rel_cmtm = link_rel_cmtm(joint, joint_coord, joint_veloc, joint_accel)
+    rel_cmtm = link_rel_cmtm(joint, joint_motions, order)
 
     link_cmtm = p_link_cmtm @ rel_cmtm
     # Update CMTM for the child link
     state_cmtm.update([(child.name, link_cmtm)])
 
-    state = cmtm_to_state(link_cmtm, child.name)
+    state = cmtm_to_state(link_cmtm, child.name, order)
     state_data.update(state)
     
   return state_data

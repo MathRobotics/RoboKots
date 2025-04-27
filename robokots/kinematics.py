@@ -70,17 +70,25 @@ def part_link_jacob(joint : JointStruct, rel_frame : np.ndarray) -> np.ndarray:
   return rel_frame.mat_inv_adj() @ joint.origin.mat_inv_adj() @ joint.select_mat
 
 #specific 3d-CMTM
-def link_rel_cmtm(joint : JointStruct, joint_coord : np.ndarray, joint_vel : np.ndarray, joint_acc : np.ndarray) -> CMTM:
-  frame = link_rel_frame(joint, joint_coord)
-  vel = link_rel_vel(joint, joint_vel)
-  acc = link_rel_acc(joint, joint_acc)
-  vec = np.array((vel, acc))
-  m = CMTM[SE3](frame, vec)
+def link_rel_cmtm(joint : JointStruct, joint_motions : np.ndarray, order = 3) -> CMTM:
+  if order < 1 or order > 3:
+    print("order is out of range")
+    return 
+  
+  dof = joint.dof
+
+  frame = link_rel_frame(joint, joint_motions[:dof].reshape(dof))
+  vecs = np.zeros((order-1, 6))
+  if order > 1:
+    vecs[0] = link_rel_vel(joint, joint_motions[dof:2*dof].reshape(dof))
+  if order > 2:
+    vecs[1] = link_rel_acc(joint, joint_motions[2*dof:3*dof].reshape(dof))
+  m = CMTM[SE3](frame, vecs)
   return m
 
 #specific 3d-CMTM
-def kinematics_cmtm(joint : JointStruct, p_link_cmtm : CMTM, joint_coord : np.ndarray, joint_veloc : np.ndarray, joint_accel : np.ndarray) -> CMTM:
-  rel_m = link_rel_cmtm(joint, joint_coord, joint_veloc, joint_accel)
+def kinematics_cmtm(joint : JointStruct, p_link_cmtm : CMTM, joint_motions : np.ndarray, order = 3) -> CMTM:
+  rel_m = link_rel_cmtm(joint, joint_motions)
   m = p_link_cmtm @ rel_m
   return m
 

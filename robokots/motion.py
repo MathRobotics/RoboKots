@@ -69,3 +69,9 @@ class RobotMotions:
   
   def link_accel(self, link : LinkStruct):
     return self.gen_value(link, "accel")
+
+  def joint_motions(self, joint : JointStruct):
+    values = ()
+    for a in self.aliases:
+      values += (self.gen_value(joint, a),)
+    return np.array(values)
