@@ -28,7 +28,7 @@ def link_jacobian_num(kots, delta = 1e-8):
 ORDER = 3
 
 def main():
-    kots = Kots.from_json_file("../model/sample_robot.json", ORDER)
+    kots = Kots.from_json_file("../model/sample_robot.json", order=ORDER)
     motion = np.random.rand(kots.order()*kots.dof())
     kots.import_motions(motion)
 

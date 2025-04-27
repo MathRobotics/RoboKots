@@ -14,16 +14,8 @@ def main():
   joints = kots.joint_list(joint_name_list)
   print(list(j.type for j in joints) )
   
-  coord = [1., -1., 1.]
-  veloc = [0., 0., 0.]
-  accel = [0., 0., 0.]
-  
-  vec = []
-  vec.extend(coord)
-  vec.extend(veloc)
-  vec.extend(accel)
-  
-  kots.import_motions(vec)
+  motion = np.random.rand(kots.order()*kots.dof())
+  kots.import_motions(motion)
   print(kots.motions())
   
   kots.kinematics()
