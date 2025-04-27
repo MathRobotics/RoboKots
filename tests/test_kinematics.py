@@ -8,6 +8,7 @@ class MockJoint:
     def __init__(self, select_mat):
         self.select_mat = select_mat
         self.origin = SE3.eye() # Identity matrix for simplicity
+        self.dof = select_mat.shape[1]
 
 delta = 1e-8 # for numercal difference
 
@@ -249,7 +250,10 @@ def test_rel_cmtm():
     expected_frame = joint.origin @ SE3.set_mat(SE3.exp(joint.select_mat @ joint_coord))
     expected_vel = joint.origin.mat_inv_adj() @ (joint.select_mat @ joint_veloc)
     expected_acc = joint.origin.mat_inv_adj() @ (joint.select_mat @ joint_accel)
-    result_cmtm = link_rel_cmtm(joint, joint_coord, joint_veloc, joint_accel)
+
+    joint_motions = np.array([joint_coord, joint_veloc, joint_accel])
+    result_cmtm = link_rel_cmtm(joint, joint_motions)
+
     assert np.allclose(result_cmtm.elem_mat(), expected_frame.mat())
     assert np.allclose(result_cmtm.elem_vecs(0), expected_vel)
     assert np.allclose(result_cmtm.elem_vecs(1), expected_acc)
@@ -276,11 +280,10 @@ def test_kinematics_cmtm():
     expected_acc = rel_frame.mat_inv_adj() @ p_link_acc + \
                    SE3.hat_adj(rel_frame @ rel_veloc) @ p_link_vel + rel_accel
 
-    result_cmtm = kinematics_cmtm(joint, p_link_cmtm, joint_coord, joint_veloc, joint_accel)
+    joint_motions = np.array([joint_coord, joint_veloc, joint_accel])
+    result_cmtm = kinematics_cmtm(joint, p_link_cmtm, joint_motions)
 
     assert np.allclose(result_cmtm.elem_mat(), expected_frame.mat())
-    print(result_cmtm.elem_vecs(0))
-    print(expected_vel)
     assert np.allclose(result_cmtm.elem_vecs(0), expected_vel)
     assert np.allclose(result_cmtm.elem_vecs(1), expected_acc)
     
@@ -302,7 +305,8 @@ def test_kinematics_():
     expected_vel = vel_kinematics(joint, p_link_vel, joint_coord, joint_veloc)
     expected_acc = acc_kinematics(joint, p_link_vel, p_link_acc, joint_coord, joint_veloc, joint_accel)
 
-    result_cmtm = kinematics_cmtm(joint, p_link_cmtm, joint_coord, joint_veloc, joint_accel)
+    joint_motions = np.array([joint_coord, joint_veloc, joint_accel])
+    result_cmtm = kinematics_cmtm(joint, p_link_cmtm, joint_motions)
 
     assert np.allclose(result_cmtm.elem_mat(), expected_frame.mat())
     assert np.allclose(result_cmtm.elem_vecs(0), expected_vel)
