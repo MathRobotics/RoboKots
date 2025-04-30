@@ -99,7 +99,7 @@ def f_kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict
 
 def __target_part_link_jacob(target_link : LinkStruct, joint : JointStruct, rel_frame : SE3) -> np.ndarray:
   if target_link.id == joint.child_link_id:
-    mat = joint.origin.mat_inv_adj() @ joint.select_mat
+    mat = joint.select_mat
   else:
     mat = part_link_jacob(joint, rel_frame)  
   return mat
@@ -129,12 +129,11 @@ def f_link_jacobian(robot : RobotStruct, state : RobotState, link_name_list : li
 def __target_part_link_cmtm_jacob(target_link : LinkStruct, joint : JointStruct, rel_cmtm : CMTM) -> np.ndarray:
   mat = np.zeros((rel_cmtm._n * 6, rel_cmtm._n * joint.dof))
   if target_link.id == joint.child_link_id:
-    origin_cmtm = CMTM[SE3](joint.origin, np.zeros((rel_cmtm._n-1,6)))
-    tmp = origin_cmtm.mat_inv_adj()
+    tmp = np.eye(rel_cmtm.mat_adj().shape[0], rel_cmtm.mat_adj().shape[1])
     for i in range(rel_cmtm._n):
-      mat[i*6:(i+1)*6] = joint.selector(tmp[i*6:(i+1)*6])
+      mat[i*6:(i+1)*6, i*joint.dof:(i+1)*joint.dof] = joint.selector(tmp[i*6:(i+1)*6, i*6:(i+1)*6])
   else:
-    mat = part_link_cmtm_jacob(joint, rel_cmtm)  
+    mat = part_link_cmtm_jacob(joint, rel_cmtm)
   return mat
 
 # specific 3d space (magic number 6)
@@ -146,10 +145,12 @@ def __link_cmtm_jacobian(robot, state : RobotState, target_link : LinkStruct, or
   
   for j in joint_route:
     joint = robot.joints[j]
-    rel_cmtm = state.link_rel_cmtm(robot.links[joint.child_link_id].name, target_link.name, order)
-    mat = __target_part_link_cmtm_jacob(target_link, joint, rel_cmtm)
-    jacob[:,joint.dof_index*order:(joint.dof_index+joint.dof)*order] = mat
-    
+    if joint.dof > 0:
+      rel_cmtm = state.link_rel_cmtm(robot.links[joint.child_link_id].name, target_link.name, order)
+      mat = __target_part_link_cmtm_jacob(target_link, joint, rel_cmtm)
+      for i in range(order):
+        jacob[:,i*robot.dof+joint.dof_index:i*robot.dof+joint.dof_index+joint.dof]  \
+          = mat[:,i*joint.dof:(i+1)*joint.dof]
   return jacob
 
 # specific 3d space (magic number 6)
