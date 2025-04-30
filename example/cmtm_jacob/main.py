@@ -29,23 +29,27 @@ def link_jacobian_num(kots, target, order = 3, delta = 1e-8):
 ORDER = 3
 
 def main():
-    kots = Kots.from_json_file("../model/sample_robot.json")
+    kots = Kots.from_json_file("../model/2dof_arm.json")
     motion = np.random.rand(kots.order()*kots.dof())
     kots.import_motions(motion)
 
     kots.kinematics()
 
-    target = ["arm3"]
+    target = ["arm2"]
     jacob = kots.link_jacobian(target,ORDER)
 
     jacob_num = link_jacobian_num(kots, target, ORDER)
     
-    print("jacobian shape: ", jacob.shape)
-    print("jacobian: ", jacob)
+    print("jacobian_ana shape: ", jacob.shape)
+    # print("jacobian: ", jacob)
     print("jacobian_num shape: ", jacob_num.shape)
-    print("jacobian_num: ", jacob_num)
+    # print("jacobian_num: ", jacob_num)
 
     print("norm: ", np.linalg.norm(jacob[:,:(ORDER*kots.dof())] - jacob_num))
-  
+
+    for i in range(kots.order()):
+        print("jacob_ana: ", jacob[i*6:(i+1)*6,:])
+        print("jacob_num: ", jacob_num[i*6:(i+1)*6,:])
+
 if __name__ == "__main__":
     main()
