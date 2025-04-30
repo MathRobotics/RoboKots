@@ -9,6 +9,10 @@ class MockJoint:
         self.select_mat = select_mat
         self.origin = mr.SE3.rand()
         self.dof = select_mat.shape[1]
+        self.select_indeces = np.argmax(self.select_mat, axis=0)
+
+    def selector(self, mat: np.ndarray) -> np.ndarray:
+        return mat[:, self.select_indeces]
 
 delta = 1e-8 # for numercal difference
 
