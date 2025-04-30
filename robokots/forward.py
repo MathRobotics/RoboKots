@@ -79,7 +79,13 @@ def f_kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict
   state = cmtm_to_state(state_cmtm[world_name], world_name, order)
   state_data.update(state)
   
-  for joint in robot.joints:    
+  for joint in robot.joints:
+    state_data.update([(joint.name + "_coord" , motions.joint_coord(joint).tolist())])
+    if order > 1:
+      state_data.update([(joint.name + "_veloc" , motions.joint_veloc(joint).tolist())])
+    if order > 2:
+      state_data.update([(joint.name + "_accel" , motions.joint_accel(joint).tolist())])
+      
     parent = robot.links[joint.parent_link_id]
     child = robot.links[joint.child_link_id]
 
@@ -94,7 +100,7 @@ def f_kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict
 
     state = cmtm_to_state(link_cmtm, child.name, order)
     state_data.update(state)
-    
+
   return state_data
 
 def __target_part_link_jacob(target_link : LinkStruct, joint : JointStruct, rel_frame : SE3) -> np.ndarray:

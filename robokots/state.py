@@ -174,8 +174,17 @@ class RobotState:
     else:
       raise ValueError(f"Invalid type: {set(type)}")
     
-  def extract_joint_info(self, type : str, name : str, frame = "dummy", rel_frame = 'dummy'):
-    'dummy'
+  def extract_joint_info(self, type : str, joint_name : str, frame = "dummy", rel_frame = 'dummy'):
+    if type == "coord":
+      return self.joint_coord(joint_name)
+    elif type == "veloc":
+      return self.joint_veloc(joint_name)
+    elif type == "accel":
+      return self.joint_accel(joint_name)
+    elif type == "cmtm":
+      return self.joint_cmtm(joint_name)
+    else:
+      raise ValueError(f"Invalid type: {set(type)}")
     
   def extract_total_info(self, type : str, name : str, frame = "dummy", rel_frame = 'dummy'):
     'dummy'

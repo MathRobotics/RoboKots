@@ -40,19 +40,24 @@ class Kots():
     
     if order == 1:
       m_aliases = ["coord"]
+      j_aliases = ["coord"]
       l_aliases = ["pos", "rot"]
     elif order == 2:
       m_aliases = ["coord", "veloc"]
+      j_aliases = ["coord", "veloc"]
       l_aliases = ["pos", "rot", "vel"]
     elif order > 2:
       m_aliases = ["coord", "veloc", "accel"]
+      j_aliases = ["coord", "veloc", "accel"]
       l_aliases = ["pos", "rot", "vel", "acc"]
       for i in range(order-3):
         m_aliases.append("accel_diff"+str(i+1))
+        j_aliases.append("coord_diff"+str(i+1))
         l_aliases.append("acc_diff"+str(i+1))
         
     l_aliases.append("link_force")
-    j_aliases=["joint_torque", "joint_force"]
+    j_aliases.append("joint_torque")
+    j_aliases.append("joint_force")
     
     for i in range(order-3):
       l_aliases.append("link_force_diff"+str(i+1))
@@ -105,6 +110,12 @@ class Kots():
   
   def state_target_link_info(self, type : str):
     return self.state_link_info_list(type, self.target_.target_names)
+  
+  def state_joint_info(self, type : str, name : str):
+    return self.state_.extract_info('joint', type, name)
+
+  def state_joint_info_list(self, type : str, name_list : list[str]):
+    return [self.state_.extract_info('joint', type, name) for name in name_list]
 
   def kinematics(self):
     self.state_.import_state(f_kinematics(self.robot_, self.motions_, self.order_))
