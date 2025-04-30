@@ -25,7 +25,7 @@ def link_jacobian_num(kots, delta = 1e-8):
 
     return J
 
-ORDER = 3
+ORDER = 1
 
 def main():
     kots = Kots.from_json_file("../model/sample_robot.json", order=ORDER)
