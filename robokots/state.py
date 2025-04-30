@@ -118,6 +118,44 @@ class RobotState:
   def link_rel_cmtm(self, base_link_name : str, target_link_name : str, order : int) -> CMTM:
     x = self.link_cmtm(base_link_name, order).inv() @ self.link_cmtm(target_link_name, order)
     return x
+  
+  @staticmethod
+  def joint_state_vec(df, joint_name : str, type : str) -> np.ndarray:
+    return df[joint_name+"_"+type][-1].to_numpy()
+  
+  def joint_coord(self, joint_name : str) -> np.ndarray:
+    return RobotState.joint_state_vec(self.df(), joint_name, "coord")
+  
+  def joint_veloc(self, joint_name : str) -> np.ndarray:
+    return RobotState.joint_state_vec(self.df(), joint_name, "veloc")
+  
+  def joint_accel(self, joint_name : str) -> np.ndarray:
+    return RobotState.joint_state_vec(self.df(), joint_name, "accel")
+
+  def joint_values(self, joint_name : str, order : int) -> np.ndarray:
+    if order < 1:
+      raise ValueError(f"Invalid order: {order}. Must be over 1.")
+    
+    # magic number 1 dof joint
+    d = np.zeros((order, 1))
+    d[0] = self.joint_coord(joint_name)
+    if order > 1:
+      d[1] = self.joint_veloc(joint_name)
+    if order > 2:
+      d[2] = self.joint_accel(joint_name)
+    if order > 3:
+      for i in range(order-3):
+        d[i+3] = RobotState.link_state_vec(self.df(), joint_name, "accel_diff"+str(i+1))
+    return d
+  
+  def joint_cmtm(self, joint_name : str, order = 3) -> CMTM:
+    vec = np.zeros((order-1, 6))
+    state = self.joint_values(joint_name, order)
+    h = SE3(state[0])
+    for i in range(1, order):
+      vec[i-1] = state[i]
+    cmtm = CMTM[SE3](h, vec)
+    return cmtm
 
   #specific 3d-CMTM
   def extract_link_info(self, type : str, link_name : str, frame = "dummy", rel_frame = 'dummy'):
