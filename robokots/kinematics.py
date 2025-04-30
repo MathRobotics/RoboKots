@@ -63,11 +63,11 @@ def acc_kinematics(joint : JointStruct, p_link_vel : np.ndarray, p_link_acc : np
   rel_vel = link_rel_vel(joint, joint_veloc)
   rel_acc = link_rel_acc(joint, joint_accel)
   
-  acc =  rel_frame.mat_inv_adj() @ p_link_acc + SE3.hat_adj( rel_frame @ rel_vel ) @ p_link_vel + rel_acc
+  acc =  rel_frame.mat_inv_adj() @ p_link_acc + SE3.hat_adj( rel_frame.mat_inv_adj() @ p_link_vel ) @ rel_vel + rel_acc
   return acc
 
 def part_link_jacob(joint : JointStruct, rel_frame : np.ndarray) -> np.ndarray:
-  return rel_frame.mat_inv_adj() @ joint.origin.mat_inv_adj() @ joint.select_mat
+  return rel_frame.mat_inv_adj() @ joint.select_mat
 
 #specific 3d-CMTM
 def link_rel_cmtm(joint : JointStruct, joint_motions : np.ndarray, order = 3) -> CMTM:
@@ -95,9 +95,8 @@ def kinematics_cmtm(joint : JointStruct, p_link_cmtm : CMTM, joint_motions : np.
 # specific 3D space (magic number 6)
 def part_link_cmtm_jacob(joint : JointStruct, rel_cmtm : CMTM) -> np.ndarray:
   mat = np.zeros((rel_cmtm._n * 6, rel_cmtm._n * joint.dof))
-  origin_cmtm = CMTM[SE3](joint.origin, np.zeros((rel_cmtm._n-1,6)))
-  tmp_cmtm = origin_cmtm @ rel_cmtm
-  tmp = tmp_cmtm.mat_inv_adj()
+  tmp = rel_cmtm.mat_inv_adj()
   for i in range(rel_cmtm._n):
-    mat[i*6:(i+1)*6] = joint.selector(tmp[i*6:(i+1)*6])
+    for j in range(i+1):
+      mat[i*6:(i+1)*6, j*joint.dof:(j+1)*joint.dof] = joint.selector(tmp[i*6:(i+1)*6,j*6:(j+1)*6])
   return mat
