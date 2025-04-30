@@ -319,3 +319,41 @@ def test_kinematics_():
     assert np.allclose(result_cmtm.elem_mat(), expected_frame.mat())
     assert np.allclose(result_cmtm.elem_vecs(0), expected_vel)
     assert np.allclose(result_cmtm.elem_vecs(1), expected_acc)
+
+def test_part_link_cmtm_jacob():
+    # Create a mock joint with a specific select_mat
+    joint = MockJoint(np.array([[0, 1, 0, 0, 0, 0]]).T)
+    order = 3
+    
+    # Test with a specific rel_frame
+    rel_cmtm = CMTM.rand(SE3) # Identity matrix for simplicity
+    expected_jacob = np.zeros((6 * order, joint.dof * order))
+    for i in range(order):
+        for j in range(i+1):
+            expected_jacob[i*6:(i+1)*6, j*joint.dof:(j+1)*joint.dof] \
+            = rel_cmtm.mat_inv_adj()[i*6:(i+1)*6, j*6:(j+1)*6] @ joint.select_mat
+    result_jacob = part_link_cmtm_jacob(joint, rel_cmtm)
+    assert np.allclose(result_jacob, expected_jacob)
+
+def test_part_link_cmtm_jacob2():
+    # Create a mock joint with a specific select_mat
+    joint = MockJoint(np.array([[0, 1, 0, 0, 0, 0]]).T)
+    order = 3
+
+    # Test with non-zero joint_coord, joint_veloc, and joint_accel
+    joint_coord = np.random.rand(1)
+    joint_veloc = np.random.rand(1)
+    joint_accel = np.random.rand(1)
+
+    joint_motions = np.array([np.zeros(1), joint_veloc, joint_accel])
+    rel_motions = np.array([joint_coord, np.zeros(1), np.zeros(1)])
+    joint_dmotions = np.array([joint_veloc, joint_accel, np.zeros(1)])
+    
+    # Test with a specific rel_frame
+    rel_cmtm = link_rel_cmtm(joint, rel_motions, order)
+
+    expected_cmtm = link_rel_cmtm(joint, joint_motions) @ rel_cmtm
+    result_vecs = part_link_cmtm_jacob(joint, rel_cmtm) @ joint_dmotions
+
+    assert np.allclose(result_vecs[:6].T, expected_cmtm.elem_vecs(0)) 
+    assert np.allclose(result_vecs[6:12].T, expected_cmtm.elem_vecs(1))  
