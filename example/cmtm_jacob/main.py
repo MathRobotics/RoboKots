@@ -36,7 +36,7 @@ def main():
     kots.kinematics()
 
     target = ["arm2"]
-    jacob = kots.link_jacobian(target,ORDER)
+    jacob = kots.link_jacobian(target, ORDER)
 
     jacob_num = link_jacobian_num(kots, target, ORDER)
     
