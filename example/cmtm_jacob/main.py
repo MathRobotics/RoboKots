@@ -29,14 +29,19 @@ def link_jacobian_num(kots, target, order = 3, delta = 1e-8):
 ORDER = 3
 
 def main():
-    kots = Kots.from_json_file("../model/2dof_arm.json")
+    kots = Kots.from_json_file("../model/sample_robot.json")
     motion = np.random.rand(kots.order()*kots.dof())
     kots.import_motions(motion)
 
     kots.kinematics()
 
-    target = ["arm2"]
+    target = ["arm3"]
     jacob = kots.link_jacobian(target, ORDER)
+
+    # for l in kots.robot_.link_names:
+    #     cmtm = kots.state_.link_rel_cmtm(l, target[0], ORDER)
+    #     print("name: ", l)
+    #     cmtm.print()
 
     jacob_num = link_jacobian_num(kots, target, ORDER)
     
@@ -47,9 +52,15 @@ def main():
 
     print("norm: ", np.linalg.norm(jacob[:,:(ORDER*kots.dof())] - jacob_num))
 
-    for i in range(kots.order()):
-        print("jacob_ana: ", jacob[i*6:(i+1)*6,:])
-        print("jacob_num: ", jacob_num[i*6:(i+1)*6,:])
+    # for i in range(kots.order()):
+    #     for j in range(6):
+    #         print("i: ", i, "j: ", j)
+    #         print("jacob_ana: ", jacob[i*6+j:i*6+j+1,:])
+    #         print("jacob_num: ", jacob_num[i*6+j:i*6+j+1,:])
+    #         print("norm: ", np.linalg.norm(jacob[i*6+j:i*6+j+1,:] - jacob_num[i*6+j:i*6+j+1,:]))
+    #     print("jacob_ana: ", jacob[i*6:(i+1)*6,:])
+    #     print("jacob_num: ", jacob_num[i*6:(i+1)*6,:])
+    #     print("norm: ", np.linalg.norm(jacob[i*6:(i+1)*6,:] - jacob_num[i*6:(i+1)*6,:]))
 
 if __name__ == "__main__":
     main()
