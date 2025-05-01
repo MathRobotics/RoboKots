@@ -13,7 +13,7 @@ def link_jacobian_num(kots, target, order = 3, delta = 1e-8):
     row = order * 6
     col = order * kots.dof()
     
-    J = np.zeros((row, col))
+    J = np.zeros((row * len(p0), col * len(p0)))
     for i in range(col):
         x_ = x.copy()
         x_[i] += delta
