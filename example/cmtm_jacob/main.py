@@ -21,9 +21,9 @@ def link_jacobian_num(kots, target, order = 3, delta = 1e-8):
         kots.kinematics()
         p1 = kots.state_link_info_list("cmtm", target)
         for j in range(len(p0)):
-            dp = mr.CMTM.sub_vec(p0[j], p1[j]) / delta
+            dp = mr.CMTM.sub_ptan_vec(p0[j], p1[j]) / delta
             J[j*row:(j+1)*row,i] = dp[:row]
-
+    J = mr.CMTM.ptan_to_tan(6, order) @ J
     return J
 
 ORDER = 3
