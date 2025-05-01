@@ -13,7 +13,7 @@ def link_jacobian_num(kots, target, order = 3, delta = 1e-8):
     row = order * 6
     col = order * kots.dof()
     
-    J = np.zeros((row * len(p0), col * len(p0)))
+    J = np.zeros((row * len(p0), col))
     for i in range(col):
         x_ = x.copy()
         x_[i] += delta
@@ -22,8 +22,7 @@ def link_jacobian_num(kots, target, order = 3, delta = 1e-8):
         p1 = kots.state_link_info_list("cmtm", target)
         for j in range(len(p0)):
             dp = mr.CMTM.sub_ptan_vec(p0[j], p1[j]) / delta
-            J[j*row:(j+1)*row,i] = dp[:row]
-    J = mr.CMTM.ptan_to_tan(6, order) @ J
+            J[j*row:(j+1)*row,i] =p0[j].tan_mat_inv_adj() @ mr.CMTM.ptan_to_tan(6, order) @ dp[:row]
     return J
 
 ORDER = 3
@@ -35,7 +34,7 @@ def main():
 
     kots.kinematics()
 
-    target = ["arm3"]
+    target = ["arm1","arm2","arm3"]
     jacob = kots.link_jacobian(target, ORDER)
 
     # for l in kots.robot_.link_names:
@@ -50,7 +49,7 @@ def main():
     print("jacobian_num shape: ", jacob_num.shape)
     # print("jacobian_num: ", jacob_num)
 
-    print("norm: ", np.linalg.norm(jacob[:,:(ORDER*kots.dof())] - jacob_num))
+    print("norm: ", np.linalg.norm(jacob - jacob_num))
 
     # for i in range(kots.order()):
     #     for j in range(6):
