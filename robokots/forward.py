@@ -80,16 +80,14 @@ def f_kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict
   state_data.update(state)
   
   for joint in robot.joints:
-    state_data.update([(joint.name + "_coord" , motions.joint_coord(joint).tolist())])
-    if order > 1:
-      state_data.update([(joint.name + "_veloc" , motions.joint_veloc(joint).tolist())])
-    if order > 2:
-      state_data.update([(joint.name + "_accel" , motions.joint_accel(joint).tolist())])
-      
     parent = robot.links[joint.parent_link_id]
     child = robot.links[joint.child_link_id]
 
     joint_motions = motions.joint_motions(joint)
+
+    joint_cmtm = joint_local_cmtm(joint, joint_motions, order)
+    state = cmtm_to_state(joint_cmtm, joint.name, order)
+    state_data.update(state)
 
     p_link_cmtm = state_cmtm[parent.name]
     rel_cmtm = link_rel_cmtm(joint, joint_motions, order)

@@ -40,15 +40,15 @@ class Kots():
     
     if order == 1:
       m_aliases = ["coord"]
-      j_aliases = ["coord"]
+      j_aliases = ["pos", "rot"]
       l_aliases = ["pos", "rot"]
     elif order == 2:
       m_aliases = ["coord", "veloc"]
-      j_aliases = ["coord", "veloc"]
+      j_aliases = ["pos", "rot", "vel"]
       l_aliases = ["pos", "rot", "vel"]
     elif order > 2:
       m_aliases = ["coord", "veloc", "accel"]
-      j_aliases = ["coord", "veloc", "accel"]
+      j_aliases = ["pos", "rot", "vel", "acc"]
       l_aliases = ["pos", "rot", "vel", "acc"]
       for i in range(order-3):
         m_aliases.append("accel_diff"+str(i+1))
