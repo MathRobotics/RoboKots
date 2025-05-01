@@ -134,15 +134,6 @@ class RobotState:
   def joint_frame(self, joint_name : str) -> SE3:
     h = SE3(self.joint_rot(joint_name), self.joint_pos(joint_name))
     return h
-  
-  def joint_coord(self, joint_name : str) -> np.ndarray:
-    return RobotState.state_vec(self.df(), joint_name, "coord")
-  
-  def joint_veloc(self, joint_name : str) -> np.ndarray:
-    return RobotState.state_vec(self.df(), joint_name, "veloc")
-  
-  def joint_accel(self, joint_name : str) -> np.ndarray:
-    return RobotState.state_vec(self.df(), joint_name, "accel")
 
   def joint_values(self, joint_name : str, order : int) -> dict:
     if order < 1:
