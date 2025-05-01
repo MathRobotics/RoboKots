@@ -348,12 +348,14 @@ def test_part_link_cmtm_jacob():
     rel_cmtm = CMTM.rand(SE3) # Identity matrix for simplicity
     joint_cmtm = joint_local_cmtm(joint, np.random.rand(3,1), order)
     expected_jacob = np.zeros((6 * order, joint.dof * order))
-    tmp = rel_cmtm.mat_inv_adj() @ joint_cmtm.tan_mat_adj()
+    tmp = rel_cmtm.mat_inv_adj() @  CMTM.ptan_to_tan(6, order) @ joint_cmtm.tan_mat_adj()
+
     for i in range(order):
         for j in range(i+1):
             expected_jacob[i*6:(i+1)*6, j*joint.dof:(j+1)*joint.dof] \
             = joint.selector(tmp[i*6:(i+1)*6, j*6:(j+1)*6])
     result_jacob = part_link_cmtm_jacob(joint, rel_cmtm, joint_cmtm)
+
     assert np.allclose(result_jacob, expected_jacob)
 
 def test_part_link_cmtm_jacob2():
@@ -403,10 +405,9 @@ def test_part_link_cmtm_jacob_numerical():
       x_ = joint_motions.copy()
       x_[i] += delta
       p1 = joint_local_cmtm(joint, x_) @ rel_frame
-      dp = mr.CMTM.sub_vec(p0, p1) / delta
+      dp = mr.CMTM.sub_ptan_vec(p0, p1) / delta
       expected_jacob[:,i] = dp
-      
-    print(result_jacob)
-    print(expected_jacob)
+
+    expected_jacob = mr.CMTM.ptan_to_tan(6, 3) @ expected_jacob
     
     assert np.allclose(result_jacob, expected_jacob)
