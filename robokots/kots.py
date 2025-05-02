@@ -23,52 +23,60 @@ class Kots():
   order_ : int
   dim_ : int
   
-  def __init__(self, robot_ : RobotStruct, motions_ : RobotMotions, state_ : RobotState, order_ : int, dim_ : int):
-    self.robot_ = robot_
-    self.motions_ = motions_
-    self.state_ = state_
-    self.order_ = order_
-    self.dim_ = dim_
+  def __init__(self, robot : RobotStruct, motions : RobotMotions, state : RobotState, order : int, dim : int):
+    self.robot_ = robot
+    self.motions_ = motions
+    self.state_ = state
+    self.order_ = order
+    self.dim_ = dim
 
   @staticmethod
-  def from_json_file(model_file_name : str, order_=3, dim_=3) -> "Kots":
-    robot_ = io_from_json_file(model_file_name)
+  def from_json_file(model_file_name : str, order=3, dim=3) -> "Kots":
+    robot = io_from_json_file(model_file_name)
 
     m_aliases = []
     l_aliases = []
     j_aliases = []
     
-    if order_ == 1:
+    if order == 1:
       m_aliases = ["coord"]
+      j_aliases = ["pos", "rot"]
       l_aliases = ["pos", "rot"]
-    elif order_ == 2:
+    elif order == 2:
       m_aliases = ["coord", "veloc"]
+      j_aliases = ["pos", "rot", "vel"]
       l_aliases = ["pos", "rot", "vel"]
-    elif order_ > 2:
+    elif order > 2:
       m_aliases = ["coord", "veloc", "accel"]
+      j_aliases = ["pos", "rot", "vel", "acc"]
       l_aliases = ["pos", "rot", "vel", "acc"]
-      for i in range(order_-3):
+      for i in range(order-3):
         m_aliases.append("accel_diff"+str(i+1))
+        j_aliases.append("coord_diff"+str(i+1))
         l_aliases.append("acc_diff"+str(i+1))
         
     l_aliases.append("link_force")
-    j_aliases=["joint_torque", "joint_force"]
+    j_aliases.append("joint_torque")
+    j_aliases.append("joint_force")
     
-    for i in range(order_-3):
+    for i in range(order-3):
       l_aliases.append("link_force_diff"+str(i+1))
       j_aliases.append("joint_torque_diff"+str(i+1))
       j_aliases.append("joint_force_diff"+str(i+1))
       
-    motions_ = RobotMotions(robot_, m_aliases)
-    state_ = RobotState(robot_, l_aliases, j_aliases)
+    motions = RobotMotions(robot, m_aliases)
+    state = RobotState(robot, l_aliases, j_aliases)
 
-    return Kots(robot_, motions_, state_, order_, dim_)
+    return Kots(robot, motions, state, order, dim)
   
   def print_structure(self):
     io_print_structure(self.robot_)
     
   def dof(self):
     return self.robot_.dof
+
+  def order(self):
+    return self.order_
   
   def link_list(self, name_list : list[str]):
     return self.robot_.link_list(name_list)
@@ -77,16 +85,19 @@ class Kots():
     return self.robot_.joint_list(name_list)
 
   def motions(self):
-    return self.motions_.motions  
+    return self.motions_.motions
 
   def set_motion_aliases(self, aliases : list[str]):
     self.motions_.set_aliases(aliases)
     
-  def import_motions(self, vecs : list[float]):
+  def import_motions(self, vecs : np.ndarray):
     self.motions_.set_motion(vecs)
     
   def motion(self, name : str):
     return self.motions_.gen_values(name)
+
+  def joint_motions(self, joint : JointStruct):
+    return self.motions_.joint_motions(joint)
   
   def state_df(self):
     return self.state_.df()
@@ -99,9 +110,15 @@ class Kots():
   
   def state_target_link_info(self, type : str):
     return self.state_link_info_list(type, self.target_.target_names)
+  
+  def state_joint_info(self, type : str, name : str):
+    return self.state_.extract_info('joint', type, name)
+
+  def state_joint_info_list(self, type : str, name_list : list[str]):
+    return [self.state_.extract_info('joint', type, name) for name in name_list]
 
   def kinematics(self):
-    self.state_.import_state(f_kinematics(self.robot_, self.motions_))
+    self.state_.import_state(f_kinematics(self.robot_, self.motions_, self.order_))
   
   def dynamics(self):
     self.state_.import_state(f_dynamics(self.robot_, self.motions_))
@@ -135,7 +152,7 @@ class Kots():
   def link_jacobian_target(self, order = 3):
     if not self.target_:
       raise ValueError("target_ is not set")
-    return self.link_cmtm_jacobian(self.target_.target_names, order)
+    return self.link_jacobian(self.target_.target_names, order)
       
   def show_robot(self, save = False):
     conectivity = np.zeros((self.robot_.joint_num, 2), dtype='int64')

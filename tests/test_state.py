@@ -96,10 +96,10 @@ def test_robot_state_link_state_vec():
     # Test link state vector extraction
     link_name = "link1"
     type = "pos"
-    vec = state.link_state_vec(state.df(), link_name, type)
+    vec = state.state_vec(state.df(), link_name, type)
     assert np.array_equal(vec, test_robot_data[link_name + "_" + type])
     # Test joint state vector extraction
     joint_name = "joint2"
     type = "vel"
-    vec = state.link_state_vec(state.df(), joint_name, type)
+    vec = state.state_vec(state.df(), joint_name, type)
     assert np.array_equal(vec, test_robot_data[joint_name + "_" + type])

@@ -9,21 +9,13 @@ def main():
     kots.set_target_from_file("target_list.json")
     kots.print_targets()
 
-    coord = [1., -1., 1.]
-    veloc = [1., 2., 3.]
-    accel = [0., 0., 0.]
-    
-    vec = []
-    vec.extend(coord)
-    vec.extend(veloc)
-    vec.extend(accel)
-    
-    kots.import_motions(vec)
+    motion = np.random.rand(kots.order()*kots.dof())
+    kots.import_motions(motion)
     
     kots.kinematics()
 
     fk_vel = kots.state_target_link_info('vel')
-    jacob_vel = kots.link_jacobian_target()@kots.motion("veloc")
+    jacob_vel = kots.link_jacobian_target(1)@kots.motion("veloc")
 
     for i in range(len(fk_vel)):
       print(fk_vel[i])
