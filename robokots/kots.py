@@ -11,7 +11,7 @@ from .robot import RobotStruct
 from .robot_io import *
 from .robot_drow import *
 
-from .forward import *
+from .outward import *
 
 from .target import TargetList
   

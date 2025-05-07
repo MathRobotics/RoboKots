@@ -1,7 +1,7 @@
 import numpy as np
 
 from mathrobo import SE3, CMTM
-from robokots.forward import *
+from robokots.outward import *
 
 class MockJoint: 
     def __init__(self, name, parent_link_id=0):
