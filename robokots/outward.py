@@ -1,7 +1,7 @@
 #!/usr/bin/env python3.9
 # -*- coding: utf-8 -*-
 # 2024.12.13 Created by T.Ishigaki
-# forward computation module from motion and robot_model to state
+# outward computation module from motion and robot_model to state
 
 import numpy as np
 
