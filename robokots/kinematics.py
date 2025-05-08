@@ -112,7 +112,7 @@ def part_link_jacob(joint : JointStruct, rel_frame : np.ndarray) -> np.ndarray:
 # specific 3D space (magic number 6)
 def part_link_cmtm_jacob(joint : JointStruct, rel_cmtm : CMTM, joint_cmtm : CMTM) -> np.ndarray:
   mat = np.zeros((rel_cmtm._n * 6, rel_cmtm._n * joint.dof))
-  tmp = rel_cmtm.mat_inv_adj() @ CMTM.ptan_to_tan(6, rel_cmtm._n) @ joint_cmtm.tan_mat_adj()
+  tmp = rel_cmtm.mat_inv_adj() @ joint_cmtm.tan_mat_adj() @ CMTM.ptan_to_tan(6, joint_cmtm._n) 
 
   for i in range(rel_cmtm._n):
     for j in range(i+1):
