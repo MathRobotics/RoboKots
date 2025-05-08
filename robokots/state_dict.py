@@ -48,38 +48,84 @@ def cmtm_to_state_dict(cmtm : CMTM, name : str, order = 3) -> dict:
     
   return state
 
-def extract_dict_link_info(self, type : str, link_name : str, frame = "dummy", rel_frame = 'dummy'):
+def state_dict_to_rot(state : dict, name : str) -> np.ndarray:
+    '''
+    Convert state data to rotation matrix
+    Args:
+        state (dict): state data
+        name (str): name of the link
+    Returns:
+        np.ndarray: rotation matrix
+    '''
+    rot_vec = np.array(state[name+"_rot"])
+    rot = rot_vec.reshape(3,3)
+
+    return rot
+
+def state_dict_to_frame(state : dict, name : str) -> SE3:
+    '''
+    Convert state data to SE3
+    Args:
+        state (dict): state data
+        name (str): name of the link
+    Returns:
+        SE3: SE3 object
+    '''
+    pos = np.array(state[name+"_pos"])
+    rot = state_dict_to_rot(state, name)
+    mat = SE3(rot, pos)
+
+    return mat
+
+#specific 3d-CMTM
+def state_dict_to_cmtm(state : dict, name : str, order = 3) -> CMTM:
+    '''
+    Convert state data to CMTM
+    Args:
+        state (dict): state data
+        name (str): name of the link
+    Returns:
+        CMTM: CMTM object
+    '''
+    if order < 1 and order > 3:
+        raise ValueError("order must be 1, 2 or 3")
+
+    vec = np.zeros((order-1, 6))
+
+    if order > 0:
+        mat = state_dict_to_frame(state, name)
+    if order > 1:
+        vec[0] = np.array(state[name+"_vel"])
+    if order > 2:
+        vec[1] = np.array(state[name+"_acc"])
+    
+    cmtm = CMTM[SE3](mat, vec)
+
+    return cmtm
+
+def extract_dict_link_info(state : dict, type : str, link_name : str, frame = "dummy", rel_frame = 'dummy'):
     if type == "pos":
-      return self.link_pos(link_name)
+      return np.array(state[link_name+"_pos"])
     elif type == "rot":
-      return self.link_rot(link_name)
+      return state_dict_to_rot(state, link_name)
     elif type == "vel":
-      return self.link_vel(link_name)
+      return np.array(state[link_name+"_vel"])
     elif type == "acc":
-      return self.link_acc(link_name)
+      return np.array(state[link_name+"_acc"])
     elif type == "frame":
-      return self.link_frame(link_name)
+      return state_dict_to_frame(state, link_name)
     elif type == "cmtm":
-      return self.link_cmtm(link_name)
+      return state_dict_to_cmtm(state, link_name)
     else:
       raise ValueError(f"Invalid type: {set(type)}")
     
-def extract_dict_joint_info(self, type : str, joint_name : str, frame = "dummy", rel_frame = 'dummy'):
-    if type == "coord":
-      return self.joint_coord(joint_name)
-    elif type == "veloc":
-      return self.joint_veloc(joint_name)
-    elif type == "accel":
-      return self.joint_accel(joint_name)
-    elif type == "cmtm":
-      return self.joint_cmtm(joint_name)
-    else:
-      raise ValueError(f"Invalid type: {set(type)}")
+def extract_dict_joint_info(data : dict, type : str, joint_name : str, frame = "dummy", rel_frame = 'dummy'):
+    'dummy'
     
-def extract_dict_total_info(self, type : str, name : str, frame = "dummy", rel_frame = 'dummy'):
+def extract_dict_total_info(data : dict, type : str, name : str, frame = "dummy", rel_frame = 'dummy'):
     'dummy'
 
-def extract_dict_info(data : dict, type : str, name : str, frame = "dummy", rel_frame = 'dummy'):
+def extract_dict_info(data : dict, data_type : str, group : str, name : str, frame = "dummy", rel_frame = 'dummy'):
     '''
     group : str
       link
@@ -94,16 +140,15 @@ def extract_dict_info(data : dict, type : str, name : str, frame = "dummy", rel_
     name : str
       link name or joint name
     '''
+
     if group == "link":
-      return extract_link_info(type, name, frame, rel_frame)
+      return extract_dict_link_info(data, data_type, name, frame, rel_frame)
     elif group == "joint":
-      return extract_joint_info(type, name, frame, rel_frame)
+      return extract_dict_joint_info(data, data_type, name, frame, rel_frame)
     elif group == "total":
-      return extract_total_info(type, name, frame, rel_frame)
+      return extract_dict_total_info(data, data_type, name, frame, rel_frame)
     else:
       raise ValueError(f"Invalid group: {set(group)}")
-
-
 
 def sub_state_dict_vec(data0 : dict, data1 : dict, type : str, name : str) -> dict:
     '''
