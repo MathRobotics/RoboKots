@@ -153,7 +153,15 @@ class Kots():
     if not self.target_:
       raise ValueError("target_ is not set")
     return self.link_jacobian(self.target_.target_names, order)
-      
+
+  def link_jacobian_numerical(self, link_name_list : list[str], data_type = "vel"):
+    return f_link_jacobian_numerical(self.robot_, self.motions_, link_name_list, data_type)
+  
+  def link_jacobian_target_numerical(self, data_type = "vel"):
+    if not self.target_:
+      raise ValueError("target_ is not set")
+    return self.link_jacobian_numerical(self.target_.target_names, data_type)
+  
   def show_robot(self, save = False):
     conectivity = np.zeros((self.robot_.joint_num, 2), dtype='int64')
     for i in range(self.robot_.joint_num):
