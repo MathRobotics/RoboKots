@@ -5,7 +5,7 @@
 
 import numpy as np
 
-from mathrobo import SE3, CMTM
+from mathrobo import SE3, CMTM, numerical_grad
 
 from .robot import RobotStruct, LinkStruct, JointStruct
 from .motion import RobotMotions
@@ -40,7 +40,7 @@ def f_kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict
     parent = robot.links[joint.parent_link_id]
     child = robot.links[joint.child_link_id]
 
-    joint_motions = motions.joint_motions(joint)
+    joint_motions = motions.joint_motions(joint, order)
 
     joint_cmtm = joint_local_cmtm(joint, joint_motions, order)
     state = cmtm_to_state_dict(joint_cmtm, joint.name, order)
@@ -125,6 +125,38 @@ def f_link_cmtm_jacobian(robot : RobotStruct, state : RobotState, link_name_list
     link_cmtm = state.link_cmtm(link_name_list[i], order)
     jacobs[6*order*i:6*order*(i+1),:] \
       = CMTM.tan_to_ptan(6, link_cmtm._n) @ link_cmtm.tan_mat_inv_adj() @ __link_cmtm_jacobian(robot, state, links[i], order)
+
+  return jacobs
+
+#specific 3d-CMTM
+def f_link_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str], data_type : str) -> np.ndarray:
+  if data_type not in ["pos", "rot", "vel", "acc", "frame", "cmtm"]:
+    raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'frame' or 'cmtm'.")
+
+  order = 3
+  if data_type == "pos" or data_type == "rot" or data_type == "frame":
+    order = 1
+  elif data_type == "vel":
+    order = 2
+  elif data_type == "acc":
+    order = 3
+  elif data_type == "cmtm":
+    order = 3
+
+  jacobs = np.zeros((6*len(link_name_list),robot.dof*order))
+  motion = motions.motions[:robot.dof*order]
+
+  for i in range(len(link_name_list)):
+    def f_kinematics_func(x):
+      motions.motions = x
+      state = f_kinematics(robot, motions, order)
+      y = extract_dict_link_info(state, data_type, link_name_list[i])
+      return y
+
+    if data_type == "frame":
+      jacobs[6*i:6*(i+1)] = numerical_grad(motion, f_kinematics_func, sub_func = SE3.sub_tan_vec)
+    else:
+      jacobs[6*i:6*(i+1)] = numerical_grad(motion, f_kinematics_func)
 
   return jacobs
 
