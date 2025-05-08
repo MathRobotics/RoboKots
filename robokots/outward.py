@@ -12,50 +12,7 @@ from .motion import RobotMotions
 from .state import RobotState
 from .kinematics import *
 from .dynamics import *
-
-#specific 3d-CMTM
-def cmtm_to_state(cmtm : CMTM, name : str, order = 3) -> dict:
-  '''
-  Convert CMTM to state data
-  Args:
-    cmtm (CMTM): CMTM object
-    name (str): name of the link
-  Returns:
-    dict: state data
-  '''
-  if order < 1 and order > 3:
-    raise ValueError("order must be 1, 2 or 3")
-
-  state = []
-
-  if 1:
-    mat = cmtm.elem_mat()
-    pos = mat[:3,3]
-    rot_vec = mat[:3,:3].ravel()
-    state.append((name+"_pos" , pos.tolist()))
-    state.append((name+"_rot" , rot_vec.tolist()))
-    if order > 1:
-      veloc = cmtm.elem_vecs(0)
-      state.append((name+"_vel" , veloc.tolist()))
-    if order > 2:
-      accel = cmtm.elem_vecs(1)
-      state.append((name+"_acc" , accel.tolist()))
-  else:
-    mat = cmtm.elem_mat()
-    veloc = cmtm.elem_vecs(0)
-    accel = cmtm.elem_vecs(1)
-    
-    pos = mat[:3,3]
-    rot_vec = mat[:3,:3].ravel()
-
-    state = [
-        (name+"_pos" , pos.tolist()),
-        (name+"_rot" , rot_vec.tolist()),
-        (name+"_vel" , veloc.tolist()),
-        (name+"_acc" , accel.tolist())
-    ]
-    
-  return state
+from .state_dict import *
 
 #specific 3d-CMTM
 def f_kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict:
