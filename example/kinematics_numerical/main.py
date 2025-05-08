@@ -3,20 +3,6 @@ import numpy as np
 import mathrobo as mr
 from robokots.kots import *
 
-def integral_mat(dof, order, dt):
-    mat = np.eye(dof * order)
-
-    vec = np.zeros((dof * order ,dof))
-
-    for i in range(1,order): 
-        for j in range(i):
-            mat[j*dof:(j+1)*dof,i*dof:(i+1)*dof] = dt**(i-j) * np.eye(dof)
-        
-    for i in range(order):
-        vec[i*dof:(i+1)*dof] = dt**(order-i) * np.eye(dof)
-
-    return mat, vec
-
 def link_kinematics_vel_num(kots, x_init, jark = None, delta = 1e-8):
     kots.import_motions(x_init)
     kots.kinematics()
@@ -27,7 +13,7 @@ def link_kinematics_vel_num(kots, x_init, jark = None, delta = 1e-8):
         jark = np.random.rand(kots.dof())
 
     x_ = x_init.copy()
-    D, d = integral_mat(kots.dof(), 3, delta)
+    D, d = mr.build_integrator(kots.dof(), 3, delta)
     x_ = D @ x_init + d @ jark
 
     kots.import_motions(x_)
@@ -50,7 +36,7 @@ def link_kinematics_acc_num(kots, x_init, jark = None, delta = 1e-8):
         jark = np.random.rand(kots.dof())
 
     x_ = x_init.copy()
-    D, d = integral_mat(kots.dof(), 3, delta)
+    D, d = mr.build_integrator(kots.dof(), 3, delta)
     x_ = D @ x_init + d @ jark
 
     kots.import_motions(x_)
@@ -71,7 +57,7 @@ def link_kinematics_jark_num(kots, x_init, jark = None, delta = 1e-8):
         jark = np.random.rand(kots.dof())
 
     x_ = x_init.copy()
-    D, d = integral_mat(kots.dof(), 3, delta)
+    D, d = mr.build_integrator(kots.dof(), 3, delta)
     x_ = D @ x_init + d @ jark
 
     kots.import_motions(x_)
@@ -94,7 +80,7 @@ def link_kinematics_cmtm_num(kots, x_init, order, jark = None, delta = 1e-8):
         jark = np.random.rand(kots.dof())
 
     x_ = x_init.copy()
-    D, d = integral_mat(kots.dof(), order, delta)
+    D, d = mr.build_integrator(kots.dof(), order, delta)
     x_ = D @ x_init + d @ jark
 
     kots.import_motions(x_)
