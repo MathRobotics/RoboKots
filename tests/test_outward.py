@@ -44,11 +44,11 @@ class MockRobot:
         self.links[1].id = 1
         self.dof = 2
 
-def test_cmtm_to_state():
+def test_cmtm_to_state_dict():
     cmtm = CMTM.eye(SE3)
     name = "link1"
     
-    state_data = cmtm_to_state(cmtm, name)
+    state_data = cmtm_to_state_dict(cmtm, name)
 
     state_dict = {}
     state_dict.update(state_data)

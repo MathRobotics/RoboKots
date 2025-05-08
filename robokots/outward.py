@@ -76,7 +76,7 @@ def f_kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict
   world_name = robot.links[robot.joints[0].parent_link_id].name
   state_cmtm.update([(world_name, CMTM.eye(SE3, order-1))])
  
-  state = cmtm_to_state(state_cmtm[world_name], world_name, order)
+  state = cmtm_to_state_dict(state_cmtm[world_name], world_name, order)
   state_data.update(state)
   
   for joint in robot.joints:
@@ -86,7 +86,7 @@ def f_kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict
     joint_motions = motions.joint_motions(joint)
 
     joint_cmtm = joint_local_cmtm(joint, joint_motions, order)
-    state = cmtm_to_state(joint_cmtm, joint.name, order)
+    state = cmtm_to_state_dict(joint_cmtm, joint.name, order)
     state_data.update(state)
 
     p_link_cmtm = state_cmtm[parent.name]
@@ -96,7 +96,7 @@ def f_kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict
     # Update CMTM for the child link
     state_cmtm.update([(child.name, link_cmtm)])
 
-    state = cmtm_to_state(link_cmtm, child.name, order)
+    state = cmtm_to_state_dict(link_cmtm, child.name, order)
     state_data.update(state)
 
   return state_data
