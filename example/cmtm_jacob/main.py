@@ -40,23 +40,18 @@ def main():
     print("velocity:", kots.state_link_info_list("vel", ["arm3"]))
     print("acceleration:", kots.state_link_info_list("acc", ["arm3"]))
 
-    target = ["arm1","arm2","arm3"]
+    target = ["arm3"]
     jacob = kots.link_jacobian(target, ORDER)
-
-    # for l in kots.robot_.link_names:
-    #     cmtm = kots.state_.link_rel_cmtm(l, target[0], ORDER)
-    #     print("name: ", l)
-    #     cmtm.print()
 
     jacob_num = link_jacobian_num(kots, target, ORDER)
 
-    print("vel", jacob[0:6,:] @ motion)
-    print("acc", jacob[6:12,:] @ motion)
+    print("vel", jacob[0:6,:6] @ motion[3:])
+    print("acc", jacob[6:12,:6] @ motion[3:])
     
     print("jacobian_ana shape: ", jacob.shape)
-    # print("jacobian: ", jacob)
+    print("jacobian: ", jacob[12:])
     print("jacobian_num shape: ", jacob_num.shape)
-    # print("jacobian_num: ", jacob_num)
+    print("jacobian_num: ", jacob_num[12:])
 
     print("norm: ", np.linalg.norm(jacob - jacob_num))
 
