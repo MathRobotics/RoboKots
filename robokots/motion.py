@@ -70,8 +70,11 @@ class RobotMotions:
   def link_accel(self, link : LinkStruct):
     return self.gen_value(link, "accel")
 
-  def joint_motions(self, joint : JointStruct):
+  def joint_motions(self, joint : JointStruct, order = None):
+    if order is None:
+      order = self.motion_num
     values = ()
-    for a in self.aliases:
-      values += (self.gen_value(joint, a),)
+    for i in range(order):
+      values += (self.gen_value(joint, self.aliases[i]),)
+
     return np.array(values)
