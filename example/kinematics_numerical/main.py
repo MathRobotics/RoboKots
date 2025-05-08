@@ -122,21 +122,28 @@ def main():
 
     jark = np.random.rand(kots.dof())
 
+    jacob = kots.link_jacobian_target(ORDER)
+
     ana_vel = kots.state_target_link_info("vel")
     num_vel = link_kinematics_vel_num(kots, motion, jark)
     vec = link_kinematics_cmtm_num(kots, motion, ORDER, jark)
     num_vel2 = vec[:,:6]
+    jac_vel = jacob[:6,:3] @ motion[3:6]
+
     print("velocity analytical : ", ana_vel)
     print("velocity numerical  : ", num_vel)
     print("velocity numerical2 : ", num_vel2)
+    print("velocity jacobian : ", jac_vel)
     print("norm: ", np.linalg.norm(ana_vel - num_vel))
 
     ana_acc = kots.state_target_link_info("acc")
     num_acc = link_kinematics_acc_num(kots, motion, jark)
     num_acc2 = vec[:,6:12]
+    jac_acc = jacob[6:12,:6] @ motion[3:9]
     print("accleration analytical : ", ana_acc)
     print("accleration numerical  : ", num_acc)
     print("accleration numerical2 : ", num_acc2)
+    print("accleration jacobian : ", jac_acc)
     print("norm: ", np.linalg.norm(ana_acc - num_acc))
 
     num_jark1 = link_kinematics_jark_num(kots, motion, jark)
