@@ -405,9 +405,7 @@ def test_part_link_cmtm_jacob_numerical():
       x_ = joint_motions.copy()
       x_[i] += delta
       p1 = joint_local_cmtm(joint, x_) @ rel_frame
-      dp = mr.CMTM.sub_ptan_vec(p0, p1) / delta
+      dp = mr.CMTM.ptan_to_tan(6, 3) @ mr.CMTM.sub_ptan_vec(p0, p1) / delta
       expected_jacob[:,i] = dp
-
-    expected_jacob = mr.CMTM.ptan_to_tan(6, 3) @ expected_jacob
     
     assert np.allclose(result_jacob, expected_jacob)
