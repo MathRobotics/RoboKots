@@ -67,6 +67,14 @@ def __target_part_link_jacob(target_link : LinkStruct, joint : JointStruct, rel_
 
 # specific 3d space (magic number 6)
 def __target_part_link_cmtm_jacob(target_link : LinkStruct, joint : JointStruct, rel_cmtm : CMTM, joint_cmtm : CMTM) -> np.ndarray:
+  '''
+  Compute the Jacobian matrix for the target part link in CMTM space.
+  Args:
+    target_link (LinkStruct): target link
+    joint (JointStruct): joint structure
+    rel_cmtm (CMTM): relative CMTM
+    joint_cmtm (CMTM): joint CMTM
+  '''
   mat = np.zeros((rel_cmtm._n * 6, rel_cmtm._n * joint.dof))
   if target_link.id == joint.child_link_id:
     tmp = CMTM.ptan_to_tan(6, rel_cmtm._n) @ joint_cmtm.tan_mat_adj()
