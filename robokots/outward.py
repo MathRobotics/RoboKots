@@ -151,7 +151,10 @@ def f_link_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_
   elif data_type == "cmtm":
     order = 3
 
-  jacobs = np.zeros((6*len(link_name_list),robot.dof*order))
+  if data_type  == "cmtm":
+    jacobs = np.zeros((6*order*len(link_name_list),robot.dof*order))
+  else:
+    jacobs = np.zeros((6*len(link_name_list),robot.dof*order))
   motion = motions.motions[:robot.dof*order]
 
   for i in range(len(link_name_list)):
@@ -163,6 +166,8 @@ def f_link_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_
 
     if data_type == "frame":
       jacobs[6*i:6*(i+1)] = numerical_grad(motion, f_kinematics_func, sub_func = SE3.sub_tan_vec)
+    elif data_type == "cmtm":
+      jacobs[(6*order)*i:(6*order)*(i+1)] = numerical_grad(motion, f_kinematics_func, sub_func = CMTM.sub_vec)
     else:
       jacobs[6*i:6*(i+1)] = numerical_grad(motion, f_kinematics_func)
 
