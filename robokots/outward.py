@@ -132,8 +132,8 @@ def f_link_cmtm_jacobian(robot : RobotStruct, state : RobotState, link_name_list
   for i in range(len(links)):
     link_cmtm = state.link_cmtm(link_name_list[i], order)
     jacobs[6*order*i:6*order*(i+1),:] \
-      = CMTM.tan_to_ptan(6, link_cmtm._n) @ link_cmtm.tan_mat_inv_adj() @ __link_cmtm_jacobian(robot, state, links[i], order)
-
+      = link_cmtm.tan_mat_inv_adj() @ CMTM.tan_to_ptan(6, link_cmtm._n) @  __link_cmtm_jacobian(robot, state, links[i], order)
+   
   return jacobs
 
 #specific 3d-CMTM
