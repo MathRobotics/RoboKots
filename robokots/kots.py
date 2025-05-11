@@ -64,7 +64,7 @@ class Kots():
       j_aliases.append("joint_torque_diff"+str(i+1))
       j_aliases.append("joint_force_diff"+str(i+1))
       
-    motions = RobotMotions(robot, m_aliases)
+    motions = RobotMotions(robot.dof, m_aliases)
     state = RobotState(robot, l_aliases, j_aliases)
 
     return Kots(robot, motions, state, order, dim)

@@ -4,17 +4,17 @@
 
 import numpy as np
 
-from .basic.robot import RobotStruct, JointStruct, LinkStruct
+from .basic.robot import JointStruct, LinkStruct
 
 class RobotMotions:
   motions : np.ndarray = np.array([])
   ALLOWED_ALIASES = frozenset(["coord", "veloc", "accel", "accel_diff1", "accel_diff2", "accel_diff3"])
 
-  def __init__(self, robot : RobotStruct, aliases_ = ["coord", "veloc", "accel"]):
+  def __init__(self, robot_dof : int, aliases_ = ["coord", "veloc", "accel"]):
     if not set(aliases_).issubset(self.ALLOWED_ALIASES):
       raise ValueError(f"Invalid alias: {set(aliases_) - self.ALLOWED_ALIASES}")
     self.aliases = aliases_
-    self.dof = robot.dof
+    self.dof = robot_dof
     self.motion_num = len(self.aliases) 
     self.motions = np.zeros(self.dof * self.motion_num)
     
