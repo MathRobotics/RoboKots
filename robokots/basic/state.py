@@ -7,8 +7,6 @@ import numpy as np
 
 from mathrobo import SE3, CMTM
 
-from .basic.robot import RobotStruct
-
 class RobotDF:
   df : pl.DataFrame
   names : list
