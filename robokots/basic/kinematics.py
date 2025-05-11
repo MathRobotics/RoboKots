@@ -15,9 +15,6 @@ class JointData:
     select_mat: np.ndarray # selection matrix
     dof: int = 0 # degree of freedom
     select_indeces: np.ndarray = None # indeces of the selection matrix
-    
-def selector(joint : JointData, mat: np.ndarray) -> np.ndarray:
-    return mat[:, joint.select_indeces]
 
 def joint_local_frame(joint : JointData, joint_coord : np.ndarray) -> SE3:  
   if len(joint_coord) != 0:
@@ -109,7 +106,8 @@ def kinematics_cmtm(joint : JointData, p_link_cmtm : CMTM, joint_motions : np.nd
   return m
 
 def part_link_jacob(joint : JointData, rel_frame : np.ndarray) -> np.ndarray:
-  return selector(joint, rel_frame.mat_inv_adj())
+  return rel_frame.mat_inv_adj()[:, joint.select_indeces]
+  
 
 # specific 3D space (magic number 6)
 def part_link_cmtm_jacob(joint : JointData, rel_cmtm : CMTM, joint_cmtm : CMTM) -> np.ndarray:
@@ -127,6 +125,6 @@ def part_link_cmtm_jacob(joint : JointData, rel_cmtm : CMTM, joint_cmtm : CMTM) 
 
   for i in range(rel_cmtm._n):
     for j in range(i+1):
-      mat[i*6:(i+1)*6, j*joint.dof:(j+1)*joint.dof] = selector(joint, tmp[i*6:(i+1)*6,j*6:(j+1)*6])
+      mat[i*6:(i+1)*6, j*joint.dof:(j+1)*joint.dof] = (tmp[i*6:(i+1)*6,j*6:(j+1)*6])[:, joint.select_indeces]
       
   return mat
