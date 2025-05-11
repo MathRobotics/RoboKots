@@ -4,10 +4,10 @@ import mathrobo as mr
 from robokots.kots import *
 import time
 
-ORDER = 3
+ORDER = 5
 
 def main():
-    kots = Kots.from_json_file("../model/sample_robot.json")
+    kots = Kots.from_json_file("../model/sample_robot.json", ORDER)
     target = ["arm3"]
 
     motion = np.random.rand(kots.order()*kots.dof())
@@ -21,10 +21,10 @@ def main():
     print("acceleration:", acceleration)
 
     jacob = kots.link_jacobian(target, ORDER)
-    jacob_num = kots.link_jacobian_numerical(target, "cmtm")
+    jacob_num = kots.link_jacobian_numerical(target, "cmtm", ORDER)
 
-    veloc_jac = jacob[0:6,:2*kots.dof()] @ motion[kots.dof():]
-    accel_jac = jacob[6:12,:2*kots.dof()] @ motion[kots.dof():]
+    veloc_jac = jacob[0:6,:2*kots.dof()] @ motion[kots.dof():3*kots.dof()]
+    accel_jac = jacob[6:12,:2*kots.dof()] @ motion[kots.dof():3*kots.dof()]
 
     print("velocity", veloc_jac)
     print("acceleration", accel_jac)
