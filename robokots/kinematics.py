@@ -17,23 +17,21 @@ def joint_local_frame(joint : JointStruct, joint_coord : np.ndarray) -> SE3:
   frame = SE3.set_mat(SE3.exp(v))
   return frame
 
-def joint_local_vel(joint : JointStruct, joint_vel : np.ndarray) -> np.ndarray:
-  if len(joint_vel) != 0:
-    vel = joint.select_mat @ joint_vel
+def joint_local_tan_vec(joint : JointStruct, joint_vec : np.ndarray) -> np.ndarray:
+  if len(joint_vec) != 0:
+    vec = joint.select_mat @ joint_vec
   else:
-    vel = np.zeros(6)
-  return vel
+    vec = np.zeros(6)
+  return vec
+
+def joint_local_vel(joint : JointStruct, joint_vel : np.ndarray) -> np.ndarray:
+  return joint_local_tan_vec(joint, joint_vel)
 
 def joint_local_acc(joint : JointStruct, joint_acc : np.ndarray) -> np.ndarray:
-  if len(joint_acc) != 0:
-    acc = joint.select_mat @ joint_acc
-  else:
-    acc = np.zeros(6)
-  return acc
+  return joint_local_tan_vec(joint, joint_acc)
 
-#specific 3d-CMTM
 def joint_local_cmtm(joint : JointStruct, joint_motions : np.ndarray, order = 3) -> CMTM:
-  if order < 1 or order > 3:
+  if order < 1:
     print("order is out of range")
     return 
   
@@ -41,10 +39,10 @@ def joint_local_cmtm(joint : JointStruct, joint_motions : np.ndarray, order = 3)
 
   frame = joint_local_frame(joint, joint_motions[:dof].reshape(dof))
   vecs = np.zeros((order-1, 6))
-  if order > 1:
-    vecs[0] = joint_local_vel(joint, joint_motions[dof:2*dof].reshape(dof))
-  if order > 2:
-    vecs[1] = joint_local_acc(joint, joint_motions[2*dof:3*dof].reshape(dof))
+
+  for i in range(order-1):
+    vecs[i] = joint_local_tan_vec(joint, joint_motions[(i+1)*dof:(i+2)*dof].reshape(dof))
+
   m = CMTM[SE3](frame, vecs)
   return m
 
@@ -53,19 +51,17 @@ def link_rel_frame(joint : JointStruct, joint_coord : np.ndarray) -> SE3:
   rel_frame =  joint.origin @ joint_frame
   return rel_frame
 
+def link_rel_tan_vec(joint : JointStruct, joint_vec : np.ndarray) -> np.ndarray:
+  return joint_local_tan_vec(joint, joint_vec)
+
 def link_rel_vel(joint : JointStruct, joint_vel : np.ndarray) -> np.ndarray:
-  local_vel = joint_local_vel(joint, joint_vel)
-  rel_vel = local_vel
-  return rel_vel
+  return link_rel_tan_vec(joint, joint_vel)
 
 def link_rel_acc(joint : JointStruct, joint_acc : np.ndarray) -> np.ndarray:
-  local_acc = joint_local_acc(joint, joint_acc)
-  rel_acc = local_acc
-  return rel_acc
+  return link_rel_tan_vec(joint, joint_acc)
 
-#specific 3d-CMTM
 def link_rel_cmtm(joint : JointStruct, joint_motions : np.ndarray, order = 3) -> CMTM:
-  if order < 1 or order > 3:
+  if order < 1:
     print("order is out of range")
     return 
   
@@ -73,10 +69,9 @@ def link_rel_cmtm(joint : JointStruct, joint_motions : np.ndarray, order = 3) ->
 
   frame = link_rel_frame(joint, joint_motions[:dof].reshape(dof))
   vecs = np.zeros((order-1, 6))
-  if order > 1:
-    vecs[0] = link_rel_vel(joint, joint_motions[dof:2*dof].reshape(dof))
-  if order > 2:
-    vecs[1] = link_rel_acc(joint, joint_motions[2*dof:3*dof].reshape(dof))
+  for i in range(order-1):
+    vecs[i] = link_rel_tan_vec(joint, joint_motions[(i+1)*dof:(i+2)*dof].reshape(dof))
+
   m = CMTM[SE3](frame, vecs)
   return m
 
@@ -100,9 +95,8 @@ def acc_kinematics(joint : JointStruct, p_link_vel : np.ndarray, p_link_acc : np
   acc =  rel_frame.mat_inv_adj() @ p_link_acc + SE3.hat_adj( rel_frame.mat_inv_adj() @ p_link_vel ) @ rel_vel + rel_acc
   return acc
 
-#specific 3d-CMTM
 def kinematics_cmtm(joint : JointStruct, p_link_cmtm : CMTM, joint_motions : np.ndarray, order = 3) -> CMTM:
-  rel_m = link_rel_cmtm(joint, joint_motions)
+  rel_m = link_rel_cmtm(joint, joint_motions, order)
   m = p_link_cmtm @ rel_m
   return m
 
