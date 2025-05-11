@@ -4,7 +4,6 @@
 import numpy as np
 from mathrobo import SE3, CMTM, SO3
 
-#specific 3d-CMTM
 def cmtm_to_state_dict(cmtm : CMTM, name : str, order = 3) -> dict:
   '''
   Convert CMTM to state data
@@ -14,38 +13,27 @@ def cmtm_to_state_dict(cmtm : CMTM, name : str, order = 3) -> dict:
   Returns:
     dict: state data
   '''
-  if order < 1 and order > 3:
-    raise ValueError("order must be 1, 2 or 3")
+  if order < 1:
+    raise ValueError("order must be over 1")
 
   state = []
 
-  if 1:
-    mat = cmtm.elem_mat()
-    pos = mat[:3,3]
-    rot_vec = mat[:3,:3].ravel()
-    state.append((name+"_pos" , pos.tolist()))
-    state.append((name+"_rot" , rot_vec.tolist()))
-    if order > 1:
-      veloc = cmtm.elem_vecs(0)
-      state.append((name+"_vel" , veloc.tolist()))
-    if order > 2:
-      accel = cmtm.elem_vecs(1)
-      state.append((name+"_acc" , accel.tolist()))
-  else:
-    mat = cmtm.elem_mat()
+  mat = cmtm.elem_mat()
+  pos = mat[:3,3]
+  rot_vec = mat[:3,:3].ravel()
+  state.append((name+"_pos" , pos.tolist()))
+  state.append((name+"_rot" , rot_vec.tolist()))
+  if order > 1:
     veloc = cmtm.elem_vecs(0)
+    state.append((name+"_vel" , veloc.tolist()))
+  if order > 2:
     accel = cmtm.elem_vecs(1)
-    
-    pos = mat[:3,3]
-    rot_vec = mat[:3,:3].ravel()
-
-    state = [
-        (name+"_pos" , pos.tolist()),
-        (name+"_rot" , rot_vec.tolist()),
-        (name+"_vel" , veloc.tolist()),
-        (name+"_acc" , accel.tolist())
-    ]
-    
+    state.append((name+"_acc" , accel.tolist()))
+  if order > 3:
+    for i in range(order-3):
+      vec = cmtm.elem_vecs(i+2)
+      state.append((name+"_acc_diff"+str(i+1) , vec.tolist()))
+  
   return state
 
 def state_dict_to_rot(state : dict, name : str) -> np.ndarray:
@@ -77,7 +65,6 @@ def state_dict_to_frame(state : dict, name : str) -> SE3:
 
     return mat
 
-#specific 3d-CMTM
 def state_dict_to_cmtm(state : dict, name : str, order = 3) -> CMTM:
     '''
     Convert state data to CMTM
@@ -87,8 +74,8 @@ def state_dict_to_cmtm(state : dict, name : str, order = 3) -> CMTM:
     Returns:
         CMTM: CMTM object
     '''
-    if order < 1 and order > 3:
-        raise ValueError("order must be 1, 2 or 3")
+    if order < 1:
+        raise ValueError("order must be over 1")
 
     vec = np.zeros((order-1, 6))
 
@@ -98,6 +85,9 @@ def state_dict_to_cmtm(state : dict, name : str, order = 3) -> CMTM:
         vec[0] = np.array(state[name+"_vel"])
     if order > 2:
         vec[1] = np.array(state[name+"_acc"])
+    if order > 3:
+        for i in range(order-3):
+            vec[i+2] = np.array(state[name+"_acc_diff"+str(i+1)])
     
     cmtm = CMTM[SE3](mat, vec)
 
@@ -166,7 +156,6 @@ def sub_state_dict_vec(data0 : dict, data1 : dict, type : str, name : str) -> di
     name : str
         link name or joint name
     '''
-
 
     if type == "pos":
         return data1[type] - data0[type]
