@@ -14,7 +14,7 @@ from .kinematics import *
 from .dynamics import *
 from .state_dict import *
 
-#specific 3d-CMTM
+
 def f_kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict:
   '''
   Forward kinematics computation
