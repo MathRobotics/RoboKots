@@ -52,7 +52,7 @@ class Kots():
       l_aliases = ["pos", "rot", "vel", "acc"]
       for i in range(order-3):
         m_aliases.append("accel_diff"+str(i+1))
-        j_aliases.append("coord_diff"+str(i+1))
+        j_aliases.append("acc_diff"+str(i+1))
         l_aliases.append("acc_diff"+str(i+1))
         
     l_aliases.append("link_force")
