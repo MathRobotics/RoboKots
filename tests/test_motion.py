@@ -1,6 +1,6 @@
 import numpy as np
 
-from robokots.motion import RobotMotions
+from robokots.basic.motion import RobotMotions
 
 '''
 Test the RobotMotions class
