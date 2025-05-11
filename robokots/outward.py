@@ -150,7 +150,7 @@ def f_link_cmtm_jacobian(robot : RobotStruct, state : RobotState, link_name_list
   return jacobs
 
 #specific 3d-CMTM
-def f_link_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str], data_type : str) -> np.ndarray:
+def f_link_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str], data_type : str, order_ = None) -> np.ndarray:
   if data_type not in ["pos", "rot", "vel", "acc", "frame", "cmtm"]:
     raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'frame' or 'cmtm'.")
 
@@ -162,7 +162,10 @@ def f_link_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_
   elif data_type == "acc":
     order = 3
   elif data_type == "cmtm":
-    order = 3
+    if order_ is None:
+      order = 3
+    else:
+      order = order_
 
   if data_type  == "cmtm":
     jacobs = np.zeros((6*order*len(link_name_list),robot.dof*order))
