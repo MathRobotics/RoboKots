@@ -29,18 +29,18 @@ class RobotDF:
 class RobotState:
   state_df : RobotDF
   
-  def __init__(self, robot : RobotStruct, l_aliases = ["pos", "rot", "vel", "acc"], j_aliases = [], separator = "_"):
+  def __init__(self, link_names : list, joint_names : list, l_aliases = ["pos", "rot", "vel", "acc"], j_aliases = [], separator = "_"):
     names = []
     self.l_aliases = l_aliases
     self.j_aliases = j_aliases
     self.separator = separator  
     if len(l_aliases) != 0:
-      for l_name in robot.link_names:
+      for l_name in link_names:
         for al in l_aliases:
           names.append(l_name + separator + al)
     
     if len(j_aliases) != 0:
-      for j_name in robot.joint_names:
+      for j_name in joint_names:
         for al in j_aliases:
           names.append(j_name + separator + al)
 
@@ -61,9 +61,9 @@ class RobotState:
     mat = mat_vec.reshape((3,3))
     return mat
   
-  def all_state_vec(self, robot : RobotStruct, type : str) -> np.ndarray:
+  def all_state_vec(self, links, type : str) -> np.ndarray:
     labels = []
-    for l in robot.links:
+    for l in links:
       labels.append(l.name+"_"+type) 
     mat = [self.df()[label][-1].to_list() for label in labels]
     return np.array(mat)
@@ -71,8 +71,8 @@ class RobotState:
   def link_pos(self, link_name : str) -> np.ndarray:
     return RobotState.state_vec(self.df(), link_name, "pos")
   
-  def all_link_pos(self, robot : RobotStruct) -> np.ndarray:
-    return self.all_state_vec(robot, "pos")
+  def all_link_pos(self, links) -> np.ndarray:
+    return self.all_state_vec(links, "pos")
   
   def link_rot(self, link_name : str) -> np.ndarray:
     return RobotState.state_mat(self.df(), link_name, "rot")

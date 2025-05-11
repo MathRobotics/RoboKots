@@ -65,7 +65,7 @@ class Kots():
       j_aliases.append("joint_force_diff"+str(i+1))
       
     motions = RobotMotions(robot.dof, m_aliases)
-    state = RobotState(robot, l_aliases, j_aliases)
+    state = RobotState(robot.link_names, robot.joint_names, l_aliases, j_aliases)
 
     return Kots(robot, motions, state, order, dim)
   
@@ -169,4 +169,4 @@ class Kots():
       conectivity[i, 0] = joint.child_link_id
       conectivity[i, 1] = joint.parent_link_id
 
-    d_show_robot(conectivity, self.state_.all_link_pos(self.robot_), save)
+    d_show_robot(conectivity, self.state_.all_link_pos(self.robot_.links), save)

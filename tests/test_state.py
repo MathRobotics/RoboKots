@@ -73,7 +73,7 @@ test_robot_data = {
 # Test RobotState initialization
 def test_robot_state_init():
     robot = MockRobot()
-    state = RobotState(robot, test_link_aliases, test_joint_aliases)   
+    state = RobotState(robot.link_names, robot.joint_names, test_link_aliases, test_joint_aliases)   
     # Check if the state_df is initialized correctly
     assert isinstance(state.state_df, RobotDF)
     assert state.state_df.df.shape[0] == 0
@@ -82,7 +82,7 @@ def test_robot_state_init():
 # Test RobotState DataFrame extraction
 def test_robot_state_df():
     robot = MockRobot()
-    state = RobotState(robot, test_link_aliases, test_joint_aliases)  
+    state = RobotState(robot.link_names, robot.joint_names, test_link_aliases, test_joint_aliases)  
     try:
         state.df()
     except ValueError as e:
@@ -91,7 +91,7 @@ def test_robot_state_df():
 # Test link state vec extraction
 def test_robot_state_link_state_vec():
     robot = MockRobot()
-    state = RobotState(robot, test_link_aliases, test_joint_aliases)  
+    state = RobotState(robot.link_names, robot.joint_names, test_link_aliases, test_joint_aliases)  
     state.state_df.add_row(test_robot_data)
     # Test link state vector extraction
     link_name = "link1"
