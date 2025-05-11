@@ -100,9 +100,9 @@ def test_gen_value():
     motions = RobotMotions(robot.dof)
     motions.set_motion(np.array([1, 2, 3, 4, 5, 6, 7, 8, 9]))
     joint = MockJoint(1, 1)
-    assert np.array_equal(motions.gen_value(joint, "coord"), np.array([2]))
-    assert np.array_equal(motions.gen_value(joint, "veloc"), np.array([5]))
-    assert np.array_equal(motions.gen_value(joint, "accel"), np.array([8]))
+    assert np.array_equal(motions.gen_value(joint.dof, joint.dof_index, "coord"), np.array([2]))
+    assert np.array_equal(motions.gen_value(joint.dof, joint.dof_index, "veloc"), np.array([5]))
+    assert np.array_equal(motions.gen_value(joint.dof, joint.dof_index, "accel"), np.array([8]))
 
 # Test the joint_coord, joint_veloc, and joint_accel methods
 def test_joint_coord_veloc_accel():
@@ -110,9 +110,9 @@ def test_joint_coord_veloc_accel():
     motions = RobotMotions(robot.dof)
     motions.set_motion(np.array([1, 2, 3, 4, 5, 6, 7, 8, 9]))
     joint = MockJoint(1, 1)
-    assert np.array_equal(motions.joint_coord(joint), np.array([2]))
-    assert np.array_equal(motions.joint_veloc(joint), np.array([5]))
-    assert np.array_equal(motions.joint_accel(joint), np.array([8]))
+    assert np.array_equal(motions.joint_coord(joint.dof, joint.dof_index), np.array([2]))
+    assert np.array_equal(motions.joint_veloc(joint.dof, joint.dof_index), np.array([5]))
+    assert np.array_equal(motions.joint_accel(joint.dof, joint.dof_index), np.array([8]))
     
 # Test the link_coord, link_veloc, and link_accel methods
 def test_link_coord_veloc_accel():
@@ -120,6 +120,6 @@ def test_link_coord_veloc_accel():
     motions = RobotMotions(robot.dof)
     motions.set_motion(np.array([1, 2, 3, 4, 5, 6, 7, 8, 9]))
     link = MockJoint(1, 1)
-    assert np.array_equal(motions.link_coord(link), np.array([2]))
-    assert np.array_equal(motions.link_veloc(link), np.array([5]))
-    assert np.array_equal(motions.link_accel(link), np.array([8]))
+    assert np.array_equal(motions.link_coord(link.dof, link.dof_index), np.array([2]))
+    assert np.array_equal(motions.link_veloc(link.dof, link.dof_index), np.array([5]))
+    assert np.array_equal(motions.link_accel(link.dof, link.dof_index), np.array([8]))

@@ -40,7 +40,7 @@ def f_kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict
     parent = robot.links[joint.parent_link_id]
     child = robot.links[joint.child_link_id]
 
-    joint_motions = motions.joint_motions(joint, order)
+    joint_motions = motions.joint_motions(joint.dof, joint.dof_index, order)
 
     joint_cmtm = joint_local_cmtm(joint, joint_motions, order)
     state = cmtm_to_state_dict(joint_cmtm, joint.name, order)
@@ -185,7 +185,7 @@ def f_dynamics(robot : RobotStruct, motions : RobotMotions) -> dict:
   for joint in reversed(robot.joints):
     child = robot.links[joint.child_link_id]
     
-    joint_coord = motions.joint_coord(joint)
+    joint_coord = motions.joint_coord(joint.dof, joint.dof_index)
 
     inertia = spatial_inertia(child.mass, child.inertia, child.cog)
 
@@ -219,7 +219,7 @@ def f_dynamics_cmtm(robot : RobotStruct, motions : RobotMotions) -> dict:
   for joint in reversed(robot.joints):
     child = robot.links[joint.child_link_id]
     
-    joint_coord = motions.joint_coord(joint)
+    joint_coord = motions.joint_coord(joint.dof, joint.dof_index)
 
     inertia = spatial_inertia(child.mass, child.inertia, child.cog)
 
