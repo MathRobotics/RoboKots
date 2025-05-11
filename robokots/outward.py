@@ -14,6 +14,15 @@ from .basic.kinematics import *
 from .basic.dynamics import *
 from .basic.state_dict import *
 
+def convert_joint_to_data(joint: JointStruct) -> JointData:
+  '''
+  Convert joint data to JointData structure
+  Args:
+    joint (JointStruct): joint structure
+  Returns:
+    JointData: JointData structure
+  '''
+  return  JointData(joint.origin, joint.select_mat, joint.dof, joint.select_indeces)
 
 def f_kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict:
   '''
@@ -39,15 +48,17 @@ def f_kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict
   for joint in robot.joints:
     parent = robot.links[joint.parent_link_id]
     child = robot.links[joint.child_link_id]
+    
+    joint_data = convert_joint_to_data(joint)
 
     joint_motions = motions.joint_motions(joint.dof, joint.dof_index, order)
 
-    joint_cmtm = joint_local_cmtm(joint, joint_motions, order)
+    joint_cmtm = joint_local_cmtm(joint_data, joint_motions, order)
     state = cmtm_to_state_dict(joint_cmtm, joint.name, order)
     state_data.update(state)
 
     p_link_cmtm = state_cmtm[parent.name]
-    rel_cmtm = link_rel_cmtm(joint, joint_motions, order)
+    rel_cmtm = link_rel_cmtm(joint_data, joint_motions, order)
 
     link_cmtm = p_link_cmtm @ rel_cmtm
     # Update CMTM for the child link
@@ -62,7 +73,8 @@ def __target_part_link_jacob(target_link : LinkStruct, joint : JointStruct, rel_
   if target_link.id == joint.child_link_id:
     mat = joint.select_mat
   else:
-    mat = part_link_jacob(joint, rel_frame)  
+    joint_data = convert_joint_to_data(joint)
+    mat = part_link_jacob(joint_data, rel_frame)  
   return mat
 
 # specific 3d space (magic number 6)
@@ -79,9 +91,10 @@ def __target_part_link_cmtm_jacob(target_link : LinkStruct, joint : JointStruct,
   if target_link.id == joint.child_link_id:
     tmp = joint_cmtm.tan_mat_adj()
     for i in range(rel_cmtm._n):
-      mat[i*6:(i+1)*6, i*joint.dof:(i+1)*joint.dof] = joint.selector(tmp[i*6:(i+1)*6, i*6:(i+1)*6])
+      mat[i*6:(i+1)*6, i*joint.dof:(i+1)*joint.dof] = selector(joint, tmp[i*6:(i+1)*6, i*6:(i+1)*6])
   else:
-    mat = part_link_cmtm_jacob(joint, rel_cmtm, joint_cmtm)
+    joint_data = convert_joint_to_data(joint)
+    mat = part_link_cmtm_jacob(joint_data, rel_cmtm, joint_cmtm)
   return mat
 
 def __link_jacobian(robot, state : RobotState, target_link : LinkStruct) -> np.ndarray:
@@ -184,6 +197,7 @@ def f_dynamics(robot : RobotStruct, motions : RobotMotions) -> dict:
 
   for joint in reversed(robot.joints):
     child = robot.links[joint.child_link_id]
+    joint_data = convert_joint_to_data(joint)
     
     joint_coord = motions.joint_coord(joint.dof, joint.dof_index)
 
@@ -195,7 +209,7 @@ def f_dynamics(robot : RobotStruct, motions : RobotMotions) -> dict:
     link_force = link_dynamics(inertia, link_veloc, link_accel)  
     state_data.update([(child.name + "_link_force" , link_force.tolist())])
     
-    rel_frame = link_rel_frame(joint, joint_coord)
+    rel_frame = link_rel_frame(joint_data, joint_coord)
 
     p_joint_force = np.zeros(6)
     for id in child.child_joint_ids:
@@ -218,6 +232,7 @@ def f_dynamics_cmtm(robot : RobotStruct, motions : RobotMotions) -> dict:
 
   for joint in reversed(robot.joints):
     child = robot.links[joint.child_link_id]
+    joint_data = convert_joint_to_data(joint)
     
     joint_coord = motions.joint_coord(joint.dof, joint.dof_index)
 
@@ -229,7 +244,7 @@ def f_dynamics_cmtm(robot : RobotStruct, motions : RobotMotions) -> dict:
     link_force = link_dynamics(inertia, link_veloc, link_accel)  
     state_data.update([(child.name + "_link_force" , link_force.tolist())])
     
-    rel_frame = link_rel_frame(joint, joint_coord)
+    rel_frame = link_rel_frame(joint_data, joint_coord)
 
     p_joint_force = np.zeros(6)
     for id in child.child_joint_ids:
