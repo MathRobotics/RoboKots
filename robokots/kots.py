@@ -6,14 +6,14 @@ import numpy as np
 
 from .motion import RobotMotions
 from .state import RobotState
-from .robot import RobotStruct
+from .basic.robot import RobotStruct
 
 from .robot_io import *
-from .robot_drow import *
+from .basic.robot_drow import *
 
 from .outward import *
 
-from .target import TargetList
+from .basic.target import TargetList
   
 class Kots():
   robot_ : RobotStruct

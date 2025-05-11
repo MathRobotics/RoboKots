@@ -5,8 +5,8 @@
 import json
 from typing import Dict
 
-from .robot import *
-from .target import *
+from .basic.robot import *
+from .basic.target import *
 
 def io_load_json(file_path: str) -> Dict:
     try:

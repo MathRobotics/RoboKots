@@ -7,12 +7,12 @@ import numpy as np
 
 from mathrobo import SE3, CMTM, numerical_grad
 
-from .robot import RobotStruct, LinkStruct, JointStruct
+from .basic.robot import RobotStruct, LinkStruct, JointStruct
 from .motion import RobotMotions
 from .state import RobotState
-from .kinematics import *
-from .dynamics import *
-from .state_dict import *
+from .basic.kinematics import *
+from .basic.dynamics import *
+from .basic.state_dict import *
 
 
 def f_kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict:
