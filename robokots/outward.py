@@ -91,7 +91,7 @@ def __target_part_link_cmtm_jacob(target_link : LinkStruct, joint : JointStruct,
   if target_link.id == joint.child_link_id:
     tmp = joint_cmtm.tan_mat_adj()
     for i in range(rel_cmtm._n):
-      mat[i*6:(i+1)*6, i*joint.dof:(i+1)*joint.dof] = selector(joint, tmp[i*6:(i+1)*6, i*6:(i+1)*6])
+      mat[i*6:(i+1)*6, i*joint.dof:(i+1)*joint.dof] = (tmp[i*6:(i+1)*6, i*6:(i+1)*6])[:, joint.select_indeces]
   else:
     joint_data = convert_joint_to_data(joint)
     mat = part_link_cmtm_jacob(joint_data, rel_cmtm, joint_cmtm)
