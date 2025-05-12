@@ -102,26 +102,32 @@ class Kots():
   def state_df(self):
     return self.state_.df()
   
-  def state_link_info(self, type : str, name : str):
-    return self.state_.extract_info('link', type, name)
+  def state_link_info(self, data_type : str, link_name : str):
+    return self.state_.extract_info('link', data_type, link_name)
+    # return extract_dict_link_info(self.state_dict_, data_type, link_name)
 
-  def state_link_info_list(self, type : str, name_list : list[str]):
+  def state_link_info_list(self, data_type : str, name_list : list[str]):
     return [self.state_.extract_info('link', type, name) for name in name_list]
+    # return [extract_dict_link_info(self.state_dict_, data_type, name) for name in name_list]
   
   def state_target_link_info(self, type : str):
     return self.state_link_info_list(type, self.target_.target_names)
   
-  def state_joint_info(self, type : str, name : str):
-    return self.state_.extract_info('joint', type, name)
+  def state_joint_info(self, data_type : str, joint_name : str):
+    return self.state_.extract_info('joint', data_type, joint_name)
+    # return extract_dict_joint_info(self.state_dict_, data_type, joint_name)
 
-  def state_joint_info_list(self, type : str, name_list : list[str]):
-    return [self.state_.extract_info('joint', type, name) for name in name_list]
+  def state_joint_info_list(self, data_type : str, name_list : list[str]):
+    return [self.state_.extract_info('joint', data_type, name) for name in name_list]
+    # return [extract_dict_joint_info(self.state_dict_, data_type, name) for name in name_list]
 
   def kinematics(self):
     self.state_.import_state(kinematics(self.robot_, self.motions_, self.order_))
+    # self.state_dict_ = kinematics(self.robot_, self.motions_, self.order_)
   
   def dynamics(self):
-    self.state_.import_state(f_dynamics(self.robot_, self.motions_))
+    self.state_.import_state(dynamics(self.robot_, self.motions_))
+    # self.state_dict_ = dynamics(self.robot_, self.motions_)
     
   def set_target_from_file(self, target_file : str):
     if not target_file:
