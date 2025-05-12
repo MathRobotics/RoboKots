@@ -18,21 +18,13 @@ from .basic.target import TargetList
 class Kots():
   robot_ : RobotStruct
   motions_ : RobotMotions
+  state_dict_ : dict
   state_ : RobotState
   target_ : TargetList
   order_ : int
   dim_ : int
   
-  def __init__(self, robot : RobotStruct, motions : RobotMotions, state : RobotState, order : int, dim : int):
-    self.robot_ = robot
-    self.motions_ = motions
-    self.state_ = state
-    self.order_ = order
-    self.dim_ = dim
-
-  @staticmethod
-  def from_json_file(model_file_name : str, order=3, dim=3) -> "Kots":
-    robot = io_from_json_file(model_file_name)
+  def __init__(self, robot : RobotStruct, order : int, dim : int):
 
     m_aliases = []
     l_aliases = []
@@ -63,11 +55,19 @@ class Kots():
       l_aliases.append("link_force_diff"+str(i+1))
       j_aliases.append("joint_torque_diff"+str(i+1))
       j_aliases.append("joint_force_diff"+str(i+1))
-      
-    motions = RobotMotions(robot.dof, m_aliases)
-    state = RobotState(robot.link_names, robot.joint_names, l_aliases, j_aliases)
 
-    return Kots(robot, motions, state, order, dim)
+    self.robot_ = robot
+    self.motions_ = RobotMotions(robot.dof, m_aliases)
+    self.state_ = RobotState(robot.link_names, robot.joint_names, l_aliases, j_aliases)
+    self.state_dict_ = {}
+    self.order_ = order
+    self.dim_ = dim
+
+  @staticmethod
+  def from_json_file(model_file_name : str, order=3, dim=3) -> "Kots":
+    robot = io_from_json_file(model_file_name)
+
+    return Kots(robot, order, dim)
   
   def print_structure(self):
     io_print_structure(self.robot_)
