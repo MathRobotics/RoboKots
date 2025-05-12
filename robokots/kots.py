@@ -154,6 +154,9 @@ class Kots():
       raise ValueError("target_ is not set")
     return self.link_jacobian(self.target_.target_names, order)
 
+  def link_diff_kinematics_numerical(self, link_name_list : list[str], data_type = "vel", order = None, eps = 1e-8, update_method = "poly", update_direction = None):
+    return link_diff_kinematics_numerical(self.robot_, self.motions_, link_name_list, data_type, order, eps, update_method, update_direction)
+
   def link_jacobian_numerical(self, link_name_list : list[str], data_type = "vel", order = None):
     return link_jacobian_numerical(self.robot_, self.motions_, link_name_list, data_type, order)
   

@@ -5,7 +5,7 @@
 
 import numpy as np
 
-from mathrobo import SE3, CMTM, numerical_grad
+from mathrobo import SO3, SE3, CMTM, numerical_grad, numerical_difference, build_integrator
 
 from .basic.robot import RobotStruct, LinkStruct, JointStruct
 from .basic.motion import RobotMotions
@@ -149,13 +149,73 @@ def link_cmtm_jacobian(robot : RobotStruct, state : RobotState, link_name_list :
    
   return jacobs
 
-#specific 3d-CMTM
+def link_diff_kinematics_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str],  data_type : str, order = None, \
+                                    eps = 1e-8, update_method = None, update_direction = None) -> np.ndarray:
+  if data_type not in ["pos", "rot", "vel", "acc", "jark", "frame", "cmtm"]:
+    raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'frame' or 'cmtm'.")
+
+  dof = 6
+
+  if order is None:
+    order = 3
+
+  if data_type == "pos" or data_type == "rot":
+    dof = 3
+  elif data_type == "frame":
+    dof = 6
+  elif data_type == "vel":
+    dof = 6
+  elif data_type == "acc":
+    dof = 6
+  elif data_type == "jark":
+    dof = 6
+  elif data_type == "cmtm":
+    if order is None:
+      dof = 3 * 6
+    else:
+      dof = order * 6
+
+  diff = np.zeros((len(link_name_list), dof))
+
+  def update_func(x_init, direct, eps):
+    x_ = x_init.copy()
+
+    if update_method is None:
+      D, d = build_integrator(robot.dof, order, eps, method="poly")
+    else:
+      D, d = build_integrator(robot.dof, order, eps, method=update_method)
+
+    x_ = D @ x_init + d @ direct
+    return x_
+
+  for i in range(len(link_name_list)):
+    def kinematics_func(x):
+      motions.motions = x
+      state = kinematics(robot, motions, order)
+      y = extract_dict_link_info(state, data_type, link_name_list[i])
+      return y
+
+    if data_type == "rot":
+      diff[i] = numerical_difference(motions.motions, kinematics_func, sub_func = SO3.sub_tan_vec, update_func = update_func, direction = update_direction)
+    if data_type == "frame":
+      diff[i] = numerical_difference(motions.motions, kinematics_func, sub_func = SE3.sub_tan_vec, update_func = update_func, direction = update_direction)
+    elif data_type == "cmtm":
+      diff[i] = numerical_difference(motions.motions, kinematics_func, sub_func = CMTM.sub_vec, update_func = update_func, direction = update_direction)
+    else:
+      diff[i] = numerical_difference(motions.motions, kinematics_func, update_func = update_func, direction = update_direction)
+  
+  return diff
+
 def link_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str], data_type : str, order_ = None) -> np.ndarray:
   if data_type not in ["pos", "rot", "vel", "acc", "frame", "cmtm"]:
     raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'frame' or 'cmtm'.")
 
   order = 3
-  if data_type == "pos" or data_type == "rot" or data_type == "frame":
+  dof = 6
+  if data_type == "pos" or data_type == "rot" :
+    dof = 3
+    order = 1
+  elif data_type == "frame":
     order = 1
   elif data_type == "vel":
     order = 2
@@ -168,9 +228,9 @@ def link_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_na
       order = order_
 
   if data_type  == "cmtm":
-    jacobs = np.zeros((6*order*len(link_name_list),robot.dof*order))
+    jacobs = np.zeros((dof*order*len(link_name_list),robot.dof*order))
   else:
-    jacobs = np.zeros((6*len(link_name_list),robot.dof*order))
+    jacobs = np.zeros((dof*len(link_name_list),robot.dof*order))
   motion = motions.motions[:robot.dof*order]
 
   for i in range(len(link_name_list)):
@@ -180,17 +240,19 @@ def link_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_na
       y = extract_dict_link_info(state, data_type, link_name_list[i])
       return y
 
-    if data_type == "frame":
-      jacobs[6*i:6*(i+1)] = numerical_grad(motion, kinematics_func, sub_func = SE3.sub_tan_vec)
+    if data_type == "rot":
+      jacobs[dof*i:dof*(i+1)] = numerical_grad(motions.motions, kinematics_func, sub_func = SO3.sub_tan_vec)
+    elif data_type == "frame":
+      jacobs[dof*i:dof*(i+1)] = numerical_grad(motion, kinematics_func, sub_func = SE3.sub_tan_vec)
     elif data_type == "cmtm":
-      jacobs[(6*order)*i:(6*order)*(i+1)] = numerical_grad(motion, kinematics_func, sub_func = CMTM.sub_vec)
+      jacobs[(dof*order)*i:(6*order)*(i+1)] = numerical_grad(motion, kinematics_func, sub_func = CMTM.sub_vec)
     else:
-      jacobs[6*i:6*(i+1)] = numerical_grad(motion, kinematics_func)
+      jacobs[dof*i:dof*(i+1)] = numerical_grad(motion, kinematics_func)
 
   return jacobs
 
 # specific 3d space (magic number 6)
-def f_dynamics(robot : RobotStruct, motions : RobotMotions) -> dict:
+def dynamics(robot : RobotStruct, motions : RobotMotions) -> dict:
   state_data = {}
   
   state_data = kinematics(robot, motions)
@@ -225,7 +287,7 @@ def f_dynamics(robot : RobotStruct, motions : RobotMotions) -> dict:
     
   return state_data
 
-def f_dynamics_cmtm(robot : RobotStruct, motions : RobotMotions) -> dict:
+def dynamics_cmtm(robot : RobotStruct, motions : RobotMotions) -> dict:
   state_data = {}
   
   state_data = kinematics(robot, motions)
