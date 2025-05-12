@@ -24,7 +24,7 @@ def convert_joint_to_data(joint: JointStruct) -> JointData:
   '''
   return  JointData(joint.origin, joint.select_mat, joint.dof, joint.select_indeces)
 
-def f_kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict:
+def kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict:
   '''
   Forward kinematics computation
   Args:
@@ -131,7 +131,7 @@ def __link_cmtm_jacobian(robot, state : RobotState, target_link : LinkStruct, or
           = mat[:,i*joint.dof:(i+1)*joint.dof]
   return jacob
 
-def f_link_jacobian(robot : RobotStruct, state : RobotState, link_name_list : list[str]) -> np.ndarray:
+def link_jacobian(robot : RobotStruct, state : RobotState, link_name_list : list[str]) -> np.ndarray:
   links = robot.link_list(link_name_list)
   jacobs = np.zeros((6*len(links),robot.dof))
   for i in range(len(links)):
@@ -139,7 +139,7 @@ def f_link_jacobian(robot : RobotStruct, state : RobotState, link_name_list : li
   return jacobs
 
 # specific 3d space (magic number 6)
-def f_link_cmtm_jacobian(robot : RobotStruct, state : RobotState, link_name_list : list[str], order = 3) -> np.ndarray:
+def link_cmtm_jacobian(robot : RobotStruct, state : RobotState, link_name_list : list[str], order = 3) -> np.ndarray:
   links = robot.link_list(link_name_list)
   jacobs = np.zeros((6*order*len(links),robot.dof*order))
   for i in range(len(links)):
@@ -150,7 +150,7 @@ def f_link_cmtm_jacobian(robot : RobotStruct, state : RobotState, link_name_list
   return jacobs
 
 #specific 3d-CMTM
-def f_link_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str], data_type : str, order_ = None) -> np.ndarray:
+def link_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str], data_type : str, order_ = None) -> np.ndarray:
   if data_type not in ["pos", "rot", "vel", "acc", "frame", "cmtm"]:
     raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'frame' or 'cmtm'.")
 
@@ -174,18 +174,18 @@ def f_link_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_
   motion = motions.motions[:robot.dof*order]
 
   for i in range(len(link_name_list)):
-    def f_kinematics_func(x):
+    def kinematics_func(x):
       motions.motions = x
-      state = f_kinematics(robot, motions, order)
+      state = kinematics(robot, motions, order)
       y = extract_dict_link_info(state, data_type, link_name_list[i])
       return y
 
     if data_type == "frame":
-      jacobs[6*i:6*(i+1)] = numerical_grad(motion, f_kinematics_func, sub_func = SE3.sub_tan_vec)
+      jacobs[6*i:6*(i+1)] = numerical_grad(motion, kinematics_func, sub_func = SE3.sub_tan_vec)
     elif data_type == "cmtm":
-      jacobs[(6*order)*i:(6*order)*(i+1)] = numerical_grad(motion, f_kinematics_func, sub_func = CMTM.sub_vec)
+      jacobs[(6*order)*i:(6*order)*(i+1)] = numerical_grad(motion, kinematics_func, sub_func = CMTM.sub_vec)
     else:
-      jacobs[6*i:6*(i+1)] = numerical_grad(motion, f_kinematics_func)
+      jacobs[6*i:6*(i+1)] = numerical_grad(motion, kinematics_func)
 
   return jacobs
 
@@ -193,7 +193,7 @@ def f_link_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_
 def f_dynamics(robot : RobotStruct, motions : RobotMotions) -> dict:
   state_data = {}
   
-  state_data = f_kinematics(robot, motions)
+  state_data = kinematics(robot, motions)
 
   # world_name = robot.links[robot.joints[0].parent_link_id].name
   # state_data.update([(world_name + "_link_force" , [0.,0.,0.,0.,0.,0.])])
@@ -228,7 +228,7 @@ def f_dynamics(robot : RobotStruct, motions : RobotMotions) -> dict:
 def f_dynamics_cmtm(robot : RobotStruct, motions : RobotMotions) -> dict:
   state_data = {}
   
-  state_data = f_kinematics(robot, motions)
+  state_data = kinematics(robot, motions)
 
   world_name = robot.links[robot.joints[0].parent_link_id].name
   state_data.update([(world_name + "_link_force" , [0.,0.,0.,0.,0.,0.])])

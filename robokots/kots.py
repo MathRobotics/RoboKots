@@ -118,7 +118,7 @@ class Kots():
     return [self.state_.extract_info('joint', type, name) for name in name_list]
 
   def kinematics(self):
-    self.state_.import_state(f_kinematics(self.robot_, self.motions_, self.order_))
+    self.state_.import_state(kinematics(self.robot_, self.motions_, self.order_))
   
   def dynamics(self):
     self.state_.import_state(f_dynamics(self.robot_, self.motions_))
@@ -145,9 +145,9 @@ class Kots():
       raise ValueError("link_name_list contains invalid link names")
 
     if order == 1:
-      return f_link_jacobian(self.robot_, self.state_, link_name_list)
+      return link_jacobian(self.robot_, self.state_, link_name_list)
     else:
-      return f_link_cmtm_jacobian(self.robot_, self.state_, link_name_list, order)
+      return link_cmtm_jacobian(self.robot_, self.state_, link_name_list, order)
   
   def link_jacobian_target(self, order = 3):
     if not self.target_:
@@ -155,7 +155,7 @@ class Kots():
     return self.link_jacobian(self.target_.target_names, order)
 
   def link_jacobian_numerical(self, link_name_list : list[str], data_type = "vel", order = None):
-    return f_link_jacobian_numerical(self.robot_, self.motions_, link_name_list, data_type, order)
+    return link_jacobian_numerical(self.robot_, self.motions_, link_name_list, data_type, order)
   
   def link_jacobian_target_numerical(self, data_type = "vel", order = None):
     if not self.target_:
