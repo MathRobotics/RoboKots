@@ -4,7 +4,7 @@ import mathrobo as mr
 from robokots.kots import *
 import time
 
-ORDER = 4
+ORDER = 5
 
 def main():
     kots = Kots.from_json_file("../model/sample_robot.json", ORDER)
