@@ -107,11 +107,11 @@ class Kots():
     # return extract_dict_link_info(self.state_dict_, data_type, link_name)
 
   def state_link_info_list(self, data_type : str, name_list : list[str]):
-    return [self.state_.extract_info('link', type, name) for name in name_list]
+    return [self.state_.extract_info('link', data_type, name) for name in name_list]
     # return [extract_dict_link_info(self.state_dict_, data_type, name) for name in name_list]
   
-  def state_target_link_info(self, type : str):
-    return self.state_link_info_list(type, self.target_.target_names)
+  def state_target_link_info(self, data_type : str):
+    return self.state_link_info_list(data_type, self.target_.target_names)
   
   def state_joint_info(self, data_type : str, joint_name : str):
     return self.state_.extract_info('joint', data_type, joint_name)
