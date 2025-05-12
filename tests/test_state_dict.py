@@ -3,6 +3,42 @@ import numpy as np
 from mathrobo import SE3, CMTM
 from robokots.outward import *
 
+def test_extract_state_keys():
+    state = {
+        "link_pos": [],
+        "link_rot": [],
+        "link_vel": [],
+        "link_acc": [],
+        "link_acc_diff1": [],
+        "link_acc_diff2": [],
+        "link_jerk": [],
+        "link_snap": []
+    }
+    name = "link"
+    
+    keys = extract_state_keys(state, name)
+    
+    assert keys == ["pos", "rot", "vel", "acc", "acc_diff1", "acc_diff2", "jerk", "snap"]
+
+def test_count_dict_order():
+    state = {"link_rot": []}
+    assert count_dict_order(state) == 1
+
+    state.update({"link_pos": []})
+    assert count_dict_order(state) == 1
+
+    state.update({"link_vel": []})
+    assert count_dict_order(state) == 2
+
+    state.update({"link_acc": []})
+    assert count_dict_order(state) == 3
+
+    state.update({"link_acc_diff1": []})
+    assert count_dict_order(state) == 4
+
+    state.update({"link_acc_diff2": []})
+    assert count_dict_order(state) == 5
+
 def test_cmtm_to_state_dict():
     cmtm = CMTM.rand(SE3)
     name = "link"
@@ -49,7 +85,8 @@ def test_state_dict_to_cmtm():
         "link_pos": [1.0, 2.0, 3.0],
         "link_rot": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
         "link_vel": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
-        "link_acc": [0.7, 0.8, 0.9, 1.0, 1.1, 1.2]
+        "link_acc": [0.7, 0.8, 0.9, 1.0, 1.1, 1.2],
+        "link_acc_diff1" : [1.3, 1.4, 1.5, 1.6, 1.7, 1.8],
     }
     name = "link"
     
@@ -58,6 +95,7 @@ def test_state_dict_to_cmtm():
     assert np.allclose(cmtm.elem_mat()[:3, 3], [1.0, 2.0, 3.0])
     assert np.allclose(cmtm.elem_vecs(0), [0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
     assert np.allclose(cmtm.elem_vecs(1), [0.7, 0.8, 0.9, 1.0, 1.1, 1.2])
+    assert np.allclose(cmtm.elem_vecs(2), [1.3, 1.4, 1.5, 1.6, 1.7, 1.8])
 
 def test_extract_dict_link_info():
     state = {
