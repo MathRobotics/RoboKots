@@ -3,96 +3,7 @@ import numpy as np
 import mathrobo as mr
 from robokots.kots import *
 
-def link_kinematics_vel_num(kots, x_init, jark = None, delta = 1e-8):
-    kots.import_motions(x_init)
-    kots.kinematics()
-    p0 = kots.state_target_link_info("frame")
-
-    dp = np.zeros((len(p0), 6))
-    if jark is None:
-        jark = np.random.rand(kots.dof())
-
-    x_ = x_init.copy()
-    D, d = mr.build_integrator(kots.dof(), 3, delta)
-    x_ = D @ x_init + d @ jark
-
-    kots.import_motions(x_)
-    kots.kinematics()
-    p1 = kots.state_target_link_info("frame")
-    
-    for i in range(len(p0)):
-        dp[i] = mr.SE3.sub_tan_vec(p0[i], p1[i], "bframe") / delta
-
-    return dp
-    
-    kots.import_motions(x_init)
-def link_kinematics_acc_num(kots, x_init, jark = None, delta = 1e-8):
-    kots.import_motions(x_init)
-    kots.kinematics()
-    a0 = kots.state_target_link_info("vel")
-
-    da = np.zeros((len(a0), 6))
-    if jark is None:
-        jark = np.random.rand(kots.dof())
-
-    x_ = x_init.copy()
-    D, d = mr.build_integrator(kots.dof(), 3, delta)
-    x_ = D @ x_init + d @ jark
-
-    kots.import_motions(x_)
-    kots.kinematics()
-    a1 = kots.state_target_link_info("vel")
-    
-    for i in range(len(a0)):
-        da[i] = (a1[i]- a0[i]) / delta
-    return da
-
-def link_kinematics_jark_num(kots, x_init, jark = None, delta = 1e-8):
-    kots.import_motions(x_init)
-    kots.kinematics()
-    a0 = kots.state_target_link_info("acc")
-
-    da = np.zeros((len(a0), 6))
-    if jark is None:
-        jark = np.random.rand(kots.dof())
-
-    x_ = x_init.copy()
-    D, d = mr.build_integrator(kots.dof(), 3, delta)
-    x_ = D @ x_init + d @ jark
-
-    kots.import_motions(x_)
-    kots.kinematics()
-    a1 = kots.state_target_link_info("acc")
-
-    for i in range(len(a0)):
-        da[i] = (a1[i]- a0[i]) / delta
-
-    return da
-
-def link_kinematics_cmtm_num(kots, x_init, order, jark = None, delta = 1e-8):
-    kots.import_motions(x_init)
-    kots.kinematics()
-    p0 = kots.state_target_link_info("cmtm")
-    a0 = kots.state_target_link_info("acc")
-
-    dp = np.zeros((len(p0), 6*order))
-    if jark is None:
-        jark = np.random.rand(kots.dof())
-
-    x_ = x_init.copy()
-    D, d = mr.build_integrator(kots.dof(), order, delta)
-    x_ = D @ x_init + d @ jark
-
-    kots.import_motions(x_)
-    kots.kinematics()
-    p1 = kots.state_target_link_info("cmtm")
-    a1 = kots.state_target_link_info("acc")
-
-    for i in range(len(p0)):
-        dp[i] = mr.CMTM.sub_vec(p0[i], p1[i]) / delta
-
-    return dp
-
+METHOD = "poly"
 ORDER = 3
 
 def main():
@@ -107,14 +18,17 @@ def main():
     kots.kinematics()
 
     jark = np.random.rand(kots.dof())
+    # jark = np.ones(kots.dof())
 
     jacob = kots.link_jacobian_target(ORDER)
 
     ana_vel = kots.state_target_link_info("vel")
-    num_vel = link_kinematics_vel_num(kots, motion, jark)
-    vec = link_kinematics_cmtm_num(kots, motion, ORDER, jark)
+    num_vel = kots.link_diff_kinematics_numerical(kots.target_.target_names, "frame", update_direction=jark)
+
+    vec = kots.link_diff_kinematics_numerical(kots.target_.target_names, "cmtm", ORDER, update_direction=jark)
     num_vel2 = vec[:,:6]
-    jac_vel = jacob[:6,:3] @ motion[3:6]
+
+    jac_vel = jacob[:6,:kots.dof()] @ motion[kots.dof():2*kots.dof()]
 
     print("velocity analytical : ", ana_vel)
     print("velocity numerical  : ", num_vel)
@@ -123,20 +37,20 @@ def main():
     print("norm: ", np.linalg.norm(ana_vel - num_vel))
 
     ana_acc = kots.state_target_link_info("acc")
-    num_acc = link_kinematics_acc_num(kots, motion, jark)
+    num_acc = kots.link_diff_kinematics_numerical(kots.target_.target_names, "vel", update_direction=jark)
     num_acc2 = vec[:,6:12]
-    jac_acc = jacob[6:12,:6] @ motion[3:9]
+    jac_acc = jacob[6:12,:2*kots.dof()] @ motion[kots.dof():3*kots.dof()]
     print("accleration analytical : ", ana_acc)
     print("accleration numerical  : ", num_acc)
     print("accleration numerical2 : ", num_acc2)
     print("accleration jacobian : ", jac_acc)
     print("norm: ", np.linalg.norm(ana_acc - num_acc))
 
-    num_jark1 = link_kinematics_jark_num(kots, motion, jark)
+    num_jark = kots.link_diff_kinematics_numerical(kots.target_.target_names, "acc", ORDER, update_direction=jark)
     num_jark2 = vec[:,12:18]
-    print("jark numerical : ", num_jark1)
+    print("jark numerical : ", num_jark)
     print("jark numerical cmtm : ", num_jark2)
-    print("norm: ", np.linalg.norm(num_jark1 - num_jark2))
+    print("norm: ", np.linalg.norm(num_jark - num_jark2))
     
 if __name__ == "__main__":
     main()
