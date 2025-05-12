@@ -4,7 +4,7 @@ import mathrobo as mr
 from robokots.kots import *
 import time
 
-ORDER = 5
+ORDER = 4
 
 def main():
     kots = Kots.from_json_file("../model/sample_robot.json", ORDER)
@@ -35,10 +35,8 @@ def main():
     print("jacobian_ana shape: ", jacob.shape)
     print("jacobian_num shape: ", jacob_num.shape)
 
-    for i in range(6):
-        print("jacobian: ", jacob[12+i:12+i+1])
-        print("jacobian_num: ", jacob_num[12+i:12+i+1])
-        print("norm: ", np.linalg.norm(jacob[12+i:12+i+1] - jacob_num[12+i:12+i+1]))
+    for i in range(ORDER):
+        print("norm: ", np.linalg.norm(jacob[6*i:6*(i+1)] - jacob_num[6*i:6*(i+1)]))
 
     print("norm: ", np.linalg.norm(jacob - jacob_num))
 
