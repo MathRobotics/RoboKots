@@ -1,10 +1,84 @@
 # -*- coding: utf-8 -*-
 
-
+import re
 import numpy as np
 from mathrobo import SE3, CMTM, SO3
 
-def cmtm_to_state_dict(cmtm : CMTM, name : str, order = 3) -> dict:
+def extract_state_keys(state: dict, prefix: str = "") -> list:
+    """
+    Extracts the suffix part of keys from a dictionary that match known physical quantities.
+
+    Args:
+        state (dict): Dictionary with string keys.
+        prefix (str): Common prefix to strip from keys (e.g., "link").
+
+    Returns:
+        list: Suffixes such as "pos", "rot", "vel", etc.
+    """
+    keywords = ("pos", "rot", "vel", "acc", "acc_diff", "jerk", "snap")
+    result = []
+
+    for k in state.keys():
+        # If prefix is given, remove it (e.g., "link_" from "link_pos")
+        if prefix and k.startswith(prefix + "_"):
+            suffix = k[len(prefix) + 1:]
+        else:
+            suffix = k
+
+        # Check if the suffix matches any keyword
+        if any(kw in suffix for kw in keywords):
+            result.append(suffix)
+
+    return result
+
+def count_dict_order(state: dict) -> int:
+    """
+    Determines the highest derivative order present in the state's keys.
+
+    Recognized keywords and their corresponding derivative orders:
+        - "pos", "rot"      → 1st order (position, orientation)
+        - "vel"             → 2nd order (velocity)
+        - "acc"             → 3rd order (acceleration)
+        - "jerk"            → 4th order (jerk)
+        - "snap"            → 5th order (snap)
+        - "acc_diffN"       → (3 + N)th order
+
+    Args:
+        state (dict): Dictionary containing state variable keys.
+
+    Returns:
+        int: The maximum derivative order detected in the keys.
+    """
+    # Mapping from keyword to corresponding derivative order
+    keyword_order_map = {
+        "pos": 1,
+        "rot": 1,
+        "vel": 2,
+        "acc": 3,
+        "jerk": 4,
+        "snap": 5
+    }
+
+    keys = extract_state_keys(state)
+    max_order = 0
+
+    for k in keys:
+        # Handle special case like "acc_diff1", "acc_diff2", etc.
+        match = re.search(r"acc_diff(\d+)", k)
+        if match:
+            diff_order = int(match.group(1))
+            max_order = max(max_order, 3 + diff_order)
+            continue  # Skip other checks if acc_diff matched
+
+        # Match against known keywords
+        for keyword, order in keyword_order_map.items():
+            if keyword in k:
+                max_order = max(max_order, order)
+                break  # Stop checking once a match is found
+
+    return max_order
+
+def cmtm_to_state_dict(cmtm : CMTM, name : str) -> dict:
   '''
   Convert CMTM to state data
   Args:
@@ -13,10 +87,9 @@ def cmtm_to_state_dict(cmtm : CMTM, name : str, order = 3) -> dict:
   Returns:
     dict: state data
   '''
-  if order < 1:
-    raise ValueError("order must be over 1")
-
   state = []
+
+  order = cmtm._n
 
   mat = cmtm.elem_mat()
   pos = mat[:3,3]
@@ -65,7 +138,7 @@ def state_dict_to_frame(state : dict, name : str) -> SE3:
 
     return mat
 
-def state_dict_to_cmtm(state : dict, name : str, order = 3) -> CMTM:
+def state_dict_to_cmtm(state : dict, name : str) -> CMTM:
     '''
     Convert state data to CMTM
     Args:
@@ -74,6 +147,9 @@ def state_dict_to_cmtm(state : dict, name : str, order = 3) -> CMTM:
     Returns:
         CMTM: CMTM object
     '''
+
+    order = count_dict_order(state)
+    
     if order < 1:
         raise ValueError("order must be over 1")
 
