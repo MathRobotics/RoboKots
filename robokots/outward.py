@@ -97,7 +97,7 @@ def __target_part_link_cmtm_jacob(target_link : LinkStruct, joint : JointStruct,
     mat = part_link_cmtm_jacob(joint_data, rel_cmtm, joint_cmtm)
   return mat
 
-def __link_jacobian(robot, state : RobotState, target_link : LinkStruct) -> np.ndarray:
+def __link_jacobian(robot, state : dict, target_link : LinkStruct) -> np.ndarray:
   jacob = np.zeros((6,robot.dof))
   link_route = []
   joint_route = []
@@ -105,14 +105,13 @@ def __link_jacobian(robot, state : RobotState, target_link : LinkStruct) -> np.n
   
   for j in joint_route:
     joint = robot.joints[j]
-    rel_frame = state.link_rel_frame(robot.links[joint.child_link_id].name, target_link.name)
+    rel_frame = state_dict_to_rel_frame(state, robot.links[joint.child_link_id].name, target_link.name)
     mat = __target_part_link_jacob(target_link, joint, rel_frame)
     jacob[:,joint.dof_index:joint.dof_index+joint.dof] = mat
     
   return jacob
 
-# specific 3d space (magic number 6)
-def __link_cmtm_jacobian(robot, state : RobotState, target_link : LinkStruct, order : int) -> np.ndarray:
+def __link_cmtm_jacobian(robot, state : dict, target_link : LinkStruct, order : int) -> np.ndarray:
   jacob = np.zeros((6*order,robot.dof*order))
   link_route = []
   joint_route = []
@@ -121,9 +120,9 @@ def __link_cmtm_jacobian(robot, state : RobotState, target_link : LinkStruct, or
   for j in joint_route:
     joint = robot.joints[j]
     if joint.dof > 0:
-      rel_cmtm = state.link_rel_cmtm(robot.links[joint.child_link_id].name, target_link.name, order)
+      rel_cmtm = state_dict_to_rel_cmtm(state, robot.links[joint.child_link_id].name, target_link.name, order)
 
-      joint_cmtm = state.joint_cmtm(joint.name, order)
+      joint_cmtm = state_dict_to_cmtm(state, joint.name, order)
       mat = __target_part_link_cmtm_jacob(target_link, joint, rel_cmtm, joint_cmtm)
 
       for i in range(order):
@@ -131,7 +130,8 @@ def __link_cmtm_jacobian(robot, state : RobotState, target_link : LinkStruct, or
           = mat[:,i*joint.dof:(i+1)*joint.dof]
   return jacob
 
-def link_jacobian(robot : RobotStruct, state : RobotState, link_name_list : list[str]) -> np.ndarray:
+# specific 3d space (magic number 6)
+def link_jacobian(robot : RobotStruct, state : dict, link_name_list : list[str]) -> np.ndarray:
   links = robot.link_list(link_name_list)
   jacobs = np.zeros((6*len(links),robot.dof))
   for i in range(len(links)):
@@ -139,14 +139,14 @@ def link_jacobian(robot : RobotStruct, state : RobotState, link_name_list : list
   return jacobs
 
 # specific 3d space (magic number 6)
-def link_cmtm_jacobian(robot : RobotStruct, state : RobotState, link_name_list : list[str], order = 3) -> np.ndarray:
+def link_cmtm_jacobian(robot : RobotStruct, state : dict, link_name_list : list[str], order = 3) -> np.ndarray:
   links = robot.link_list(link_name_list)
   jacobs = np.zeros((6*order*len(links),robot.dof*order))
   for i in range(len(links)):
-    link_cmtm = state.link_cmtm(link_name_list[i], order)
+    link_cmtm = state_dict_to_cmtm(state, link_name_list[i], order)
     jacobs[6*order*i:6*order*(i+1),:] \
       = link_cmtm.tan_mat_inv_adj() @ __link_cmtm_jacobian(robot, state, links[i], order)
-   
+  
   return jacobs
 
 def link_diff_kinematics_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str],  data_type : str, order = None, \
