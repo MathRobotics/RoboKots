@@ -40,7 +40,7 @@ def kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict:
   # Initialize CMTM for the world link
   # The world link is the parent of the first joint
   world_name = robot.links[robot.joints[0].parent_link_id].name
-  state_cmtm.update([(world_name, CMTM.eye(SE3, order-1))])
+  state_cmtm.update([(world_name, CMTM.eye(SE3, order))])
  
   state = cmtm_to_state_dict(state_cmtm[world_name], world_name)
   state_data.update(state)

@@ -393,7 +393,7 @@ def test_part_link_cmtm_jacob_numerical():
     
     joint_motions = np.array([joint_coord, joint_veloc, joint_accel])
     
-    rel_frame = CMTM.rand(SE3,2)
+    rel_frame = CMTM.rand(SE3,3)
     joint_frame = joint_local_cmtm(joint, joint_motions)
     result_jacob = part_link_cmtm_jacob(joint, rel_frame, joint_frame)
 
