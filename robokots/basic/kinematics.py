@@ -101,13 +101,14 @@ def acc_kinematics(joint : JointData, p_link_vel : np.ndarray, p_link_acc : np.n
   return acc
 
 def kinematics_cmtm(joint : JointData, p_link_cmtm : CMTM, joint_motions : np.ndarray, order = 3) -> CMTM:
+  if joint.dof * orde != len(joint_motions):
+    raise ValueError(f"Invalid joint motions: {len(joint_motions)}. Must be {joint.dof * order}.")
   rel_m = link_rel_cmtm(joint, joint_motions, order)
   m = p_link_cmtm @ rel_m
   return m
 
 def part_link_jacob(joint : JointData, rel_frame : np.ndarray) -> np.ndarray:
   return rel_frame.mat_inv_adj()[:, joint.select_indeces]
-  
 
 # specific 3D space (magic number 6)
 def part_link_cmtm_tan_jacob(joint : JointData, rel_cmtm : CMTM, joint_cmtm : CMTM) -> np.ndarray:
