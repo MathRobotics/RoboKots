@@ -78,7 +78,7 @@ def __target_part_link_jacob(target_link : LinkStruct, joint : JointStruct, rel_
   return mat
 
 # specific 3d space (magic number 6)
-def __target_part_link_cmtm_jacob(target_link : LinkStruct, joint : JointStruct, rel_cmtm : CMTM, joint_cmtm : CMTM) -> np.ndarray:
+def __target_part_link_cmtm_tan_jacob(target_link : LinkStruct, joint : JointStruct, rel_cmtm : CMTM, joint_cmtm : CMTM) -> np.ndarray:
   '''
   Compute the Jacobian matrix for the target part link in CMTM space.
   Args:
@@ -94,7 +94,7 @@ def __target_part_link_cmtm_jacob(target_link : LinkStruct, joint : JointStruct,
       mat[i*6:(i+1)*6, i*joint.dof:(i+1)*joint.dof] = (tmp[i*6:(i+1)*6, i*6:(i+1)*6])[:, joint.select_indeces]
   else:
     joint_data = convert_joint_to_data(joint)
-    mat = part_link_cmtm_jacob(joint_data, rel_cmtm, joint_cmtm)
+    mat = part_link_cmtm_tan_jacob(joint_data, rel_cmtm, joint_cmtm)
   return mat
 
 def __link_jacobian(robot, state : dict, target_link : LinkStruct) -> np.ndarray:
@@ -111,7 +111,7 @@ def __link_jacobian(robot, state : dict, target_link : LinkStruct) -> np.ndarray
     
   return jacob
 
-def __link_cmtm_jacobian(robot, state : dict, target_link : LinkStruct, order : int) -> np.ndarray:
+def __link_cmtm_tan_jacobian(robot, state : dict, target_link : LinkStruct, order : int) -> np.ndarray:
   jacob = np.zeros((6*order,robot.dof*order))
   link_route = []
   joint_route = []
@@ -123,7 +123,7 @@ def __link_cmtm_jacobian(robot, state : dict, target_link : LinkStruct, order : 
       rel_cmtm = state_dict_to_rel_cmtm(state, robot.links[joint.child_link_id].name, target_link.name, order)
 
       joint_cmtm = state_dict_to_cmtm(state, joint.name, order)
-      mat = __target_part_link_cmtm_jacob(target_link, joint, rel_cmtm, joint_cmtm)
+      mat = __target_part_link_cmtm_tan_jacob(target_link, joint, rel_cmtm, joint_cmtm)
 
       for i in range(order):
         jacob[:,i*robot.dof+joint.dof_index:i*robot.dof+joint.dof_index+joint.dof]  \
@@ -145,7 +145,7 @@ def link_cmtm_jacobian(robot : RobotStruct, state : dict, link_name_list : list[
   for i in range(len(links)):
     link_cmtm = state_dict_to_cmtm(state, link_name_list[i], order)
     jacobs[6*order*i:6*order*(i+1),:] \
-      = link_cmtm.tan_map_inv_adj() @ __link_cmtm_jacobian(robot, state, links[i], order)
+      = link_cmtm.tan_map_inv_adj() @ __link_cmtm_tan_jacobian(robot, state, links[i], order)
   
   return jacobs
 

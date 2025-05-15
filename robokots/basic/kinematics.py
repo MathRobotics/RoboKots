@@ -110,7 +110,7 @@ def part_link_jacob(joint : JointData, rel_frame : np.ndarray) -> np.ndarray:
   
 
 # specific 3D space (magic number 6)
-def part_link_cmtm_jacob(joint : JointData, rel_cmtm : CMTM, joint_cmtm : CMTM) -> np.ndarray:
+def part_link_cmtm_tan_jacob(joint : JointData, rel_cmtm : CMTM, joint_cmtm : CMTM) -> np.ndarray:
   '''
   jacobian matrix which map joint space to cmtm space wrt to a link
   Args:
@@ -128,3 +128,6 @@ def part_link_cmtm_jacob(joint : JointData, rel_cmtm : CMTM, joint_cmtm : CMTM) 
       mat[i*6:(i+1)*6, j*joint.dof:(j+1)*joint.dof] = (tmp[i*6:(i+1)*6,j*6:(j+1)*6])[:, joint.select_indeces]
       
   return mat
+
+def part_link_cmtm_jacob(joint : JointData, rel_cmtm : CMTM, joint_cmtm : CMTM, link_cmtm : CMTM) -> np.ndarray:
+  return link_cmtm.tan_map_inv_adj() @ part_link_cmtm_tan_jacob(joint, rel_cmtm, joint_cmtm)
