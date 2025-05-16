@@ -435,7 +435,7 @@ def test_part_link_cmtm_jacob():
     rel_cmtm = CMTM.rand(SE3, order) # Identity matrix for simplicity
     joint_cmtm = joint_local_cmtm(joint, np.random.rand(order,1), order)
     expected_jacob = np.zeros((6 * order, joint.dof * order))
-    tmp = rel_cmtm.mat_inv_adj() @ joint_cmtm.tan_map_adj()
+    tmp = rel_cmtm.mat_inv_adj() @ joint_cmtm.tan_map()
 
     for i in range(order):
         for j in range(i+1):

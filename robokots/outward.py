@@ -89,7 +89,7 @@ def __target_part_link_cmtm_tan_jacob(target_link : LinkStruct, joint : JointStr
   '''
   mat = np.zeros((rel_cmtm._n * 6, rel_cmtm._n * joint.dof))
   if target_link.id == joint.child_link_id:
-    tmp = joint_cmtm.tan_map_adj()
+    tmp = joint_cmtm.tan_map()
     for i in range(rel_cmtm._n):
       mat[i*6:(i+1)*6, i*joint.dof:(i+1)*joint.dof] = (tmp[i*6:(i+1)*6, i*6:(i+1)*6])[:, joint.select_indeces]
   else:
@@ -145,7 +145,7 @@ def link_cmtm_jacobian(robot : RobotStruct, state : dict, link_name_list : list[
   for i in range(len(links)):
     link_cmtm = state_dict_to_cmtm(state, link_name_list[i], order)
     jacobs[6*order*i:6*order*(i+1),:] \
-      = link_cmtm.tan_map_inv_adj() @ __link_cmtm_tan_jacobian(robot, state, links[i], order)
+      = link_cmtm.tan_map_inv() @ __link_cmtm_tan_jacobian(robot, state, links[i], order)
   
   return jacobs
 
