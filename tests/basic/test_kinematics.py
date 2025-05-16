@@ -354,12 +354,10 @@ def test_kinematics_cmtm_numerical():
 
     joint_motions = np.random.rand(order)
     p_link_cmtm = CMTM.rand(SE3, order)
-    # p_link_cmtm = CMTM.eye(SE3, order)
 
     result_cmtm = kinematics_cmtm(joint, p_link_cmtm, joint_motions, order)
 
-    print(result_cmtm.elem_mat())
-    print(result_cmtm.elem_vecs(0))
+    rel_cmtm = link_rel_cmtm(joint, joint_motions, order)
 
     # Calculate numerical kinematics
     def func(x):
@@ -371,16 +369,19 @@ def test_kinematics_cmtm_numerical():
         x_ = D @ x_init + d @ direct
         return x_
 
-    grad = mr.numerical_grad(joint_motions, func, delta, sub_func = mr.CMTM.sub_vec)
-    diff = mr.numerical_difference(joint_motions, func, delta, sub_func = mr.CMTM.sub_vec, update_func=update_func, direction=joint_motions[order-1])
+    diff = mr.numerical_difference(joint_motions, func, delta, sub_func = mr.CMTM.sub_ptan_vec, update_func=update_func, direction=np.ones(1))
 
-    expected_cmtm_vec = grad[:,:order-1] @ joint_motions[1:]
+    link_cmtm = p_link_cmtm @ rel_cmtm
+    base_vec = link_cmtm.tan_map_inv(order-1) @ rel_cmtm.mat_inv_adj(order-1) @ p_link_cmtm.tan_vecs_flatten()
+
+    diff = link_cmtm.ptan_map_inv(order) @ diff
+    diff[:(order-1)*6] +=  base_vec
+    
+    result_vecs = result_cmtm.vecs()
 
     for i in range(order-1):
-        print(result_cmtm.elem_vecs(i))
+        print(result_vecs[i])
         print(diff[i*6:(i+1)*6].T)
-        print(expected_cmtm_vec[i*6:(i+1)*6].T)
-        assert np.allclose(result_cmtm.elem_vecs(i), expected_cmtm_vec[i*6:(i+1)*6].T)
         assert np.allclose(result_cmtm.elem_vecs(i), diff[i*6:(i+1)*6])
 
     assert np.allclose(result_cmtm.elem_vecs(0), diff[i*6:(i+1)*6])
