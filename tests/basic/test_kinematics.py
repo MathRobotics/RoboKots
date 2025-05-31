@@ -219,9 +219,6 @@ def test_link_rel_cmtm_numerical():
     # Test with non-zero joint_coord, joint_veloc, and joint_accel
     result_cmtm = link_rel_cmtm(joint, joint_motions, order)
 
-    # Calculate numerical Jacobian
-    p0 = link_rel_frame(joint, joint_motions[:joint.dof].reshape(joint.dof))
-
     def func(x):
         return link_rel_cmtm(joint, x, order)
 
