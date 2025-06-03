@@ -350,7 +350,7 @@ def test_kinematics_cmtm():
 def test_kinematics_cmtm_numerical():
     # Create a mock joint with a specific select_mat
     joint = MockJoint(np.array([[0, 1, 0, 0, 0, 0]]).T)
-    order = 5
+    order = 6
 
     joint_motions = np.random.rand(order)
     p_link_cmtm = CMTM.rand(SE3, order)
@@ -369,23 +369,18 @@ def test_kinematics_cmtm_numerical():
         x_ = D @ x_init + d @ direct
         return x_
 
-    diff = mr.numerical_difference(joint_motions, func, delta, sub_func = mr.CMTM.sub_ptan_vec, update_func=update_func, direction=np.ones(1))
+    diff = mr.numerical_difference(joint_motions, func, delta, sub_func = mr.CMTM.sub_tan_vec_var, update_func=update_func, direction=np.ones(1))
 
     link_cmtm = p_link_cmtm @ rel_cmtm
     base_vec = link_cmtm.tan_map_inv(order-1) @ rel_cmtm.mat_inv_adj(order-1) @ p_link_cmtm.tan_vecs_flatten()
 
-    diff = link_cmtm.ptan_map_inv(order) @ diff
+    diff = link_cmtm.tan_map_inv() @ diff
     diff[:(order-1)*6] +=  base_vec
     
     result_vecs = result_cmtm.vecs()
 
     for i in range(order-1):
-        print(result_vecs[i])
-        print(diff[i*6:(i+1)*6].T)
         assert np.allclose(result_cmtm.elem_vecs(i), diff[i*6:(i+1)*6])
-
-    assert np.allclose(result_cmtm.elem_vecs(0), diff[i*6:(i+1)*6])
-
     
 def test_part_link_jacob():
     # Create a mock joint with a specific select_mat
@@ -397,7 +392,7 @@ def test_part_link_jacob():
     result_jacob = part_link_jacob(joint, rel_frame)
     assert np.allclose(result_jacob, expected_jacob)
 
-def test_part_link_jacob2():
+def test_part_link_jacob_vec():
     # Create a mock joint with a specific select_mat
     joint = MockJoint(np.array([[0, 1, 0, 0, 0, 0]]).T)
 
@@ -446,7 +441,7 @@ def test_part_link_cmtm_jacob():
 
     assert np.allclose(result_jacob, expected_jacob)
 
-def test_part_link_cmtm_jacob2():
+def test_part_link_cmtm_jacob_vec():
     # Create a mock joint with a specific select_mat
     joint = MockJoint(np.array([[0, 1, 0, 0, 0, 0]]).T)
     order = 5
@@ -468,6 +463,25 @@ def test_part_link_cmtm_jacob2():
     for i in range(order-1):
         assert np.allclose(result_vecs[i*6:(i+1)*6].T, expected_cmtm.elem_vecs(i))
 
+def test_part_link_cmtm_tan_jacob_numerical():
+    # Create a mock joint with a specific select_mat
+    joint = MockJoint(np.array([[0, 1, 0, 0, 0, 0]]).T)
+
+    order = 5
+
+    joint_motions = np.random.rand(order)
+    
+    rel_frame = CMTM.rand(SE3, order)
+    joint_frame = joint_local_cmtm(joint, joint_motions, order)
+    result_jacob = part_link_cmtm_tan_jacob(joint, rel_frame, joint_frame)
+
+    # Calculate numerical Jacobian
+    def func(x):
+        return joint_local_cmtm(joint, x, order) @ rel_frame
+    numerical_jacob = mr.numerical_grad(joint_motions, func, delta, sub_func = mr.CMTM.sub_tan_vec_var)
+    
+    assert np.allclose(result_jacob, numerical_jacob)
+
 def test_part_link_cmtm_jacob_numerical():
     # Create a mock joint with a specific select_mat
     joint = MockJoint(np.array([[0, 1, 0, 0, 0, 0]]).T)
@@ -476,36 +490,16 @@ def test_part_link_cmtm_jacob_numerical():
 
     joint_motions = np.random.rand(order)
     
-    # rel_frame = CMTM.rand(SE3, order)
-    rel_frame = CMTM.eye(SE3, order)
+    rel_frame = CMTM.rand(SE3, order)
     joint_frame = joint_local_cmtm(joint, joint_motions, order)
     link_frame = joint_frame @ rel_frame
-    # result_jacob = part_link_cmtm_tan_jacob(joint, rel_frame, joint_frame)
     result_jacob = part_link_cmtm_jacob(joint, rel_frame, joint_frame, link_frame)
 
     # Calculate numerical Jacobian
-    p0 = joint_frame @ rel_frame
-
     def func(x):
         return joint_local_cmtm(joint, x, order) @ rel_frame
 
-    numerical_jacob =  mr.numerical_grad(joint_motions, func, delta, sub_func = mr.CMTM.sub_vec)
+    numerical_jacob =  mr.numerical_grad(joint_motions, func, delta, sub_func = mr.CMTM.sub_tan_vec_var)
+    numerical_jacob = link_frame.tan_map_inv() @ numerical_jacob
     
-    # rel_frame.print()
-
-    expected_jacob = np.zeros((6*order, order))
-    for i in range(order):
-      x_ = joint_motions.copy()
-      x_[i] += delta
-      p1 = joint_local_cmtm(joint, x_, order) @ rel_frame
-    #   dp = mr.CMTM.ptan_to_tan(6, order) @ mr.CMTM.sub_ptan_vec(p0, p1) / delta
-      dp = mr.CMTM.sub_vec(p0, p1) / delta
-      expected_jacob[:,i] = dp
-
-    # rel_frame.print()
-
-    print("result_jacob\n", result_jacob[18:])
-    print("expected_jacob\n", expected_jacob[18:])
-    print("numerical_jacob\n", numerical_jacob[18:])
-    
-    # assert np.allclose(result_jacob, expected_jacob)
+    assert np.allclose(result_jacob, numerical_jacob, atol=1e-6, rtol=1e-6)
