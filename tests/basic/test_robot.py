@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from mathrobo import SE3
-from robokots.robot import RobotStruct, LinkStruct, JointStruct
+from robokots.basic.robot import RobotStruct, LinkStruct, JointStruct
 
 
 def test_robot_struct_init():

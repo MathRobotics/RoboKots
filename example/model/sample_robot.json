@@ -45,7 +45,7 @@
       "parent_link_id": 0,
       "child_link_id": 1,
       "origin": {
-        "position": [0, 0, 0.0],
+        "position": [0, 0, 0],
         "orientation": [1, 0, 0, 0]
       }
     },
@@ -58,7 +58,7 @@
       "axis": [0, 0, 1],
       "limits": {"min": -1.57, "max": 1.57},
       "origin": {
-        "position": [0, 0, 0.1],
+        "position": [1, 1, 0],
         "orientation": [1, 0, 0, 0]
       }
     },
@@ -71,7 +71,7 @@
       "axis": [0, 0, 1],
       "limits": {"min": -1.57, "max": 1.57},
       "origin": {
-        "position": [1, 0, 0],
+        "position": [1, 1, 0],
         "orientation": [1, 0, 0, 0]
       }
     },
@@ -84,7 +84,7 @@
       "axis": [0, 0, 1],
       "limits": {"min": -1.57, "max": 1.57},
       "origin": {
-        "position": [1, 0, 0],
+        "position": [1, 1, 0],
         "orientation": [1, 0, 0, 0]
       }
     }

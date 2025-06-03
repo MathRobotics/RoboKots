@@ -4,17 +4,15 @@
 
 import numpy as np
 
-from .robot import RobotStruct, JointStruct, LinkStruct
-
 class RobotMotions:
   motions : np.ndarray = np.array([])
   ALLOWED_ALIASES = frozenset(["coord", "veloc", "accel", "accel_diff1", "accel_diff2", "accel_diff3"])
 
-  def __init__(self, robot : RobotStruct, aliases_ = ["coord", "veloc", "accel"]):
+  def __init__(self, robot_dof : int, aliases_ = ["coord", "veloc", "accel"]):
     if not set(aliases_).issubset(self.ALLOWED_ALIASES):
       raise ValueError(f"Invalid alias: {set(aliases_) - self.ALLOWED_ALIASES}")
     self.aliases = aliases_
-    self.dof = robot.dof
+    self.dof = robot_dof
     self.motion_num = len(self.aliases) 
     self.motions = np.zeros(self.dof * self.motion_num)
     
@@ -47,31 +45,34 @@ class RobotMotions:
   def accel(self):
     return self.gen_values("accel")
     
-  def gen_value(self, joint : JointStruct, name : str):
+  def gen_value(self, dof : int, dof_index : int, name : str):
     m_index = self.motion_index(name)
-    offset = self.dof * m_index + joint.dof_index
-    return self.motions[offset : offset + joint.dof]
+    offset = self.dof * m_index + dof_index
+    return self.motions[offset : offset + dof]
   
-  def joint_coord(self, joint : JointStruct):
-    return self.gen_value(joint, "coord")
+  def joint_coord(self, dof : int, dof_index : int):
+    return self.gen_value(dof, dof_index, "coord")
   
-  def joint_veloc(self, joint : JointStruct):
-    return self.gen_value(joint, "veloc")
+  def joint_veloc(self, dof : int, dof_index : int):
+    return self.gen_value(dof, dof_index, "veloc")
   
-  def joint_accel(self, joint : JointStruct):
-    return self.gen_value(joint, "accel")
+  def joint_accel(self, dof : int, dof_index : int):
+    return self.gen_value(dof, dof_index, "accel")
 
-  def link_coord(self, link : LinkStruct):
-    return self.gen_value(link, "coord")
+  def link_coord(self, dof : int, dof_index : int):
+    return self.gen_value(dof, dof_index, "coord")
   
-  def link_veloc(self, link : LinkStruct):
-    return self.gen_value(link, "veloc")
+  def link_veloc(self, dof : int, dof_index : int):
+    return self.gen_value(dof, dof_index, "veloc")
   
-  def link_accel(self, link : LinkStruct):
-    return self.gen_value(link, "accel")
+  def link_accel(self, dof : int, dof_index : int):
+    return self.gen_value(dof, dof_index, "accel")
 
-  def joint_motions(self, joint : JointStruct):
+  def joint_motions(self, joint_dof : int, joint_dof_index : int, order = None):
+    if order is None:
+      order = self.motion_num
     values = ()
-    for a in self.aliases:
-      values += (self.gen_value(joint, a),)
+    for i in range(order):
+      values += (self.gen_value(joint_dof, joint_dof_index, self.aliases[i]),)
+
     return np.array(values)

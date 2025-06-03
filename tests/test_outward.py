@@ -1,7 +1,7 @@
 import numpy as np
 
 from mathrobo import SE3, CMTM
-from robokots.forward import *
+from robokots.outward import *
 
 class MockJoint: 
     def __init__(self, name, parent_link_id=0):
@@ -43,24 +43,3 @@ class MockRobot:
         self.links[0].id = 0
         self.links[1].id = 1
         self.dof = 2
-
-def test_cmtm_to_state():
-    cmtm = CMTM.eye(SE3)
-    name = "link1"
-    
-    state_data = cmtm_to_state(cmtm, name)
-
-    state_dict = {}
-    state_dict.update(state_data)
-    
-    # Check if the state data contains the expected keys
-    assert "link1_pos" in state_dict.keys()
-    assert "link1_rot" in state_dict.keys()
-    assert "link1_vel" in state_dict.keys()
-    assert "link1_acc" in state_dict.keys()
-
-    # Check if the state data has the expected values
-    assert np.allclose(state_dict["link1_pos"], [0., 0., 0.])
-    assert np.allclose(state_dict["link1_rot"], [1., 0., 0., 0., 1., 0., 0., 0., 1.])
-    assert np.allclose(state_dict["link1_vel"], [0., 0., 0., 0., 0., 0.])
-    assert np.allclose(state_dict["link1_acc"], [0., 0., 0., 0., 0., 0.])

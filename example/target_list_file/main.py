@@ -20,6 +20,13 @@ def main():
     for i in range(len(fk_vel)):
       print(fk_vel[i])
       print(jacob_vel[6*i:6*(i+1)])
+
+    fk_acc = kots.state_target_link_info('acc')
+    jacob_acc = kots.link_jacobian_target(2)@np.array((kots.motion("veloc"),kots.motion("accel"))).flatten()
+
+    for i in range(len(fk_acc)):
+      print(fk_acc[i])
+      print(jacob_acc[12*i+6:12*i+12])
   
 if __name__ == "__main__":
     main()

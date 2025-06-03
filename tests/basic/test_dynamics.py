@@ -1,7 +1,7 @@
 import numpy as np
 
 from mathrobo import SO3, SE3
-from robokots.dynamics import *
+from robokots.basic.dynamics import *
 
 '''
 Test dynamics function
