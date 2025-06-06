@@ -109,6 +109,35 @@ def cmtm_to_state_dict(cmtm : CMTM, name : str) -> dict:
   
   return state
 
+def dict_to_link_pos(state : dict, name : str) -> np.ndarray:
+    '''
+    Convert state data to link position
+    Args:
+        state (dict): state data
+        name (str): name of the link
+    Returns:
+        np.ndarray: position vector
+    '''
+    pos = np.array(state[name+"_pos"])
+
+    return pos
+
+def dict_to_links_pos(state : dict, link_names : list) -> np.ndarray:
+    '''
+    Convert state data to link positions
+    Args:
+        state (dict): state data
+        link_names (list): list of link names
+    Returns:
+        np.ndarray: array of positions
+    '''
+    pos_list = []
+    for name in link_names:
+        pos = dict_to_link_pos(state, name)
+        pos_list.append(pos)
+    
+    return np.array(pos_list)
+
 def state_dict_to_rot(state : dict, name : str) -> np.ndarray:
     '''
     Convert state data to rotation matrix
@@ -287,6 +316,6 @@ def sub_state_dict_vec(data0 : dict, data1 : dict, type : str, name : str) -> di
     elif type == "frame":
         return SE3.sub_tan_vec(data0[type], data1[type], "bframe")
     elif type == "cmtm":
-        return CMTM.sub_vec(data0[type], data1[type], "bframe")
+        return CMTM.sub_tan_vec_var(data0[type], data1[type], "bframe")
     else:
         raise ValueError(f"Invalid type: {set(type)}")

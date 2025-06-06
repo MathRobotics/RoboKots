@@ -178,4 +178,4 @@ class Kots():
       conectivity[i, 0] = joint.child_link_id
       conectivity[i, 1] = joint.parent_link_id
 
-    d_show_robot(conectivity, self.state_.all_link_pos(self.robot_.links), save)
+    d_show_robot(conectivity, dict_to_links_pos(self.state_dict_, self.robot_.link_names), save)
