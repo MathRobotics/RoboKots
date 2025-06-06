@@ -20,7 +20,5 @@ def main():
   
   kots.dynamics()
   
-  print(kots.state_df())
-  
 if __name__ == "__main__":
     main()

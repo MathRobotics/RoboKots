@@ -20,8 +20,6 @@ def main():
   
   kots.kinematics()
   
-  print(kots.state_df())
-  
   print(kots.link_jacobian(["arm1","arm2","arm3"]))
   
 if __name__ == "__main__":
