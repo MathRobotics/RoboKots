@@ -122,6 +122,9 @@ class Kots():
   
   def dynamics(self):
     self.state_dict_ = dynamics(self.robot_, self.motions_)
+
+  def set_state_df(self):
+    self.state_.import_state(self.state_dict_)
     
   def set_target_from_file(self, target_file : str):
     if not target_file:
@@ -179,3 +182,22 @@ class Kots():
       conectivity[i, 1] = joint.parent_link_id
 
     d_show_robot(conectivity, dict_to_links_pos(self.state_dict_, self.robot_.link_names), save)
+
+  def show_link_points(self):
+    print(dict_to_links_pos(self.state_dict_, self.robot_.link_names))
+    d_show_link_points(dict_to_links_pos(self.state_dict_, self.robot_.link_names))
+
+  def show_target_link_points(self):
+    if not self.target_:
+      raise ValueError("target_ is not set")
+    d_show_link_points(dict_to_links_pos(self.state_dict_, self.target_.target_names))
+
+  def target_link_pos_traj(self):
+    if not self.target_:
+      raise ValueError("target_ is not set")
+    return self.state_.extract_links_info_traj("pos", self.target_.target_names)
+
+  def show_points(self, points):
+    d_show_link_points(points)
+
+  
