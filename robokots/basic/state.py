@@ -54,36 +54,29 @@ class RobotState:
     return df[name+"_"+type][-1].to_numpy()
   
   @staticmethod
+  def state_vecs(df, names : list, type : str) -> np.ndarray:
+    vecs = []
+    for name in names:
+      vecs.append(df[name+"_"+type][-1])
+    return np.array(vecs)
+  
+  @staticmethod
+  def state_vec_traj(df, name : str, type : str) -> np.ndarray:
+    return df[name+"_"+type].to_numpy()
+  
+  @staticmethod
+  def state_vecs_traj(df, names : list, type : str) -> np.ndarray:
+    length = df[names[0]+"_"+type].shape[0]
+    vecs = np.zeros((len(names), length, 3))
+    for i in range(len(names)):
+      vecs[i] = np.array(df[names[i]+"_"+type].to_list())
+    return vecs
+  
+  @staticmethod
   def state_mat(df, name : str, type : str) -> np.ndarray:
     mat_vec = df[name+"_"+type][-1].to_numpy()
     mat = mat_vec.reshape((3,3))
     return mat
-  
-  def all_state_vec(self, links, type : str) -> np.ndarray:
-    labels = []
-    for l in links:
-      labels.append(l.name+"_"+type) 
-    mat = [self.df()[label][-1].to_list() for label in labels]
-    return np.array(mat)
-  
-  def link_pos(self, link_name : str) -> np.ndarray:
-    return RobotState.state_vec(self.df(), link_name, "pos")
-  
-  def all_link_pos(self, links) -> np.ndarray:
-    return self.all_state_vec(links, "pos")
-  
-  def link_rot(self, link_name : str) -> np.ndarray:
-    return RobotState.state_mat(self.df(), link_name, "rot")
-
-  def link_vel(self, link_name : str) -> np.ndarray:
-    return RobotState.state_vec(self.df(), link_name, "vel")
-
-  def link_acc(self, link_name : str) -> np.ndarray:
-    return RobotState.state_vec(self.df(), link_name, "acc")
-    
-  def link_frame(self, link_name : str) -> SE3:
-    h = SE3(self.link_rot(link_name), self.link_pos(link_name))
-    return h
   
   def link_values(self, link_name : str, order : int) -> dict:
     if order < 1:
@@ -108,30 +101,6 @@ class RobotState:
       vec[i-1] = state[i]
     cmtm = CMTM[SE3](h, vec)
     return cmtm
-
-  def link_rel_frame(self, base_link_name : str, target_link_name : str) -> SE3:
-    h = self.link_frame(base_link_name).inv() @ self.link_frame(target_link_name)
-    return h
-  
-  def link_rel_cmtm(self, base_link_name : str, target_link_name : str, order : int) -> CMTM:
-    x = self.link_cmtm(base_link_name, order).inv() @ self.link_cmtm(target_link_name, order)
-    return x
-
-  def joint_pos(self, joint_name : str) -> np.ndarray:
-    return RobotState.state_vec(self.df(), joint_name, "pos")
-  
-  def joint_rot(self, joint_name : str) -> np.ndarray:
-    return RobotState.state_mat(self.df(), joint_name, "rot")
-
-  def joint_vel(self, joint_name : str) -> np.ndarray:
-    return RobotState.state_vec(self.df(), joint_name, "vel")
-
-  def joint_acc(self, joint_name : str) -> np.ndarray:
-    return RobotState.state_vec(self.df(), joint_name, "acc")
-    
-  def joint_frame(self, joint_name : str) -> SE3:
-    h = SE3(self.joint_rot(joint_name), self.joint_pos(joint_name))
-    return h
 
   def joint_values(self, joint_name : str, order : int) -> dict:
     if order < 1:
@@ -160,15 +129,16 @@ class RobotState:
   #specific 3d-CMTM
   def extract_link_info(self, type : str, link_name : str, frame = "dummy", rel_frame = 'dummy'):
     if type == "pos":
-      return self.link_pos(link_name)
+      return RobotState.state_vec(self.df(), link_name, "pos")
     elif type == "rot":
-      return self.link_rot(link_name)
+      return RobotState.state_mat(self.df(), link_name, "rot")
     elif type == "vel":
-      return self.link_vel(link_name)
+      return RobotState.state_vec(self.df(), link_name, "vel")
     elif type == "acc":
-      return self.link_acc(link_name)
+      return RobotState.state_vec(self.df(), link_name, "acc")
     elif type == "frame":
-      return self.link_frame(link_name)
+      return SE3(RobotState.state_mat(self.df(), link_name, "rot"),
+             RobotState.state_vec(self.df(), link_name, "pos"))
     elif type == "cmtm":
       return self.link_cmtm(link_name)
     else:
@@ -176,11 +146,11 @@ class RobotState:
     
   def extract_joint_info(self, type : str, joint_name : str, frame = "dummy", rel_frame = 'dummy'):
     if type == "coord":
-      return self.joint_coord(joint_name)
+      return RobotState.state_vec(self.df(), joint_name, "coord")
     elif type == "veloc":
-      return self.joint_veloc(joint_name)
+      return  RobotState.state_vec(self.df(), joint_name, "veloc")
     elif type == "accel":
-      return self.joint_accel(joint_name)
+      return RobotState.state_vec(self.df(), joint_name, "accel")
     elif type == "cmtm":
       return self.joint_cmtm(joint_name)
     else:
@@ -212,6 +182,33 @@ class RobotState:
       return self.extract_total_info(type, name, frame, rel_frame)
     else:
       raise ValueError(f"Invalid group: {set(group)}")
+    
+  def extract_links_info_traj(self, type : str, link_names : list, frame = "dummy", rel_frame = 'dummy'):
+    '''
+    type : str
+      pos
+      rot
+      vel
+      acc
+      frame
+    names : list of str
+      link names
+    '''
+    if type == "pos":
+      return RobotState.state_vecs_traj(self.df(), link_names, "pos")
+    elif type == "rot":
+      return RobotState.state_mat(self.df(), link_names, "rot")
+    elif type == "vel":
+      return RobotState.state_vecs_traj(self.df(), link_names, "vel")
+    elif type == "acc":
+      return RobotState.state_vecs_traj(self.df(), link_names, "acc")
+    elif type == "frame":
+      return SE3(RobotState.state_mat(self.df(), link_names, "rot"),
+             RobotState.state_vecs_traj(self.df(), link_names, "pos"))
+    elif type == "cmtm":
+      return self.link_cmtm(link_names)
+    else:
+      raise ValueError(f"Invalid type: {set(type)}")
 
   def import_state(self, data : dict):
     self.state_df.add_row(data)
