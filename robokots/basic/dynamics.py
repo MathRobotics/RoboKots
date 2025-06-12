@@ -95,11 +95,11 @@ def link_mometum_cmtm(inertia : np.ndarray, vecs : np.ndarray) -> np.ndarray:
     Calculate the link momentum and centripetal momentum.
     Args:
         inertia (numpy.ndarray): 6x6 spatial inertia matrix of the link.
-        vecs (numpy.ndarray): 6xn spatial vectors of the link.
+        vecs (numpy.ndarray): nx6 spatial vectors of the link.
     Returns:
         numpy.ndarray: 6xn spatial momentum vectors of the link.
     """
-    return inertia @ vecs.T
+    return (inertia @ vecs.T).reshape(-1)
 
 def link_dynamics_cmtm(inertia : np.ndarray, vecs : np.ndarray) -> np.ndarray:
     """
