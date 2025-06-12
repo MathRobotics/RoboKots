@@ -90,7 +90,7 @@ def joint_dynamics(joint : JointStruct, rel_frame : SE3, p_joint_force : np.ndar
     joint_torque = joint.select_mat.T @ joint_force
     return joint_torque, joint_torque
 
-def link_mometum_cmtm(inertia : np.ndarray, vecs : np.ndarray) -> np.ndarray:
+def link_momentum_cmtm(inertia : np.ndarray, vecs : np.ndarray) -> np.ndarray:
     """
     Calculate the link momentum and centripetal momentum.
     Args:
@@ -116,11 +116,11 @@ def link_dynamics_cmtm(inertia : np.ndarray, vecs : np.ndarray) -> np.ndarray:
         frac[i] = frac[i-1] * i
 
     ## remain : implement frac
-    return link_momentum(inertia, vecs[1:]) - CMTM.hat_adj(SE3, vecs[:-1]).T @ link_momentum(inertia, vecs[:-1])
+    return link_momentum_cmtm(inertia, vecs[1:]) - CMTM.hat_adj(SE3, vecs[:-1]).T @ link_momentum_cmtm(inertia, vecs[:-1])
 
 def joint_dynamics_cmtm(joint : JointStruct, rel_cmtm : CMTM, p_joint_force : np.ndarray, link_force : np.ndarray) -> tuple:
     joint_force = rel_cmtm.mat_inv_adj() @ p_joint_force - link_force
     joint_torque = np.zeros(joint.dof*rel_cmtm._n)
     for i in range(rel_cmtm._n):
-        joint_torque[i*6:(i+1)*6] = joint.selector(joint_force[i*6:(i+1)*6])
-    return joint_torque, joint_torque
+        joint_torque[i*joint.dof:(i+1)*joint.dof] = (joint_force[i*6:(i+1)*6])[joint.select_indeces]
+    return joint_torque, joint_force
