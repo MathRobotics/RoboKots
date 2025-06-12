@@ -109,7 +109,7 @@ def cmtm_to_state_list(cmtm : CMTM, name : str) -> list:
   
   return state
 
-def vecs_to_state_dict(vec : np.ndarray, name : str, type_name : str, vec_dof = 6) -> list:
+def vecs_to_state_dict(vec : np.ndarray, name : str, type_name : str, order : int) -> list:
     '''
     Convert vector data to state data
     Args:
@@ -122,15 +122,28 @@ def vecs_to_state_dict(vec : np.ndarray, name : str, type_name : str, vec_dof = 
     '''
     state = []
 
-    if vec.size % vec_dof != 0:
-        raise ValueError("The size of vecs is not a multiple of vec_dof.")
+    if order > 0:
+        vec_dof = vec.size // order
+    else:
+        raise ValueError("order must be greater than 0")
+
+    if vec.size == 0 or vec_dof == 0:
+        return [
+            (
+                f"{name}_{type_name}" if i == 0 else f"{name}_{type_name}_diff{i}", []
+            )
+            for i in range(order)
+        ]
+
     vecs = vec.reshape(-1, vec_dof)
 
-    for i, v in enumerate(vecs):
-        if i == 0:
-            state.append((f"{name}_{type_name}", v.tolist()))
-        else:
-            state.append((f"{name}_{type_name}_diff{i}", v.tolist()))
+    state = [
+        (
+            f"{name}_{type_name}" if i == 0 else f"{name}_{type_name}_diff{i}",
+            row.tolist(),
+        )
+        for i, row in enumerate(vecs)
+    ]
 
     return state
 
@@ -289,11 +302,13 @@ def extract_dict_link_info(state : dict, data_type : str, link_name : str, frame
     elif data_type == "snap":
         return np.array(state[link_name+"_acc_diff2"])
     elif data_type == "frame":
-      return state_dict_to_frame(state, link_name)
+        return state_dict_to_frame(state, link_name)
     elif data_type == "cmtm":
-      return state_dict_to_cmtm(state, link_name)
+        return state_dict_to_cmtm(state, link_name)
+    elif data_type == "force":
+        return np.array(state[link_name+"_link_force"])
     else:
-      raise ValueError(f"Invalid type: {set(data_type)}")
+        raise ValueError(f"Invalid type: {set(data_type)}")
     
 def extract_dict_joint_info(state : dict, data_type : str, joint_name : str, frame = "dummy", rel_frame = 'dummy'):
     if data_type == "coord":
@@ -306,6 +321,10 @@ def extract_dict_joint_info(state : dict, data_type : str, joint_name : str, fra
         return state_dict_to_frame(state, joint_name)
     elif data_type == "cmtm":
         return state_dict_to_cmtm(state, joint_name)
+    elif data_type == "force":
+        return np.array(state[joint_name+"_joint_force"])
+    elif data_type == "torque":
+        return np.array(state[joint_name+"_joint_torque"])
     else:
         raise ValueError(f"Invalid type: {set(data_type)}")
     
