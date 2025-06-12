@@ -78,14 +78,14 @@ def count_dict_order(state: dict) -> int:
 
     return max_order
 
-def cmtm_to_state_dict(cmtm : CMTM, name : str) -> dict:
+def cmtm_to_state_list(cmtm : CMTM, name : str) -> list:
   '''
   Convert CMTM to state data
   Args:
     cmtm (CMTM): CMTM object
     name (str): name of the link
   Returns:
-    dict: state data
+    list: state data
   '''
   state = []
 
@@ -108,6 +108,31 @@ def cmtm_to_state_dict(cmtm : CMTM, name : str) -> dict:
       state.append((name+"_acc_diff"+str(i+1) , vec.tolist()))
   
   return state
+
+def vecs_to_state_dict(vec : np.ndarray, name : str, type_name : str, vec_dof = 6) -> list:
+    '''
+    Convert vector data to state data
+    Args:
+        vecs (np.ndarray): vector data
+        name (str): name of the link or joint
+        type_name (str): type of the vector (e.g., "link", "joint")
+        vec_dof (int): dimension of the vector
+    Returns:
+        list: state data
+    '''
+    state = []
+
+    if vec.size % vec_dof != 0:
+        raise ValueError("The size of vecs is not a multiple of vec_dof.")
+    vecs = vec.reshape(-1, vec_dof)
+
+    for i, v in enumerate(vecs):
+        if i == 0:
+            state.append((f"{name}_{type_name}", v.tolist()))
+        else:
+            state.append((f"{name}_{type_name}_diff{i}", v.tolist()))
+
+    return state
 
 def dict_to_link_pos(state : dict, name : str) -> np.ndarray:
     '''
@@ -230,37 +255,61 @@ def state_dict_to_rel_cmtm(state : dict, base_name : str, target_name : str, ord
 
     return rel_cmtm
 
-def extract_dict_link_info(state : dict, type : str, link_name : str, frame = "dummy", rel_frame = 'dummy'):
-    if type == "pos":
+def state_dict_to_force_vecs(state : dict, name : str, type_name : str) -> np.ndarray:
+    '''
+    Convert state data to vector
+    Args:
+        state (dict): state data
+        name (str): name of the link or joint
+        type_name (str): type of the vector (e.g., "link", "joint")
+    Returns:
+        np.ndarray: vector
+    '''
+    vecs = []
+    
+    for k in state.keys():
+        if k.startswith(name + "_") and k.endswith("_" + type_name):
+            vecs.append(np.array(state[k]))
+        elif re.match(rf"{name}_{type_name}_diff\d+", k):
+            vecs.append(np.array(state[k]))
+
+    return np.concatenate(vecs)
+
+def extract_dict_link_info(state : dict, data_type : str, link_name : str, frame = "dummy", rel_frame = 'dummy'):
+    if data_type == "pos":
       return np.array(state[link_name+"_pos"])
-    elif type == "rot":
+    elif data_type == "rot":
       return state_dict_to_rot(state, link_name)
-    elif type == "vel":
+    elif data_type == "vel":
       return np.array(state[link_name+"_vel"])
-    elif type == "acc":
+    elif data_type == "acc":
       return np.array(state[link_name+"_acc"])
-    elif type == "frame":
+    elif data_type == "jerk":
+        return np.array(state[link_name+"_acc_diff1"])
+    elif data_type == "snap":
+        return np.array(state[link_name+"_acc_diff2"])
+    elif data_type == "frame":
       return state_dict_to_frame(state, link_name)
-    elif type == "cmtm":
+    elif data_type == "cmtm":
       return state_dict_to_cmtm(state, link_name)
     else:
-      raise ValueError(f"Invalid type: {set(type)}")
+      raise ValueError(f"Invalid type: {set(data_type)}")
     
-def extract_dict_joint_info(state : dict, type : str, joint_name : str, frame = "dummy", rel_frame = 'dummy'):
-    if type == "coord":
+def extract_dict_joint_info(state : dict, data_type : str, joint_name : str, frame = "dummy", rel_frame = 'dummy'):
+    if data_type == "coord":
         return np.array(state[joint_name+"_coord"])
-    elif type == "veloc":
+    elif data_type == "veloc":
         return np.array(state[joint_name+"_veloc"])
-    elif type == "accel":
+    elif data_type == "accel":
         return np.array(state[joint_name+"_accel"])
-    elif type == "frame":
+    elif data_type == "frame":
         return state_dict_to_frame(state, joint_name)
-    elif type == "cmtm":
+    elif data_type == "cmtm":
         return state_dict_to_cmtm(state, joint_name)
     else:
-        raise ValueError(f"Invalid type: {set(type)}")
+        raise ValueError(f"Invalid type: {set(data_type)}")
     
-def extract_dict_total_info(data : dict, type : str, name : str, frame = "dummy", rel_frame = 'dummy'):
+def extract_dict_total_info(data : dict, data_type : str, name : str, frame = "dummy", rel_frame = 'dummy'):
     'dummy'
 
 def extract_dict_info(data : dict, data_type : str, group : str, name : str, frame = "dummy", rel_frame = 'dummy'):
