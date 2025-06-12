@@ -121,7 +121,7 @@ class Kots():
     self.state_dict_ = kinematics(self.robot_, self.motions_, self.order_)
   
   def dynamics(self):
-    self.state_dict_ = dynamics(self.robot_, self.motions_)
+    self.state_dict_ = dynamics_cmtm(self.robot_, self.motions_, self.order_-2)
 
   def set_state_df(self):
     self.state_.import_state(self.state_dict_)
