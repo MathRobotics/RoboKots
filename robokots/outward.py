@@ -309,7 +309,7 @@ def dynamics_cmtm(robot : RobotStruct, motions : RobotMotions, dynamics_order = 
     
     link_forces = link_dynamics_cmtm(inertia, link_cmtm.vecs())  
 
-    state = vecs_to_state_dict(link_forces, child.name, "link_force")
+    state = vecs_to_state_dict(link_forces, child.name, "link_force", dynamics_order)
     state_data.update(state)
     
     rel_cmtm = link_rel_cmtm(joint_data, joint_motion, dynamics_order)
@@ -320,10 +320,9 @@ def dynamics_cmtm(robot : RobotStruct, motions : RobotMotions, dynamics_order = 
 
     joint_torques, joint_forces = joint_dynamics_cmtm(joint, rel_cmtm, p_joint_force, link_forces)
 
-    state = vecs_to_state_dict(joint_forces, joint.name, "joint_force")
+    state = vecs_to_state_dict(joint_forces, joint.name, "joint_force", dynamics_order)
     state_data.update(state)
-    if joint.dof > 0:
-      state = vecs_to_state_dict(joint_torques, joint.name, "joint_torque", joint.dof)
-      state_data.update(state)
+    state = vecs_to_state_dict(joint_torques, joint.name, "joint_torque", dynamics_order)
+    state_data.update(state)
     
   return state_data
