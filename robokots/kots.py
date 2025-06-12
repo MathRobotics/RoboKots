@@ -78,8 +78,14 @@ class Kots():
   def order(self):
     return self.order_
   
+  def link_name_list(self):
+    return self.robot_.link_names
+  
   def link_list(self, name_list : list[str]):
     return self.robot_.link_list(name_list)
+  
+  def joint_name_list(self):
+    return self.robot_.joint_names
   
   def joint_list(self, name_list : list[str]):
     return self.robot_.joint_list(name_list)
@@ -116,6 +122,13 @@ class Kots():
 
   def state_joint_info_list(self, data_type : str, name_list : list[str]):
     return [extract_dict_joint_info(self.state_dict_, data_type, name) for name in name_list]
+  
+  def state_joint_vecs(self, data_type : str):
+    values = ()
+    for name in self.robot_.joint_names:
+      values += (extract_dict_joint_info(self.state_dict_, data_type, name),)
+    vecs = [v for v in values if v.size]
+    return np.array(vecs)
 
   def kinematics(self):
     self.state_dict_ = kinematics(self.robot_, self.motions_, self.order_)
