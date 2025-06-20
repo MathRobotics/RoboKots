@@ -7,12 +7,12 @@ import numpy as np
 
 from mathrobo import SO3, SE3, CMTM, numerical_grad, numerical_difference, build_integrator
 
-from .basic.robot import RobotStruct, LinkStruct, JointStruct
-from .basic.motion import RobotMotions
-from .basic.state import RobotState
-from .basic.kinematics import *
-from .basic.dynamics import *
-from .basic.state_dict import *
+from ..basic.robot import RobotStruct, LinkStruct, JointStruct
+from ..basic.motion import RobotMotions
+from ..basic.state import RobotState
+from ..kinematics.kinematics import *
+from ..dynamics.dynamics import *
+from ..basic.state_dict import *
 
 def convert_joint_to_data(joint: JointStruct) -> JointData:
   '''

@@ -1,7 +1,7 @@
 import numpy as np
 
 import mathrobo as mr
-from robokots.basic.kinematics import *
+from robokots.kinematics.kinematics import *
 
 # Define a mock joint object with a select_mat attribute
 class MockJoint:

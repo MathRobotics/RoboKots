@@ -1,7 +1,7 @@
 import numpy as np
 
 from mathrobo import SE3, CMTM
-from robokots.outward import *
+from robokots.outward.outward import *
 
 def test_extract_state_keys():
     state = {
@@ -39,11 +39,11 @@ def test_count_dict_order():
     state.update({"link_acc_diff2": []})
     assert count_dict_order(state) == 5
 
-def test_cmtm_to_state_dict():
+def test_cmtm_to_state_list():
     cmtm = CMTM.rand(SE3)
     name = "link"
     
-    state_data = cmtm_to_state_dict(cmtm, name)
+    state_data = cmtm_to_state_list(cmtm, name)
 
     state_dict = {}
     state_dict.update(state_data)
