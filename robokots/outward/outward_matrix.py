@@ -13,7 +13,7 @@ from ..dynamics.dynamics_matrix import inertia_diag_mat
 
 def link_to_joint_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
     n_ = dim * order
-    mat = np.zeros(r.joint_num * dim * order, r.link_num * dim * order)
+    mat = np.zeros((r.joint_num * dim * order, r.link_num * dim * order))
 
     for i, joint in enumerate(r.joints):
         p_id = joint.parent_link_id
@@ -25,7 +25,7 @@ def link_to_joint_mat(r : RobotStruct, state : dict, order : int = 3, dim : int 
 
 def link_to_joint_mat_inv(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
     n_ = dim * order
-    mat = np.zeros(r.joint_num * n_, r.link_num * n_)
+    mat = np.zeros((r.joint_num * n_, r.link_num * n_))
 
     for i, joint in enumerate(r.joints):
         c_id = joint.child_link_id
@@ -47,7 +47,7 @@ def link_inertia_mat(r : RobotStruct, order : int = 3, dim : int = 6) -> np.ndar
 
     return mat
 
-def joint_mat(r : RobotStruct, order : int = 3, dim : int = 6) -> np.ndarray:
+def coord_to_joint_mat(r : RobotStruct, order : int = 3, dim : int = 6) -> np.ndarray:
     n_ = dim * order
     mat = np.zeros((r.joint_num * n_, r.joint_dof * order))
 
@@ -56,7 +56,7 @@ def joint_mat(r : RobotStruct, order : int = 3, dim : int = 6) -> np.ndarray:
 
     return mat
 
-def joint_mat_inv(r : RobotStruct, order : int = 3, dim : int = 6) -> np.ndarray:
+def coord_to_joint_mat_inv(r : RobotStruct, order : int = 3, dim : int = 6) -> np.ndarray:
     n_ = dim * order
     mat = np.zeros((r.joint_dof * order, r.joint_num * n_))
 
@@ -64,3 +64,13 @@ def joint_mat_inv(r : RobotStruct, order : int = 3, dim : int = 6) -> np.ndarray
         mat[joint.dof_index:joint.dof_index+joint.dof, i*n_:(i+1)*n_] = joint.select_mat.T
 
     return mat
+
+def coord_to_link_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
+    return joint_to_link_mat(r, state, order, dim) @ coord_to_joint_mat(r, order, dim)
+
+def coord_to_link_momentum_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
+    return link_inertia_mat(r, order, dim) @ joint_to_link_mat(r, state, order, dim) @ coord_to_joint_mat(r, order, dim)
+
+def coord_to_joint_momentum_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
+    return link_to_joint_mat(r, state, order, dim) @ link_inertia_mat(r, order, dim) @ \
+            joint_to_link_mat(r, state, order, dim) @ coord_to_joint_mat(r, order, dim)
