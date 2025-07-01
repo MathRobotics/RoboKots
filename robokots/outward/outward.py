@@ -151,7 +151,7 @@ def link_cmtm_jacobian(robot : RobotStruct, state : dict, link_name_list : list[
 
 def link_diff_kinematics_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str],  data_type : str, order = None, \
                                     eps = 1e-8, update_method = None, update_direction = None) -> np.ndarray:
-  if data_type not in ["pos", "rot", "vel", "acc", "jark", "frame", "cmtm"]:
+  if data_type not in ["pos", "rot", "vel", "acc", "jerk", "frame", "cmtm"]:
     raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'frame' or 'cmtm'.")
 
   dof = 6
@@ -167,7 +167,7 @@ def link_diff_kinematics_numerical(robot : RobotStruct, motions : RobotMotions, 
     dof = 6
   elif data_type == "acc":
     dof = 6
-  elif data_type == "jark":
+  elif data_type == "jerk":
     dof = 6
   elif data_type == "cmtm":
     if order is None:
