@@ -4,7 +4,7 @@
 # dynamics computation module by matrix formulation
 
 import numpy as np
-import mathrobo as SO3, SE3, CMTM
+from mathrobo import SO3, SE3, CMTM
 
 def inertia_diag_mat(inertia : np.ndarray, order : int = 1) -> np.ndarray:
     if inertia.shape != (6, 6):
