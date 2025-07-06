@@ -14,8 +14,8 @@ from dataclasses import dataclass
 @dataclass
 class SoftLinkData:
     origin_coord: np.ndarray
-    length: float = 0.0 # length of the soft link
     select_mat: np.ndarray # selection matrix
+    length: float = 0.0 # length of the soft link
     dof: int = 0 # degree of freedom
     select_indeces: np.ndarray = None # indeces of the selection matrix
     
@@ -124,7 +124,7 @@ def part_soft_link_jacob(soft_link : SoftLinkData, soft_link_coord : np.ndarray,
   return ( rel_frame.mat_inv_adj() @ calc_local_tan_mat(soft_link, soft_link_coord) )[:, soft_link.select_indeces]
 
 # specific 3D space (magic number 6)
-def part_soft_link_cmtm_tan_jacob(soft_link : SoftLinkData, rel_cmtm : CMTM, soft_link_cmtm : CMTM) -> np.ndarray:
+def part_soft_link_cmtm_tan_jacob(soft_link : SoftLinkData,  soft_link_coord : np.ndarray, rel_cmtm : CMTM, soft_link_cmtm : CMTM) -> np.ndarray:
   '''
   jacobian matrix which map soft link space to cmtm space wrt to a link
   Args:
@@ -135,7 +135,7 @@ def part_soft_link_cmtm_tan_jacob(soft_link : SoftLinkData, rel_cmtm : CMTM, sof
   '''
 
   mat = np.zeros((rel_cmtm._n * 6, rel_cmtm._n * soft_link.dof))
-  tmp = rel_cmtm.mat_inv_adj() @ soft_link_cmtm.tan_map()
+  tmp = rel_cmtm.mat_inv_adj() @ calc_local_tan_mat(soft_link, soft_link_coord) @ soft_link_cmtm.tan_map()
 
   for i in range(rel_cmtm._n):
     for j in range(i+1):
@@ -143,5 +143,5 @@ def part_soft_link_cmtm_tan_jacob(soft_link : SoftLinkData, rel_cmtm : CMTM, sof
 
   return mat
 
-def part_soft_link_cmtm_jacob(soft_link : SoftLinkData, rel_cmtm : CMTM, soft_link_cmtm : CMTM, link_cmtm : CMTM) -> np.ndarray:
-  return link_cmtm.tan_map_inv() @ part_soft_link_cmtm_tan_jacob(soft_link, rel_cmtm, soft_link_cmtm)
+def part_soft_link_cmtm_jacob(soft_link : SoftLinkData,  soft_link_coord : np.ndarray, rel_cmtm : CMTM, soft_link_cmtm : CMTM, link_cmtm : CMTM) -> np.ndarray:
+  return link_cmtm.tan_map_inv() @ part_soft_link_cmtm_tan_jacob(soft_link, soft_link_coord, rel_cmtm, soft_link_cmtm)
