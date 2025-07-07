@@ -162,15 +162,15 @@ class Kots():
 
     if order == 1:
       if 0:
-        return link_jacobian(self.robot_, self.state_, link_name_list)
+        return link_jacobian(self.robot_, self.motions_, self.state_, link_name_list)
       else:
-        return link_jacobian(self.robot_, self.state_dict_, link_name_list)
+        return link_jacobian(self.robot_, self.motions_, self.state_dict_, link_name_list)
     else:
       if 0:
-        return link_cmtm_jacobian(self.robot_, self.state_, link_name_list, order)
+        return link_cmtm_jacobian(self.robot_, self.motions_, self.state_, link_name_list, order)
       else:
-        return link_cmtm_jacobian(self.robot_, self.state_dict_, link_name_list, order)
-  
+        return link_cmtm_jacobian(self.robot_, self.motions_, self.state_dict_, link_name_list, order)
+
   def link_jacobian_target(self, order = 3):
     if not self.target_:
       raise ValueError("target_ is not set")
