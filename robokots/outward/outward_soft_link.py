@@ -9,7 +9,7 @@ from mathrobo import SO3, SE3, CMTM, numerical_grad, numerical_difference, build
 
 from ..basic.robot import RobotStruct, LinkStruct, JointStruct
 from ..basic.motion import RobotMotions
-from ..kinematics.soft_link_kinematics import *
+from ..kinematics.kinematics_soft_link import *
 from ..dynamics.dynamics import *
 from ..basic.state_dict import *
 
