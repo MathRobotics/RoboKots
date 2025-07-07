@@ -61,7 +61,7 @@ def kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict:
 
 def __target_part_link_jacob(target_link : LinkStruct, link : LinkStruct, link_coord : np.ndarray, rel_frame : SE3) -> np.ndarray:
   if target_link.id == link.id:
-    mat = link.select_mat
+    mat = calc_local_tan_mat(link, link_coord)[:, link.select_indices]
   else:
     link_data = convert_link_to_data(link)
     mat = part_soft_link_jacob(link_data, link_coord, rel_frame)  
@@ -79,9 +79,9 @@ def __target_part_link_cmtm_tan_jacob(target_link : LinkStruct, link : LinkStruc
   '''
   mat = np.zeros((rel_cmtm._n * 6, rel_cmtm._n * link.dof))
   if target_link.id == link.id:
-    tmp = calc_local_tan_mat(link, link_motion) @ link_cmtm.tan_map()
+    tmp = calc_local_tan_mat(link, link_motion, rel_cmtm._n) @ link_cmtm.tan_map()
     for i in range(rel_cmtm._n):
-      mat[i*6:(i+1)*6, i*link.dof:(i+1)*link.dof] = (tmp[i*6:(i+1)*6, i*6:(i+1)*6])[:, link.select_indeces]
+      mat[i*6:(i+1)*6, i*link.dof:(i+1)*link.dof] = (tmp[i*6:(i+1)*6, i*6:(i+1)*6])[:, link.select_indices]
   else:
     link_data = convert_link_to_data(link)
     mat = part_soft_link_cmtm_tan_jacob(link_data, link_motion, rel_cmtm, link_cmtm)
