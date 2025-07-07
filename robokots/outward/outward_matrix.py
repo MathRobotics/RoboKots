@@ -121,5 +121,3 @@ def joint_jacob_force(robot : RobotStruct, state : dict, joint_name_list : list[
     for i, joint in enumerate(joints):
         jacobs[i*dim*order:(i+1)*dim*order, :] = mat[joint.id*dim*order:(joint.id+1)*dim*order, :]
     return jacobs
-
-def joint_jacobian_torque
