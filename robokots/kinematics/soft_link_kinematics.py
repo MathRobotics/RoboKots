@@ -9,15 +9,7 @@ from scipy.linalg import expm
 from mathrobo import SE3, CMTM
 from mathrobo import gq_integrate
 
-from dataclasses import dataclass
-
-@dataclass
-class SoftLinkData:
-    origin_coord: np.ndarray
-    select_mat: np.ndarray # selection matrix
-    length: float = 0.0 # length of the soft link
-    dof: int = 0 # degree of freedom
-    select_indeces: np.ndarray = None # indeces of the selection matrix
+from .base import SoftLinkData
     
 def calc_soft_link_strain(soft_link : SoftLinkData, soft_link_coord : np.ndarray) -> np.ndarray:
     if len(soft_link_coord) != 0:

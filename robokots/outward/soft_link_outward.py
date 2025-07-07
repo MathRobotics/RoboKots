@@ -44,7 +44,7 @@ def kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict:
   state = cmtm_to_state_list(state_cmtm[world_name], world_name)
   state_data.update(state)
   
-  for joint in robot.links:
+  for joint in robot.joints:
     parent = robot.links[joint.parent_link_id]
     child = robot.links[joint.child_link_id]
     
