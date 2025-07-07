@@ -19,4 +19,4 @@ def convert_link_to_data(link: LinkStruct) -> SoftLinkData:
   Returns:
     SoftLinkData: SoftLinkData structure
   '''
-  return  SoftLinkData(link.select_mat, link.dof, link.select_indeces)
+  return  SoftLinkData(link.origin_coord , link.select_mat, link.length, link.dof, link.select_indeces)

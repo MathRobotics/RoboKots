@@ -13,7 +13,7 @@ from .base import SoftLinkData
     
 def calc_soft_link_strain(soft_link : SoftLinkData, soft_link_coord : np.ndarray) -> np.ndarray:
     if len(soft_link_coord) != 0:
-        strain = soft_link.select_mat @ soft_link_coord + soft_link.origin_coord
+        strain = soft_link.select_mat @ soft_link_coord.flatten() + soft_link.origin_coord
     else:
         strain = soft_link.origin_coord
     return strain
@@ -25,10 +25,10 @@ def calc_local_tan_mat(soft_link : SoftLinkData,
         raise ValueError(f"Invalid order: {order}. Must be over 1.")
     
     if order == 1:
-        tan_mat = SE3.exp_integ_adj(calc_soft_link_strain(soft_link, soft_link_motion), soft_link.length)
+        tan_mat = -SE3.exp_integ_adj(calc_soft_link_strain(soft_link, soft_link_motion), -soft_link.length)
     else:
         motion = soft_link_motion.reshape((order, soft_link.dof))
-        strains = (soft_link.select_mat @ motion[i] for i in range(order))
+        strains = np.array([soft_link.select_mat @ motion[i] for i in range(order)])
         strains[0] += soft_link.origin_coord
         def integrad(s):
             x = expm(-s * soft_link.length * CMTM.hat_adj(SE3, strains))
@@ -79,9 +79,13 @@ def soft_link_local_cmtm(soft_link : SoftLinkData, soft_link_motions : np.ndarra
   #   vecs = vec.reshape((order-1, 6))
 
   # m = CMTM[SE3](frame, vecs)
-  
+
+  if soft_link.dof < 1:
+    return CMTM.eye(SE3, order)
+ 
   mot = soft_link_motions.copy()
-  mot[:6] += soft_link.origin_coord
+  mot[0] += soft_link.origin_coord
+
   mat = CMTM.set_mat(SE3, expm(soft_link.length * CMTM.hat(SE3, mot.reshape((order, 6)))))
 
   return mat
@@ -116,7 +120,7 @@ def part_soft_link_jacob(soft_link : SoftLinkData, soft_link_coord : np.ndarray,
   return ( rel_frame.mat_inv_adj() @ calc_local_tan_mat(soft_link, soft_link_coord) )[:, soft_link.select_indeces]
 
 # specific 3D space (magic number 6)
-def part_soft_link_cmtm_tan_jacob(soft_link : SoftLinkData,  soft_link_coord : np.ndarray, rel_cmtm : CMTM, soft_link_cmtm : CMTM) -> np.ndarray:
+def part_soft_link_cmtm_tan_jacob(soft_link : SoftLinkData,  soft_link_motion : np.ndarray, rel_cmtm : CMTM, soft_link_cmtm : CMTM) -> np.ndarray:
   '''
   jacobian matrix which map soft link space to cmtm space wrt to a link
   Args:
@@ -127,7 +131,7 @@ def part_soft_link_cmtm_tan_jacob(soft_link : SoftLinkData,  soft_link_coord : n
   '''
 
   mat = np.zeros((rel_cmtm._n * 6, rel_cmtm._n * soft_link.dof))
-  tmp = rel_cmtm.mat_inv_adj() @ calc_local_tan_mat(soft_link, soft_link_coord) @ soft_link_cmtm.tan_map()
+  tmp = rel_cmtm.mat_inv_adj() @ calc_local_tan_mat(soft_link, soft_link_motion, rel_cmtm._n)
 
   for i in range(rel_cmtm._n):
     for j in range(i+1):
@@ -135,5 +139,5 @@ def part_soft_link_cmtm_tan_jacob(soft_link : SoftLinkData,  soft_link_coord : n
 
   return mat
 
-def part_soft_link_cmtm_jacob(soft_link : SoftLinkData,  soft_link_coord : np.ndarray, rel_cmtm : CMTM, soft_link_cmtm : CMTM, link_cmtm : CMTM) -> np.ndarray:
-  return link_cmtm.tan_map_inv() @ part_soft_link_cmtm_tan_jacob(soft_link, soft_link_coord, rel_cmtm, soft_link_cmtm)
+def part_soft_link_cmtm_jacob(soft_link : SoftLinkData,  soft_link_motion : np.ndarray, rel_cmtm : CMTM, soft_link_cmtm : CMTM, link_cmtm : CMTM) -> np.ndarray:
+  return link_cmtm.tan_map_inv() @ part_soft_link_cmtm_tan_jacob(soft_link, soft_link_motion, rel_cmtm, soft_link_cmtm)
