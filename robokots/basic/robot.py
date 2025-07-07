@@ -174,6 +174,7 @@ class RobotStruct:
           print(f"    Inertia: {link.inertia}, DOF: {link.dof}")
           print(f"    Connect parent joint: {link.parent_joint_ids}")
           print(f"    Connect child joint: {link.child_joint_ids}")
+          print(f"    DOF:{link.dof}")
           print(f"    DOF index: {link.dof_index}")
           print(f"    Length: {link.length}\n")
 
@@ -199,6 +200,7 @@ class LinkStruct:
     self.dof = self._link_dof(self.type)
     self.select_mat = self._select_mat(self.type)
     self.select_indeces = np.argmax(self.select_mat, axis=0)
+    self.origin_coord = np.array([0., 0., 0., 0., 0., 1.])
     self.child_joint_ids = []
     self.parent_joint_ids = []
     
