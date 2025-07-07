@@ -92,7 +92,7 @@ def __link_jacobian(robot : RobotStruct, motions: RobotMotions, state : dict, ta
   link_route = []
   joint_route = []
   robot.route_target_link(target_link, link_route, joint_route)
-  print(f"Link route: {link_route}, Joint route: {joint_route}")
+
   for l in link_route:
     link = robot.links[l]
     if link.dof < 1:
