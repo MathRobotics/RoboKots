@@ -13,15 +13,7 @@ from ..kinematics.soft_link_kinematics import *
 from ..dynamics.dynamics import *
 from ..basic.state_dict import *
 
-def convert_link_to_data(link: LinkStruct) -> SoftLinkData:
-  '''
-  Convert link data to SoftLinkData structure
-  Args:
-    link (LinkStruct): link structure
-  Returns:
-    SoftLinkData: SoftLinkData structure
-  '''
-  return  SoftLinkData(link.origin, link.select_mat, link.dof, link.select_indeces)
+from base import convert_link_to_data
 
 def kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict:
   '''
