@@ -19,49 +19,49 @@ target_data = {
     ]
 }
 
-def test_io_load_json():
+def test_load_json_file():
     # Test loading a valid JSON file
     with open("./file/test_robot.json", "w") as f:
         json.dump(test_data, f)
-    loaded_data = io_load_json("./file/test_robot.json")
+    loaded_data = load_json_file("./file/test_robot.json")
     assert loaded_data == test_data
     # Test loading a non-existent file
     try:
-        io_load_json("non_existent.json")
+        load_json_file("non_existent.json")
     except FileNotFoundError as e:
         assert str(e) == "File non_existent.json not found."
     # Test loading an invalid JSON file
     with open("./file/invalid.json", "w") as f:
         f.write("{invalid_json}")
     try:
-        io_load_json("./file/invalid.json")
+        load_json_file("./file/invalid.json")
     except ValueError as e:
         assert str(e) == "Invalid JSON format: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)"
-    
-def test_io_save_json():
+
+def test_save_json_file():
     # Test saving to a valid JSON file
-    io_save_json(test_data, "./file/output.json")
+    save_json_file(test_data, "./file/output.json")
     with open("./file/output.json", "r") as f:
         saved_data = json.load(f)
     assert saved_data == test_data
     # Test saving to a read-only file
     try:
-        io_save_json(test_data, "./file/output.json")
+        save_json_file(test_data, "./file/output.json")
     except IOError as e:
         assert str(e) == "Failed to write JSON file: [Errno 13] Permission denied: '/file/output.json'"
         
-def test_io_from_json_file():
+def test_load_robot_json_file():
     # Test loading a valid JSON file
     with open("./file/test_robot.json", "w") as f:
         json.dump(test_data, f)
-    robot = io_from_json_file("./file/test_robot.json")
+    robot = load_robot_json_file("./file/test_robot.json")
     assert isinstance(robot, RobotStruct)
     assert robot.links[0].name == "link1"
     assert robot.joints[1].type == "revolute"
     
     # Test loading a non-existent file
     try:
-        io_from_json_file("non_existent.json")
+        load_robot_json_file("non_existent.json")
     except FileNotFoundError as e:
         assert str(e) == "File non_existent.json not found."
         
@@ -69,29 +69,29 @@ def test_io_from_json_file():
     with open("./file/invalid.json", "w") as f:
         f.write("{invalid_json}")
     try:
-        io_from_json_file("./file/invalid.json")
+        load_robot_json_file("./file/invalid.json")
     except ValueError as e:
         assert str(e) == "Invalid JSON format: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)"
         
-def test_io_print_structure():
+def test_print_robot_structure():
     # Test printing the structure of a robot
     robot = RobotStruct.from_dict(test_data)
-    io_print_structure(robot)
+    print_robot_structure(robot)
     # Check the printed output manually or redirect stdout to capture it
     # This is a placeholder as capturing printed output requires more setup
     # assert printed_output == expected_output
     
-def test_io_from_target_json():
+def test_load_target_json_file():
     with open("./file/test_target.json", "w") as f:
         json.dump(target_data, f)
-    target_list = io_from_target_json("./file/test_target.json")
+    target_list = load_target_json_file("./file/test_target.json")
     assert isinstance(target_list, TargetList)
     assert target_list.targets[0].type == "pos"
     assert target_list.targets[1].link_name == "link2"
     
     # Test loading a non-existent target JSON file
     try:
-        io_from_target_json("non_existent.json")
+        load_target_json_file("non_existent.json")
     except FileNotFoundError as e:
         assert str(e) == "File non_existent.json not found."
         
@@ -99,14 +99,14 @@ def test_io_from_target_json():
     with open("./file/invalid.json", "w") as f:
         f.write("{invalid_json}")
     try:
-        io_from_target_json("./file/invalid.json")
+        load_target_json_file("./file/invalid.json")
     except ValueError as e:
         assert str(e) == "Invalid JSON format: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)"
         
-def test_io_print_targets():
+def test_print_target_list():
     # Test printing the targets
     target_list = TargetList.from_dict(target_data)
-    io_print_targets(target_list)
+    print_target_list(target_list)
     # Check the printed output manually or redirect stdout to capture it
     # This is a placeholder as capturing printed output requires more setup
     # assert printed_output == expected_output
