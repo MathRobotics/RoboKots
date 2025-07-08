@@ -96,6 +96,63 @@ def dynamics(robot : RobotStruct, motions : RobotMotions) -> dict:
     
   return state_data
 
+def link_diff_kinematics_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str],  data_type : str, order = None, \
+                                    eps = 1e-8, update_method = None, update_direction = None) -> np.ndarray:
+  if data_type not in ["pos", "rot", "vel", "acc", "jerk", "frame", "cmtm"]:
+    raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'frame' or 'cmtm'.")
+
+  dof = 6
+
+  if order is None:
+    order = 3
+
+  if data_type == "pos" or data_type == "rot":
+    dof = 3
+  elif data_type == "frame":
+    dof = 6
+  elif data_type == "vel":
+    dof = 6
+  elif data_type == "acc":
+    dof = 6
+  elif data_type == "jerk":
+    dof = 6
+  elif data_type == "cmtm":
+    if order is None:
+      dof = 3 * 6
+    else:
+      dof = order * 6
+
+  diff = np.zeros((len(link_name_list), dof))
+
+  def update_func(x_init, direct, eps):
+    x_ = x_init.copy()
+
+    if update_method is None:
+      D, d = build_integrator(robot.dof, order, eps, method="poly")
+    else:
+      D, d = build_integrator(robot.dof, order, eps, method=update_method)
+
+    x_ = D @ x_init + d @ direct
+    return x_
+
+  for i in range(len(link_name_list)):
+    def kinematics_func(x):
+      motions.motions = x
+      state = kinematics(robot, motions, order)
+      y = extract_dict_link_info(state, data_type, link_name_list[i])
+      return y
+
+    if data_type == "rot":
+      diff[i] = numerical_difference(motions.motions, kinematics_func, sub_func = SO3.sub_tan_vec, update_func = update_func, direction = update_direction)
+    if data_type == "frame":
+      diff[i] = numerical_difference(motions.motions, kinematics_func, sub_func = SE3.sub_tan_vec, update_func = update_func, direction = update_direction)
+    elif data_type == "cmtm":
+      diff[i] = numerical_difference(motions.motions, kinematics_func, sub_func = CMTM.sub_vec, update_func = update_func, direction = update_direction)
+    else:
+      diff[i] = numerical_difference(motions.motions, kinematics_func, update_func = update_func, direction = update_direction)
+  
+  return diff
+
 def dynamics_cmtm(robot : RobotStruct, motions : RobotMotions, dynamics_order = 1) -> dict:
   state_data = {}
   
