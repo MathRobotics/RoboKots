@@ -69,6 +69,12 @@ class Kots():
 
     return Kots(robot, order, dim)
   
+  @staticmethod
+  def from_json_data(model_data : dict, order=3, dim=3) -> "Kots":
+    robot = load_robot_json(model_data)
+
+    return Kots(robot, order, dim)
+
   def print_structure(self):
     print_robot_structure(self.robot_)
     
