@@ -8,7 +8,7 @@ from typing import Dict
 from .basic.robot import *
 from .basic.target import *
 
-def io_load_json(file_path: str) -> Dict:
+def load_json_file(file_path: str) -> Dict:
     try:
         with open(file_path, 'r', encoding='utf-8') as file:
             return json.load(file)
@@ -17,23 +17,33 @@ def io_load_json(file_path: str) -> Dict:
     except json.JSONDecodeError as e:
         raise ValueError(f"Invalid JSON format: {e}")
 
-def io_save_json(data: Dict, file_path: str):
+def save_json_file(data: Dict, file_path: str):
     try:
         with open(file_path, 'w', encoding='utf-8') as file:
             json.dump(data, file, indent=4)
     except Exception as e:
         raise IOError(f"Failed to write JSON file: {e}")
 
-def io_from_json_file(file_path: str) -> "RobotStruct":
-    data = io_load_json(file_path)
+def load_robot_json(data : Dict) -> "RobotStruct":
+    if not isinstance(data, dict):
+        raise ValueError("Input data must be a dictionary.")
     return RobotStruct.from_dict(data)
 
-def io_print_structure(robot : RobotStruct):
-    robot.print()
-        
-def io_from_target_json(file_path: str) -> "TargetList":
-    data = io_load_json(file_path)
-    return TargetList.from_dict(data)
+def load_robot_json_file(file_path: str) -> "RobotStruct":
+    data = load_json_file(file_path)
+    return load_robot_json(data)
 
-def io_print_targets(t_list : TargetList):
+def print_robot_structure(robot : RobotStruct):
+    robot.print()
+
+def load_target_json(data: Dict) -> "TargetList":
+    if not isinstance(data, dict):
+        raise ValueError("Input data must be a dictionary.")
+    return TargetList.from_dict(data)
+        
+def load_target_json_file(file_path: str) -> "TargetList":
+    data = load_json_file(file_path)
+    return load_target_json(data)
+
+def print_target_list(t_list : TargetList):
     t_list.print()
