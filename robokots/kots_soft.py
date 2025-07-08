@@ -65,12 +65,12 @@ class Kots():
 
   @staticmethod
   def from_json_file(model_file_name : str, order=3, dim=3) -> "Kots":
-    robot = io_from_json_file(model_file_name)
+    robot = load_robot_json_file(model_file_name)
 
     return Kots(robot, order, dim)
   
   def print_structure(self):
-    io_print_structure(self.robot_)
+    print_robot_structure(self.robot_)
     
   def dof(self):
     return self.robot_.dof
@@ -144,11 +144,11 @@ class Kots():
       raise ValueError("target_file is empty")
     if not isinstance(target_file, str):
       raise TypeError("target_file must be a string")
-    self.target_ = io_from_target_json(target_file)
-    
+    self.target_ = load_target_json_file(target_file)
+
   def print_targets(self):
-    io_print_targets(self.target_)
-  
+    print_target_list(self.target_)
+
   def link_jacobian(self, link_name_list : list[str], order = 3):
     if order < 1:
       raise ValueError("order must be greater than 0")

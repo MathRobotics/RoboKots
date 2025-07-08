@@ -3,18 +3,28 @@
 # 2024.12.13 Created by T.Ishigaki
 
 import numpy as np
+import re
 
 class RobotMotions:
   motions : np.ndarray = np.array([])
-  ALLOWED_ALIASES = frozenset(["coord", "veloc", "accel", "accel_diff1", "accel_diff2", "accel_diff3"])
+  ALLOWED_ALIASES = frozenset(["coord", "veloc", "accel"])
+
+  ACCEL_DIFF_PATTERN = re.compile(r"^accel_diff\d+$")
 
   def __init__(self, robot_dof : int, aliases_ = ["coord", "veloc", "accel"]):
-    if not set(aliases_).issubset(self.ALLOWED_ALIASES):
-      raise ValueError(f"Invalid alias: {set(aliases_) - self.ALLOWED_ALIASES}")
+    for alias in aliases_:
+      if alias not in self.ALLOWED_ALIASES and not self.ACCEL_DIFF_PATTERN.match(alias):
+        raise ValueError(f"Invalid alias: {alias}")
     self.aliases = aliases_
     self.dof = robot_dof
     self.motion_num = len(self.aliases) 
     self.motions = np.zeros(self.dof * self.motion_num)
+
+  def set_aliases(self, aliases_ = ["coord", "veloc", "accel"]):
+    for alias in aliases_:
+      if alias not in self.ALLOWED_ALIASES and not self.ACCEL_DIFF_PATTERN.match(alias):
+        raise ValueError(f"Invalid alias: {alias}")
+    self.aliases = aliases_
     
   def set_aliases(self, aliases_ = ["coord", "veloc", "accel"]):
     if not set(aliases_).issubset(self.ALLOWED_ALIASES):
