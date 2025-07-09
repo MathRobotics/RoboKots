@@ -6,7 +6,7 @@ import numpy as np
 
 from .basic.motion import RobotMotions
 from .basic.state import RobotState
-from .basic.robot import RobotStruct
+from .basic.robot import RobotStruct, JointStruct
 
 from .robot_io import *
 from .basic.robot_drow import *
