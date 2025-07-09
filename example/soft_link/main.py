@@ -1,11 +1,10 @@
 import numpy as np
 
-from robokots import kots
 from robokots.kots_soft import *
 
 order = 5
 def main():
-  kots = Kots.from_json_file("../model/soft_2rod.json", order=order)
+  kots = Kots.from_json_file("../model/soft_rod.json", order=order)
   # kots.print_structure()
 
   kots.set_target_from_file("target_list.json")
@@ -17,7 +16,6 @@ def main():
   kots.kinematics()
 
   jacob = kots.link_jacobian_target(order)
-
   jacob_num = kots.link_jacobian_target_numerical("cmtm", order)
   # jacob_num = kots.link_jacobian_target_numerical("frame")
 
