@@ -12,6 +12,7 @@ from .robot_io import *
 from .basic.robot_drow import *
 
 from .outward.outward import *
+from .outward.outward import kinematics as outward_kinematics
 
 from .basic.target import TargetList
   
@@ -137,7 +138,7 @@ class Kots():
     return np.array(vecs)
 
   def kinematics(self):
-    self.state_dict_ = kinematics(self.robot_, self.motions_, self.order_)
+    self.state_dict_ = outward_kinematics(self.robot_, self.motions_, self.order_)
   
   def dynamics(self):
     self.state_dict_ = dynamics_cmtm(self.robot_, self.motions_, self.order_-2)

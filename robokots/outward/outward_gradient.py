@@ -10,6 +10,9 @@ from ..kinematics import *
 from ..dynamics.dynamics import *
 from ..basic.state_dict import *
 
+from .outward import kinematics as outward_kinematics
+
+
 def __target_part_link_jacob(target_link : LinkStruct, joint : JointStruct, rel_frame : SE3) -> np.ndarray:
   if target_link.id == joint.child_link_id:
     mat = joint.select_mat
@@ -120,7 +123,7 @@ def link_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_na
   for i in range(len(link_name_list)):
     def kinematics_func(x):
       motions.motions = x
-      state = kinematics(robot, motions, order)
+      state = outward_kinematics(robot, motions, order)
       y = extract_dict_link_info(state, data_type, link_name_list[i])
       return y
 
@@ -129,7 +132,7 @@ def link_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_na
     elif data_type == "frame":
       jacobs[dof*i:dof*(i+1)] = numerical_grad(motion, kinematics_func, sub_func = SE3.sub_tan_vec)
     elif data_type == "cmtm":
-      state = kinematics(robot, motions, order)
+      state = outward_kinematics(robot, motions, order)
       jacobs[(dof*order)*i:(6*order)*(i+1)] = \
         extract_dict_link_info(state, data_type, link_name_list[i]).tan_map_inv() @ numerical_grad(motion, kinematics_func, sub_func = CMTM.sub_tan_vec_var)
     else:
