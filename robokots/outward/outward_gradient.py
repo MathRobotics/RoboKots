@@ -6,12 +6,11 @@ from mathrobo import SO3, SE3, CMTM, numerical_grad, numerical_difference, build
 from ..basic.robot import RobotStruct, LinkStruct, JointStruct
 from ..basic.motion import RobotMotions
 
-from ..kinematics import *
-from ..dynamics.dynamics import *
-from ..basic.state_dict import *
+from ..basic.state_dict import state_dict_to_rel_frame, state_dict_to_rel_cmtm, state_dict_to_cmtm, extract_dict_link_info
+from ..kinematics.base import convert_joint_to_data
+from ..kinematics.kinematics import part_link_jacob, part_link_cmtm_tan_jacob
 
 from .outward import kinematics as outward_kinematics
-
 
 def __target_part_link_jacob(target_link : LinkStruct, joint : JointStruct, rel_frame : SE3) -> np.ndarray:
   if target_link.id == joint.child_link_id:

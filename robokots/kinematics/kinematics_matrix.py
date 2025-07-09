@@ -5,8 +5,6 @@
 
 import numpy as np
 
-import mathrobo as mr
-
 from .base import JointData
 
 def joint_select_diag_mat(joint : JointData, order : int = 1) -> np.ndarray:

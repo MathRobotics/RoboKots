@@ -5,8 +5,8 @@
 
 import numpy as np
 
-from ..basic.robot import RobotStruct, LinkStruct
-from ..basic.state_dict import *
+from ..basic.robot import RobotStruct
+from ..basic.state_dict import state_dict_to_rel_cmtm
 
 from ..dynamics.dynamics_matrix import inertia_diag_mat
 from ..kinematics.kinematics_matrix import joint_select_diag_mat

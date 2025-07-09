@@ -1,7 +1,7 @@
 import numpy as np
 
 from mathrobo import SE3, CMTM
-from robokots.outward.outward import *
+from robokots.basic.state_dict import *
 
 def test_extract_state_keys():
     state = {
