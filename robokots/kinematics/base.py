@@ -1,6 +1,6 @@
 import numpy as np
 
-from mathrobo import SE3, CMTM
+from mathrobo import SE3
 
 from ..basic.robot import JointStruct
 from ..basic.robot import LinkStruct
