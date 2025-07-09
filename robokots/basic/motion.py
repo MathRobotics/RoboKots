@@ -11,11 +11,16 @@ class RobotMotions:
 
   ACCEL_DIFF_PATTERN = re.compile(r"^accel_diff\d+$")
 
-  def __init__(self, robot_dof : int, aliases_ = ["coord", "veloc", "accel"]):
-    for alias in aliases_:
-      if alias not in self.ALLOWED_ALIASES and not self.ACCEL_DIFF_PATTERN.match(alias):
-        raise ValueError(f"Invalid alias: {alias}")
-    self.aliases = aliases_
+  def __init__(self, robot_dof : int, aliases_ = None):
+    if aliases_ is None:
+      aliases_ = ["coord", "veloc", "accel"]
+
+    invalid = {a for a in aliases_
+                if a not in self.ALLOWED_ALIASES and not self.ACCEL_DIFF_PATTERN.match(a)}
+    if invalid:
+      raise ValueError(f"Invalid alias: {invalid}")
+
+    self.aliases = list(aliases_)
     self.dof = robot_dof
     self.motion_num = len(self.aliases) 
     self.motions = np.zeros(self.dof * self.motion_num)

@@ -11,7 +11,8 @@ from .basic.robot import RobotStruct
 from .robot_io import *
 from .basic.robot_drow import *
 
-from .outward.outward_soft_link import *
+from .outward.outward_soft_link import kinematics as outward_kinematics
+from .outward.outward_gradient_soft_link import *
 
 from .basic.target import TargetList
   
@@ -137,7 +138,7 @@ class Kots():
     return np.array(vecs)
 
   def kinematics(self):
-    self.state_dict_ = kinematics(self.robot_, self.motions_, self.order_)
+    self.state_dict_ = outward_kinematics(self.robot_, self.motions_, self.order_)
   
   def dynamics(self):
     pass
