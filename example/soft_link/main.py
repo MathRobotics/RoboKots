@@ -1,6 +1,6 @@
 import numpy as np
 
-from robokots.kots_soft import *
+from robokots.kots import *
 
 order = 5
 def main():
