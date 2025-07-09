@@ -77,6 +77,8 @@ def __link_jacobian(robot : RobotStruct, motions: RobotMotions, state : dict, ta
   
   for j in joint_route:
     joint = robot.joints[j]
+    if joint.dof < 1:
+      continue
     rel_frame = state_dict_to_rel_frame(state, robot.links[joint.child_link_id].name, target_link.name)
     mat = __target_link_part_joint_jacob(target_link, joint, rel_frame)
     jacob[:,joint.dof_index:joint.dof_index+joint.dof] = mat

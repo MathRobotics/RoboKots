@@ -53,7 +53,7 @@ def kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict:
     joint_rel_cmtm = link_rel_cmtm(joint_data, joint_motions, order)
     link_cmtm = soft_link_local_cmtm(link_data, link_motions, order)
 
-    link_cmtm = p_link_cmtm @ joint_rel_cmtm
+    link_cmtm = p_link_cmtm @ joint_rel_cmtm @ link_cmtm
     # Update CMTM for the child link
     state_cmtm.update([(child.name, link_cmtm)])
 
