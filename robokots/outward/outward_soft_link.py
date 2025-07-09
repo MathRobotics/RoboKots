@@ -7,11 +7,13 @@ import numpy as np
 
 from mathrobo import SO3, SE3, CMTM, numerical_difference, build_integrator
 
-from ..basic.robot import RobotStruct, LinkStruct, JointStruct
+from ..basic.robot import RobotStruct
 from ..basic.motion import RobotMotions
-from ..kinematics import *
-from ..dynamics.dynamics import *
-from ..basic.state_dict import *
+from ..basic.state_dict import state_dict_to_frame, extract_dict_link_info, cmtm_to_state_list
+
+from ..kinematics.base import convert_link_to_data 
+from ..kinematics.kinematics_soft_link import soft_link_local_cmtm, calc_soft_link_strain
+
 
 def kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict:
   '''

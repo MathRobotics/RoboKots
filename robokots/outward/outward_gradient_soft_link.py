@@ -4,11 +4,11 @@ from mathrobo import SO3, SE3, CMTM, numerical_grad
 
 from ..basic.robot import RobotStruct, LinkStruct
 from ..basic.motion import RobotMotions
+from ..basic.state_dict import state_dict_to_rel_frame, state_dict_to_rel_cmtm, state_dict_to_cmtm, extract_dict_link_info
 
 from ..kinematics.base import convert_link_to_data
-from ..kinematics.kinematics_soft_link import *
-from ..dynamics.dynamics import *
-from ..basic.state_dict import *
+from ..kinematics.kinematics_soft_link import part_soft_link_jacob, part_soft_link_cmtm_tan_jacob, calc_local_tan_mat
+
 
 from .outward_soft_link import kinematics as outward_kinematics
 
