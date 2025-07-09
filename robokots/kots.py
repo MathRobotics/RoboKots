@@ -113,6 +113,9 @@ class Kots():
   def joint_motions(self, joint : JointStruct):
     return self.motions_.joint_motions(joint)
   
+  def link_motions(self, link : LinkStruct):
+    return self.motions_.link_motions(link)
+  
   def state_df(self):
     return self.state_.df()
   
