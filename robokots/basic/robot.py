@@ -98,7 +98,8 @@ class RobotStruct:
         cog=np.array(link.get("cog", [0., 0., 0.])),
         mass=float(link.get("mass", 0.)),
         inertia=np.array(link.get("inertia", [1.0, 1.0, 1.0, 0.0, 0.0, 0.0])),
-        type=link.get("type", "rigid")
+        type=link.get("type", "rigid"),
+        length=float(link.get("length", 0.0))
     ) for link in data["links"]]
 
     joints = [JointStruct(
@@ -132,6 +133,7 @@ class RobotStruct:
         else:
             inertia_list = [1,1,1,0,0,0]
         link_dict["inertia"] = inertia_list
+        link_dict["length"] = float(link.length) if link.length is not None else 0.0
 
         link_dict["geometry"] = None
 
@@ -172,7 +174,9 @@ class RobotStruct:
           print(f"    Inertia: {link.inertia}, DOF: {link.dof}")
           print(f"    Connect parent joint: {link.parent_joint_ids}")
           print(f"    Connect child joint: {link.child_joint_ids}")
+          print(f"    DOF:{link.dof}")
           print(f"    DOF index: {link.dof_index}")
+          print(f"    Length: {link.length}\n")
 
       print("\nJoints:")
       for joint in self.joints:
@@ -185,14 +189,18 @@ class RobotStruct:
 
 class LinkStruct:
   dof_index : int = 0
-  def __init__(self, id: int, name: str, cog: np.ndarray, mass: float, inertia: np.ndarray, type: str = "rigid"):
+  def __init__(self, id: int, name: str, cog: np.ndarray, mass: float, inertia: np.ndarray, type: str = "rigid", length: float = None):
     self.id = id
     self.name = name
     self.type = type
     self.cog = cog
     self.mass = mass
     self.inertia = inertia
+    self.length = length if length is not None else 1.0  # Default length if not specified
     self.dof = self._link_dof(self.type)
+    self.select_mat = self._select_mat(self.type)
+    self.select_indeces = np.argmax(self.select_mat, axis=0)
+    self.origin_coord = np.array([0., 0., 0., 0., 0., 1.])
     self.child_joint_ids = []
     self.parent_joint_ids = []
     
@@ -205,6 +213,23 @@ class LinkStruct:
   def _link_dof(type) -> int:
     if type == "rigid":
       return 0
+    elif type == "soft":
+      return 6
+    else:
+        warnings.warn(f"Unsupported link type: {type}", UserWarning)
+        return 0
+
+  #specific for rigid link or soft link
+  @staticmethod
+  def _select_mat(type: str) -> np.ndarray:
+      mat = np.zeros((6, 1))
+      if type == "rigid":
+          return mat
+      elif type == "soft":
+          mat = np.eye(6)
+          return mat
+      else:
+          warnings.warn(f"Unsupported link type: {type}", UserWarning)
 
 class JointStruct:
     dof_index : int = 0

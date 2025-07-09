@@ -1,0 +1,9 @@
+{
+  "targets":[
+    {
+      "type": "pos",
+      "link": "end",
+      "pos" : [0,0,0]
+    }
+  ]
+}
