@@ -9,11 +9,9 @@ from mathrobo import SO3, SE3, CMTM, numerical_grad, numerical_difference, build
 
 from ..basic.robot import RobotStruct, LinkStruct, JointStruct
 from ..basic.motion import RobotMotions
-from ..kinematics.kinematics import *
+from ..kinematics import *
 from ..dynamics import *
 from ..basic.state_dict import *
-
-from .base import convert_joint_to_data
 
 def kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict:
   '''
