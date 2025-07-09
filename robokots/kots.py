@@ -6,15 +6,16 @@ import numpy as np
 
 from .basic.motion import RobotMotions
 from .basic.state import RobotState
-from .basic.robot import RobotStruct
-
-from .robot_io import *
+from .basic.state_dict import extract_dict_link_info, extract_dict_joint_info, dict_to_links_pos
+from .basic.robot import RobotStruct, JointStruct, LinkStruct
+from .basic.target import TargetList
 from .basic.robot_drow import *
 
-from .outward.outward import *
-from .outward.outward import kinematics as outward_kinematics
+from .robot_io import *
 
-from .basic.target import TargetList
+from .outward.outward import kinematics as outward_kinematics
+from .outward.outward import dynamics_cmtm, link_diff_kinematics_numerical
+from .outward.outward_gradient import link_jacobian, link_cmtm_jacobian, link_jacobian_numerical 
   
 class Kots():
   robot_ : RobotStruct
@@ -168,15 +169,9 @@ class Kots():
       raise ValueError("link_name_list contains invalid link names")
 
     if order == 1:
-      if 0:
-        return link_jacobian(self.robot_, self.state_, link_name_list)
-      else:
-        return link_jacobian(self.robot_, self.state_dict_, link_name_list)
+        return link_jacobian(self.robot_, self.motions_, self.state_dict_, link_name_list)
     else:
-      if 0:
-        return link_cmtm_jacobian(self.robot_, self.state_, link_name_list, order)
-      else:
-        return link_cmtm_jacobian(self.robot_, self.state_dict_, link_name_list, order)
+        return link_cmtm_jacobian(self.robot_, self.motions_, self.state_dict_, link_name_list, order)
   
   def link_jacobian_target(self, order = 3):
     if not self.target_:
