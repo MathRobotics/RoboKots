@@ -14,7 +14,7 @@ from .basic.robot_drow import *
 from .robot_io import *
 
 from .outward.outward import kinematics as outward_kinematics
-from .outward.outward import dynamics_cmtm, link_diff_kinematics_numerical
+from .outward.outward import dynamics_cmtm, link_diff_kinematics_numerical, calc_link_total_point_frame
 from .outward.outward_gradient import link_jacobian, link_cmtm_jacobian, link_jacobian_numerical 
   
 class Kots():
@@ -143,6 +143,9 @@ class Kots():
 
   def kinematics(self):
     self.state_dict_ = outward_kinematics(self.robot_, self.motions_, self.order_)
+
+  def kinematics_point(self, s : float = 0.0):
+    return calc_link_total_point_frame(self.robot_, self.motions_, self.state_dict_, s)
   
   def dynamics(self):
     self.state_dict_ = dynamics_cmtm(self.robot_, self.motions_, self.order_-2)
