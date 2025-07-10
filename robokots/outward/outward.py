@@ -9,15 +9,14 @@ from mathrobo import SO3, SE3, CMTM, numerical_difference, build_integrator
 
 from ..basic.robot import RobotStruct
 from ..basic.motion import RobotMotions
-from ..basic.state_dict import state_dict_to_cmtm, extract_dict_link_info, vecs_to_state_dict, cmtm_to_state_list
+from ..basic.state_dict import state_dict_to_cmtm, extract_dict_link_info, vecs_to_state_dict, cmtm_to_state_list, state_dict_to_frame
 
-from ..kinematics.base import convert_joint_to_data
+from ..kinematics.base import convert_joint_to_data, convert_link_to_data
 from ..kinematics.kinematics import joint_local_cmtm, link_rel_cmtm, link_rel_frame
+from ..kinematics.kinematics_soft_link import soft_link_local_cmtm, calc_link_local_point_frame
 
 from ..dynamics.base import spatial_inertia
 from ..dynamics.dynamics import link_dynamics, joint_dynamics, link_dynamics_cmtm, joint_dynamics_cmtm
-
-
 
 def kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict:
   '''
@@ -45,60 +44,40 @@ def kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict:
     child = robot.links[joint.child_link_id]
     
     joint_data = convert_joint_to_data(joint)
+    link_data = convert_link_to_data(child)
 
     joint_motions = motions.joint_motions(joint.dof, joint.dof_index, order)
-
-    joint_cmtm = joint_local_cmtm(joint_data, joint_motions, order)
-    state = cmtm_to_state_list(joint_cmtm, joint.name)
-    state_data.update(state)
+    link_motions = motions.link_motions(child.dof, child.dof_index, order)
 
     p_link_cmtm = state_cmtm[parent.name]
-    rel_cmtm = link_rel_cmtm(joint_data, joint_motions, order)
+    joint_rel_cmtm = link_rel_cmtm(joint_data, joint_motions, order)
+    link_cmtm = soft_link_local_cmtm(link_data, link_motions, order)
 
-    link_cmtm = p_link_cmtm @ rel_cmtm
+    link_cmtm = p_link_cmtm @ joint_rel_cmtm @ link_cmtm
     # Update CMTM for the child link
     state_cmtm.update([(child.name, link_cmtm)])
 
     state = cmtm_to_state_list(link_cmtm, child.name)
     state_data.update(state)
+    
+    #---for pre-computation
+    joint_cmtm = joint_local_cmtm(joint_data, joint_motions, order)
+    state = cmtm_to_state_list(joint_cmtm, joint.name)
+    state_data.update(state)
 
   return state_data
 
-# specific 3d space (magic number 6)
-def dynamics(robot : RobotStruct, motions : RobotMotions) -> dict:
-  state_data = {}
-  
-  state_data = kinematics(robot, motions)
-
-  world_name = robot.links[robot.joints[0].parent_link_id].name
-  state_data.update([(world_name + "_link_force" , [0.,0.,0.,0.,0.,0.])])
-
-  for joint in reversed(robot.joints):
-    child = robot.links[joint.child_link_id]
-    joint_data = convert_joint_to_data(joint)
-    
-    joint_coord = motions.joint_coord(joint.dof, joint.dof_index)
-
-    inertia = spatial_inertia(child.mass, child.inertia, child.cog)
-
-    link_veloc = state_data[child.name + "_vel"]
-    link_accel = state_data[child.name + "_acc"]
-    
-    link_force = link_dynamics(inertia, link_veloc, link_accel)  
-    state_data.update([(child.name + "_link_force" , link_force.tolist())])
-    
-    rel_frame = link_rel_frame(joint_data, joint_coord)
-
-    p_joint_force = np.zeros(6)
-    for id in child.child_joint_ids:
-      p_joint_force += state_data[robot.joints[id].name + "_joint_force"]
-
-    joint_torque, joint_force = joint_dynamics(joint, rel_frame, p_joint_force, link_force)
-    
-    state_data.update([(joint.name + "_joint_force" , joint_force.tolist())])
-    state_data.update([(joint.name + "_joint_torque" , joint_torque.tolist())])
-    
-  return state_data
+def calc_link_total_point_frame(robot : RobotStruct, motions : RobotMotions, state : dict, point : float) -> SE3:
+  base = 0.0
+  p_link = robot.links[0]
+  for l in robot.links:
+      if point > base + l.length:
+          base += l.length
+          p_link = l
+          continue
+      p_link_frame = state_dict_to_frame(state, p_link.name)
+      coord = motions.link_motions(l.dof, l.dof_index, 1)[0]
+      return calc_link_local_point_frame(l, coord, p_link_frame, point - base)
 
 def link_diff_kinematics_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str],  data_type : str, order = None, \
                                     eps = 1e-8, update_method = None, update_direction = None) -> np.ndarray:
@@ -156,6 +135,42 @@ def link_diff_kinematics_numerical(robot : RobotStruct, motions : RobotMotions, 
       diff[i] = numerical_difference(motions.motions, kinematics_func, update_func = update_func, direction = update_direction)
   
   return diff
+
+# specific 3d space (magic number 6)
+def dynamics(robot : RobotStruct, motions : RobotMotions) -> dict:
+  state_data = {}
+  
+  state_data = kinematics(robot, motions)
+
+  world_name = robot.links[robot.joints[0].parent_link_id].name
+  state_data.update([(world_name + "_link_force" , [0.,0.,0.,0.,0.,0.])])
+
+  for joint in reversed(robot.joints):
+    child = robot.links[joint.child_link_id]
+    joint_data = convert_joint_to_data(joint)
+    
+    joint_coord = motions.joint_coord(joint.dof, joint.dof_index)
+
+    inertia = spatial_inertia(child.mass, child.inertia, child.cog)
+
+    link_veloc = state_data[child.name + "_vel"]
+    link_accel = state_data[child.name + "_acc"]
+    
+    link_force = link_dynamics(inertia, link_veloc, link_accel)  
+    state_data.update([(child.name + "_link_force" , link_force.tolist())])
+    
+    rel_frame = link_rel_frame(joint_data, joint_coord)
+
+    p_joint_force = np.zeros(6)
+    for id in child.child_joint_ids:
+      p_joint_force += state_data[robot.joints[id].name + "_joint_force"]
+
+    joint_torque, joint_force = joint_dynamics(joint, rel_frame, p_joint_force, link_force)
+    
+    state_data.update([(joint.name + "_joint_force" , joint_force.tolist())])
+    state_data.update([(joint.name + "_joint_torque" , joint_torque.tolist())])
+    
+  return state_data
 
 def dynamics_cmtm(robot : RobotStruct, motions : RobotMotions, dynamics_order = 1) -> dict:
   state_data = {}
