@@ -9,11 +9,11 @@ from mathrobo import SO3, SE3, CMTM, numerical_difference, build_integrator
 
 from ..basic.robot import RobotStruct
 from ..basic.motion import RobotMotions
-from ..basic.state_dict import state_dict_to_cmtm, extract_dict_link_info, vecs_to_state_dict, cmtm_to_state_list
+from ..basic.state_dict import state_dict_to_cmtm, extract_dict_link_info, vecs_to_state_dict, cmtm_to_state_list, state_dict_to_frame
 
 from ..kinematics.base import convert_joint_to_data, convert_link_to_data
 from ..kinematics.kinematics import joint_local_cmtm, link_rel_cmtm, link_rel_frame
-from ..kinematics.kinematics_soft_link import soft_link_local_cmtm, calc_soft_link_strain
+from ..kinematics.kinematics_soft_link import soft_link_local_cmtm, calc_link_local_point_frame
 
 from ..dynamics.base import spatial_inertia
 from ..dynamics.dynamics import link_dynamics, joint_dynamics, link_dynamics_cmtm, joint_dynamics_cmtm
@@ -66,6 +66,18 @@ def kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict:
     state_data.update(state)
 
   return state_data
+
+def calc_link_total_point_frame(robot : RobotStruct, motions : RobotMotions, state : dict, point : float) -> SE3:
+  base = 0.0
+  p_link = robot.links[0]
+  for l in robot.links:
+      if point > base + l.length:
+          base += l.length
+          p_link = l
+          continue
+      p_link_frame = state_dict_to_frame(state, p_link.name)
+      coord = motions.link_motions(l.dof, l.dof_index, 1)[0]
+      return calc_link_local_point_frame(l, coord, p_link_frame, point - base)
 
 def link_diff_kinematics_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str],  data_type : str, order = None, \
                                     eps = 1e-8, update_method = None, update_direction = None) -> np.ndarray:

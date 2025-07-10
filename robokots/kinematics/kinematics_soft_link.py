@@ -116,6 +116,9 @@ def kinematics_cmtm(soft_link : SoftLinkData, p_link_cmtm : CMTM, soft_link_moti
   m = p_link_cmtm @ rel_m
   return m
 
+def calc_link_local_point_frame(link : SoftLinkData, coord : np.ndarray, p_frame : SE3, point : float) -> SE3:
+  return p_frame @ SE3.set_mat(SE3.exp(calc_soft_link_strain(link, coord), point))
+
 def part_soft_link_jacob(soft_link : SoftLinkData, soft_link_coord : np.ndarray, rel_frame : np.ndarray) -> np.ndarray:
   return ( rel_frame.mat_inv_adj() @ calc_local_tan_mat(soft_link, soft_link_coord) )[:, soft_link.select_indeces]
 
