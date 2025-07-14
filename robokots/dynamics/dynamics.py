@@ -33,7 +33,7 @@ def link_dynamics(inertia : np.ndarray, veloc : np.ndarray, accel : np.ndarray) 
     force = link_momentum(inertia, accel) - SE3.hat_adj(veloc).T @ link_momentum(inertia, veloc)
     return force
 
-def joint_dynamics(joint : JointStruct, rel_frame : SE3, p_joint_force : np.ndarray, link_force : np.ndarray) -> tuple:
+def joint_dynamics(joint_select : np.ndarray, rel_frame : SE3, p_joint_force : np.ndarray, link_force : np.ndarray) -> tuple:
     """
     Calculate the joint dynamics.
     Args:
@@ -46,7 +46,7 @@ def joint_dynamics(joint : JointStruct, rel_frame : SE3, p_joint_force : np.ndar
         numpy.ndarray: joint torque vector.
     """
     joint_force = rel_frame.mat_inv_adj() @ p_joint_force - link_force
-    joint_torque = joint.select_mat.T @ joint_force
+    joint_torque = joint_select.T @ joint_force
     return joint_torque, joint_torque
 
 def link_momentum_cmtm(inertia : np.ndarray, vecs : np.ndarray) -> np.ndarray:

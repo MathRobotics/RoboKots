@@ -9,7 +9,7 @@ from mathrobo import SO3, SE3, CMTM, numerical_difference, build_integrator
 
 from ..basic.robot import RobotStruct
 from ..basic.motion import RobotMotions
-from ..basic.state_dict import state_dict_to_cmtm, extract_dict_link_info, vecs_to_state_dict, cmtm_to_state_list, state_dict_to_frame
+from ..basic.state_dict import state_dict_to_cmtm, extract_dict_link_info, vecs_to_state_dict, cmtm_to_state_list, state_dict_to_frame, state_dict_to_force_vecs
 
 from ..kinematics.base import convert_joint_to_data, convert_link_to_data
 from ..kinematics.kinematics import joint_local_cmtm, link_rel_cmtm, link_rel_frame
@@ -165,7 +165,7 @@ def dynamics(robot : RobotStruct, motions : RobotMotions) -> dict:
     for id in child.child_joint_ids:
       p_joint_force += state_data[robot.joints[id].name + "_joint_force"]
 
-    joint_torque, joint_force = joint_dynamics(joint, rel_frame, p_joint_force, link_force)
+    joint_torque, joint_force = joint_dynamics(joint.select_mat, rel_frame, p_joint_force, link_force)
     
     state_data.update([(joint.name + "_joint_force" , joint_force.tolist())])
     state_data.update([(joint.name + "_joint_torque" , joint_torque.tolist())])
