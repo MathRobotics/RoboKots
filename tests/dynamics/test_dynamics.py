@@ -7,10 +7,6 @@ from robokots.dynamics import *
 Test dynamics function
 '''
 
-class MockJoint():
-    def __init__(self):
-       self.select_mat = np.array([[1, 0, 0, 0, 0, 0]]).T
-
 def test_inertia():
     i_vec = np.array([1, 2, 3, 4, 5, 6])
     i = inertia(i_vec)
@@ -49,13 +45,13 @@ def test_link_dynamics():
     assert np.allclose(force, expected_force)
 
 def test_joint_dynamics():
-    joint = MockJoint()
+    select_mat = np.array([[1, 0, 0, 0, 0, 0]]).T
     rel_frame = SE3()
     p_joint_force = np.array([1, 2, 3, 4, 5, 6])
     link_force = np.array([7, 8, 9, 10, 11, 12])
-    joint_torque, joint_force = joint_dynamics(joint, rel_frame, p_joint_force, link_force)
+    joint_torque, joint_force = joint_dynamics(select_mat, rel_frame, p_joint_force, link_force)
     expected_force = rel_frame.mat_inv_adj() @ p_joint_force - link_force
-    expected_torque = joint.select_mat.T @ expected_force
+    expected_torque = select_mat.T @ expected_force
     # Check the shapes of the outputss
     assert np.allclose(joint_force, expected_force)
     assert np.allclose(joint_torque, expected_torque)
