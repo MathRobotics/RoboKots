@@ -24,11 +24,8 @@ def joint_local_tan_vec(joint : JointData, joint_vec : np.ndarray) -> np.ndarray
     vec = np.zeros(6)
   return vec
 
-def joint_local_vel(joint : JointData, joint_vel : np.ndarray) -> np.ndarray:
-  return joint_local_tan_vec(joint, joint_vel)
-
-def joint_local_acc(joint : JointData, joint_acc : np.ndarray) -> np.ndarray:
-  return joint_local_tan_vec(joint, joint_acc)
+joint_local_vel = joint_local_tan_vec
+joint_local_acc = joint_local_tan_vec
 
 def joint_local_cmtm(joint : JointData, joint_motions : np.ndarray, order = 3) -> CMTM:
   if order < 1:
