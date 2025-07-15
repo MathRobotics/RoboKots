@@ -126,14 +126,14 @@ def link_diff_kinematics_numerical(robot : RobotStruct, motions : RobotMotions, 
       return y
 
     if data_type == "rot":
-      diff[i] = numerical_difference(motions.motions, kinematics_func, sub_func = SO3.sub_tan_vec, update_func = update_func, direction = update_direction)
+      diff[i] = numerical_difference(motions.motions, kinematics_func, sub_func = SO3.sub_tan_vec, update_func = update_func, direction = update_direction, eps=eps)
     if data_type == "frame":
-      diff[i] = numerical_difference(motions.motions, kinematics_func, sub_func = SE3.sub_tan_vec, update_func = update_func, direction = update_direction)
+      diff[i] = numerical_difference(motions.motions, kinematics_func, sub_func = SE3.sub_tan_vec, update_func = update_func, direction = update_direction, eps=eps)
     elif data_type == "cmtm":
-      diff[i] = numerical_difference(motions.motions, kinematics_func, sub_func = CMTM.sub_vec, update_func = update_func, direction = update_direction)
+      diff[i] = numerical_difference(motions.motions, kinematics_func, sub_func = CMTM.sub_vec, update_func = update_func, direction = update_direction, eps=eps)
     else:
-      diff[i] = numerical_difference(motions.motions, kinematics_func, update_func = update_func, direction = update_direction)
-  
+      diff[i] = numerical_difference(motions.motions, kinematics_func, update_func = update_func, direction = update_direction, eps=eps)
+
   return diff
 
 # specific 3d space (magic number 6)
