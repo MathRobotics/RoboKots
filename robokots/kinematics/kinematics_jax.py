@@ -40,17 +40,17 @@ joint_local_acc = local_tan_vec
 def joint_local_cmtm(joint : JointData, joint_motions : np.ndarray, order = 3) -> CMTM:
   return local_cmtm(joint.select_mat, joint_motions, joint.dof, order)
 
-def link_rel_frame(joint : JointData, joint_coord : np.ndarray) -> SE3:
+def joint_rel_frame(joint : JointData, joint_coord : np.ndarray) -> SE3:
   rel_frame =  joint.origin @ joint_local_frame(joint, joint_coord)
   return rel_frame
 
-def link_rel_cmtm(joint : JointData, joint_motions : np.ndarray, order = 3) -> CMTM:
+def joint_rel_cmtm(joint : JointData, joint_motions : np.ndarray, order = 3) -> CMTM:
   if order < 1:
     raise ValueError(f"Invalid order: {order}. Must be over 1.")
   
   dof = joint.dof
 
-  frame = link_rel_frame(joint, joint_motions[:dof].reshape(dof))
+  frame = joint_rel_frame(joint, joint_motions[:dof].reshape(dof))
   vecs = np.zeros((order-1, 6))
   for i in range(order-1):
     vecs[i] = local_tan_vec(joint.select_mat, joint_motions[(i+1)*dof:(i+2)*dof].reshape(dof))
@@ -59,19 +59,19 @@ def link_rel_cmtm(joint : JointData, joint_motions : np.ndarray, order = 3) -> C
   return m
 
 def kinematics(joint : JointData, p_link_frame : SE3, joint_coord : np.ndarray) -> SE3:
-  rel_frame = link_rel_frame(joint, joint_coord)
+  rel_frame = joint_rel_frame(joint, joint_coord)
   frame = p_link_frame @ rel_frame
   return frame
 
 def vel_kinematics(joint : JointData, p_link_vel : np.ndarray, joint_coord : np.ndarray, joint_veloc : np.ndarray) -> np.ndarray:
-  rel_frame = link_rel_frame(joint, joint_coord)
+  rel_frame = joint_rel_frame(joint, joint_coord)
   rel_vel = joint_local_vel(joint.select_mat, joint_veloc)
 
   vel = rel_frame.mat_inv_adj() @ p_link_vel  + rel_vel
   return vel
 
 def acc_kinematics(joint : JointData, p_link_vel : np.ndarray, p_link_acc : np.ndarray, joint_coord : np.ndarray, joint_veloc : np.ndarray, joint_accel : np.ndarray) -> np.ndarray:
-  rel_frame = link_rel_frame(joint, joint_coord)
+  rel_frame = joint_rel_frame(joint, joint_coord)
   rel_vel = joint_local_vel(joint.select_mat, joint_veloc)
   rel_acc = joint_local_acc(joint.select_mat, joint_accel)
 
@@ -81,7 +81,7 @@ def acc_kinematics(joint : JointData, p_link_vel : np.ndarray, p_link_acc : np.n
 def kinematics_cmtm(joint : JointData, p_link_cmtm : CMTM, joint_motions : np.ndarray, order = 3) -> CMTM:
   if joint.dof * order != len(joint_motions):
     raise ValueError(f"Invalid joint motions: {len(joint_motions)}. Must be {joint.dof * order}.")
-  rel_m = link_rel_cmtm(joint, joint_motions, order)
+  rel_m = joint_rel_cmtm(joint, joint_motions, order)
   m = p_link_cmtm @ rel_m
   return m
 
