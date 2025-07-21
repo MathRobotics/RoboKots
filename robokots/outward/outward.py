@@ -12,7 +12,7 @@ from ..basic.motion import RobotMotions
 from ..basic.state_dict import state_dict_to_cmtm, extract_dict_link_info, vecs_to_state_dict, cmtm_to_state_list, state_dict_to_frame, state_dict_to_force_vecs
 
 from ..kinematics.base import convert_joint_to_data, convert_link_to_data
-from ..kinematics.kinematics import joint_local_cmtm, link_rel_cmtm, link_rel_frame
+from ..kinematics.kinematics import joint_local_cmtm, joint_rel_cmtm, joint_rel_frame
 from ..kinematics.kinematics_soft_link import soft_link_local_cmtm, calc_link_local_point_frame
 
 from ..dynamics.base import spatial_inertia
@@ -50,10 +50,10 @@ def kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict:
     link_motions = motions.link_motions(child.dof, child.dof_index, order)
 
     p_link_cmtm = state_cmtm[parent.name]
-    joint_rel_cmtm = link_rel_cmtm(joint_data, joint_motions, order)
+    joint_cmtm = joint_rel_cmtm(joint_data, joint_motions, order)
     link_cmtm = soft_link_local_cmtm(link_data, link_motions, order)
 
-    link_cmtm = p_link_cmtm @ joint_rel_cmtm @ link_cmtm
+    link_cmtm = p_link_cmtm @ joint_cmtm @ link_cmtm
     # Update CMTM for the child link
     state_cmtm.update([(child.name, link_cmtm)])
 
@@ -159,13 +159,13 @@ def dynamics(robot : RobotStruct, motions : RobotMotions) -> dict:
     link_force = link_dynamics(inertia, link_veloc, link_accel)  
     state_data.update([(child.name + "_link_force" , link_force.tolist())])
     
-    rel_frame = link_rel_frame(joint_data, joint_coord)
+    joint_frame = joint_rel_frame(joint_data, joint_coord)
 
     p_joint_force = np.zeros(6)
     for id in child.child_joint_ids:
       p_joint_force += state_data[robot.joints[id].name + "_joint_force"]
 
-    joint_torque, joint_force = joint_dynamics(joint.select_mat, rel_frame, p_joint_force, link_force)
+    joint_torque, joint_force = joint_dynamics(joint.select_mat, joint_frame, p_joint_force, link_force)
     
     state_data.update([(joint.name + "_joint_force" , joint_force.tolist())])
     state_data.update([(joint.name + "_joint_torque" , joint_torque.tolist())])
@@ -195,13 +195,13 @@ def dynamics_cmtm(robot : RobotStruct, motions : RobotMotions, dynamics_order = 
     state = vecs_to_state_dict(link_forces, child.name, "link_force", dynamics_order)
     state_data.update(state)
     
-    rel_cmtm = link_rel_cmtm(joint_data, joint_motion, dynamics_order)
+    joint_cmtm = joint_rel_cmtm(joint_data, joint_motion, dynamics_order)
 
     p_joint_force = np.zeros(6*dynamics_order)
     for id in child.child_joint_ids:
       p_joint_force += state_dict_to_force_vecs(state_data, robot.joints[id].name, "joint_force")
 
-    joint_torques, joint_forces = joint_dynamics_cmtm(joint, rel_cmtm, p_joint_force, link_forces)
+    joint_torques, joint_forces = joint_dynamics_cmtm(joint, joint_cmtm, p_joint_force, link_forces)
 
     state = vecs_to_state_dict(joint_forces, joint.name, "joint_force", dynamics_order)
     state_data.update(state)
