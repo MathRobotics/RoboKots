@@ -54,7 +54,7 @@ def coord_to_joint_mat(r : RobotStruct, order : int = 3, dim : int = 6) -> np.nd
     for i, joint in enumerate(r.joints):
         if joint.dof == 0:  # Joint with no degree of freedom
             continue
-        mat[i*n_:(i+1)*n_, joint.dof_index*order:(joint.dof_index+joint.dof)*order] = joint_select_diag_mat(joint, order)
+        mat[i*n_:(i+1)*n_, joint.dof_index*order:(joint.dof_index+joint.dof)*order] = joint_select_diag_mat(joint.select_mat, order)
 
     return mat
 

@@ -5,7 +5,5 @@
 
 import numpy as np
 
-from .base import JointData
-
-def joint_select_diag_mat(joint : JointData, order : int = 1) -> np.ndarray:
-    return np.kron(np.eye(order), joint.select_mat)
+def joint_select_diag_mat(select_mat : np.ndarray, order : int = 1) -> np.ndarray:
+    return np.kron(np.eye(order), select_mat)

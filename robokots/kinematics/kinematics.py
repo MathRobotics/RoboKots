@@ -9,52 +9,40 @@ from mathrobo import SE3, CMTM
 
 from .base import JointData
 
-def joint_local_frame(joint : JointData, joint_coord : np.ndarray) -> SE3:  
-  if len(joint_coord) != 0:
-    v = joint.select_mat@joint_coord
+def local_tan_vec(select_mat : np.ndarray, joint_vec : np.ndarray) -> np.ndarray:
+  if len(joint_vec) == 0:
+    return np.zeros(6)
   else:
-    v = joint.select_mat@np.zeros(1)
-  frame = SE3.set_mat(SE3.exp(v))
-  return frame
+    return select_mat @ joint_vec
 
-def joint_local_tan_vec(joint : JointData, joint_vec : np.ndarray) -> np.ndarray:
-  if len(joint_vec) != 0:
-    vec = joint.select_mat @ joint_vec
-  else:
-    vec = np.zeros(6)
-  return vec
+def local_frame(select_mat : np.ndarray, joint_coord : np.ndarray) -> SE3:  
+  return SE3.set_mat(SE3.exp(local_tan_vec(select_mat, joint_coord)))
 
-joint_local_vel = joint_local_tan_vec
-joint_local_acc = joint_local_tan_vec
-
-def joint_local_cmtm(joint : JointData, joint_motions : np.ndarray, order = 3) -> CMTM:
+def local_cmtm(select_mat : np.ndarray, joint_motions : np.ndarray, dof : int = 1, order = 3) -> CMTM:
   if order < 1:
     raise ValueError(f"Invalid order: {order}. Must be over 1.")
-  
-  dof = joint.dof
 
-  frame = joint_local_frame(joint, joint_motions[:dof].reshape(dof))
+  frame = local_frame(select_mat, joint_motions[:dof].reshape(dof))
   vecs = np.zeros((order-1, 6))
 
   for i in range(order-1):
-    vecs[i] = joint_local_tan_vec(joint, joint_motions[(i+1)*dof:(i+2)*dof].reshape(dof))
+    vecs[i] = local_tan_vec(select_mat, joint_motions[(i+1)*dof:(i+2)*dof].reshape(dof))
 
   m = CMTM[SE3](frame, vecs)
   return m
 
+def joint_local_frame(joint : JointData, joint_coord : np.ndarray) -> SE3:  
+  return local_frame(joint.select_mat, joint_coord)
+
+joint_local_vel = local_tan_vec
+joint_local_acc = local_tan_vec
+
+def joint_local_cmtm(joint : JointData, joint_motions : np.ndarray, order = 3) -> CMTM:
+  return local_cmtm(joint.select_mat, joint_motions, joint.dof, order)
+
 def link_rel_frame(joint : JointData, joint_coord : np.ndarray) -> SE3:
-  joint_frame = joint_local_frame(joint, joint_coord)
-  rel_frame =  joint.origin @ joint_frame
+  rel_frame =  joint.origin @ joint_local_frame(joint, joint_coord)
   return rel_frame
-
-def link_rel_tan_vec(joint : JointData, joint_vec : np.ndarray) -> np.ndarray:
-  return joint_local_tan_vec(joint, joint_vec)
-
-def link_rel_vel(joint : JointData, joint_vel : np.ndarray) -> np.ndarray:
-  return link_rel_tan_vec(joint, joint_vel)
-
-def link_rel_acc(joint : JointData, joint_acc : np.ndarray) -> np.ndarray:
-  return link_rel_tan_vec(joint, joint_acc)
 
 def link_rel_cmtm(joint : JointData, joint_motions : np.ndarray, order = 3) -> CMTM:
   if order < 1:
@@ -65,7 +53,7 @@ def link_rel_cmtm(joint : JointData, joint_motions : np.ndarray, order = 3) -> C
   frame = link_rel_frame(joint, joint_motions[:dof].reshape(dof))
   vecs = np.zeros((order-1, 6))
   for i in range(order-1):
-    vecs[i] = link_rel_tan_vec(joint, joint_motions[(i+1)*dof:(i+2)*dof].reshape(dof))
+    vecs[i] = local_tan_vec(joint.select_mat, joint_motions[(i+1)*dof:(i+2)*dof].reshape(dof))
 
   m = CMTM[SE3](frame, vecs)
   return m
@@ -77,16 +65,16 @@ def kinematics(joint : JointData, p_link_frame : SE3, joint_coord : np.ndarray) 
 
 def vel_kinematics(joint : JointData, p_link_vel : np.ndarray, joint_coord : np.ndarray, joint_veloc : np.ndarray) -> np.ndarray:
   rel_frame = link_rel_frame(joint, joint_coord)
-  rel_vel = link_rel_vel(joint, joint_veloc)
-  
+  rel_vel = joint_local_vel(joint.select_mat, joint_veloc)
+
   vel = rel_frame.mat_inv_adj() @ p_link_vel  + rel_vel
   return vel
 
 def acc_kinematics(joint : JointData, p_link_vel : np.ndarray, p_link_acc : np.ndarray, joint_coord : np.ndarray, joint_veloc : np.ndarray, joint_accel : np.ndarray) -> np.ndarray:
   rel_frame = link_rel_frame(joint, joint_coord)
-  rel_vel = link_rel_vel(joint, joint_veloc)
-  rel_acc = link_rel_acc(joint, joint_accel)
-  
+  rel_vel = joint_local_vel(joint.select_mat, joint_veloc)
+  rel_acc = joint_local_acc(joint.select_mat, joint_accel)
+
   acc =  rel_frame.mat_inv_adj() @ p_link_acc + SE3.hat_adj( rel_frame.mat_inv_adj() @ p_link_vel ) @ rel_vel + rel_acc
   return acc
 
