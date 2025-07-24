@@ -24,14 +24,14 @@ def save_json_file(data: Dict, file_path: str):
     except Exception as e:
         raise IOError(f"Failed to write JSON file: {e}")
 
-def load_robot_json(data : Dict) -> "RobotStruct":
+def load_robot_json(data : Dict, lib: str = "numpy") -> "RobotStruct":
     if not isinstance(data, dict):
         raise ValueError("Input data must be a dictionary.")
-    return RobotStruct.from_dict(data)
+    return RobotStruct.from_dict(data, lib = lib)
 
-def load_robot_json_file(file_path: str) -> "RobotStruct":
+def load_robot_json_file(file_path: str, lib: str = "numpy") -> "RobotStruct":
     data = load_json_file(file_path)
-    return load_robot_json(data)
+    return load_robot_json(data, lib=lib)
 
 def print_robot_structure(robot : RobotStruct):
     robot.print()

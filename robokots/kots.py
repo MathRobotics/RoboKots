@@ -25,8 +25,9 @@ class Kots():
   target_ : TargetList
   order_ : int
   dim_ : int
+  lib_ : str
   
-  def __init__(self, robot : RobotStruct, order : int, dim : int):
+  def __init__(self, robot : RobotStruct, order : int, dim : int, lib : str = "numpy"):
 
     m_aliases = []
     l_aliases = []
@@ -64,18 +65,19 @@ class Kots():
     self.state_dict_ = {}
     self.order_ = order
     self.dim_ = dim
+    self.lib_ = lib
 
   @staticmethod
-  def from_json_file(model_file_name : str, order=3, dim=3) -> "Kots":
-    robot = load_robot_json_file(model_file_name)
+  def from_json_file(model_file_name : str, order=3, dim=3, lib : str = "numpy") -> "Kots":
+    robot = load_robot_json_file(model_file_name, lib=lib)
 
-    return Kots(robot, order, dim)
-  
+    return Kots(robot, order, dim, lib)
+
   @staticmethod
-  def from_json_data(model_data : dict, order=3, dim=3) -> "Kots":
-    robot = load_robot_json(model_data)
+  def from_json_data(model_data : dict, order=3, dim=3, lib : str = "numpy") -> "Kots":
+    robot = load_robot_json(model_data, lib=lib)
 
-    return Kots(robot, order, dim)
+    return Kots(robot, order, dim, lib)
 
   def print_structure(self):
     print_robot_structure(self.robot_)
