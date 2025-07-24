@@ -60,9 +60,15 @@ class RobotMotions:
   def accel(self):
     return self.gen_values("accel")
     
+  # def gen_value(self, dof : int, dof_index : int, name : str):
+  #   m_index = self.motion_index(name)
+  #   offset = self.dof * m_index + dof_index
+  #   return self.motions[offset : offset + dof]
+  
   def gen_value(self, dof : int, dof_index : int, name : str):
+    order = len(self.aliases)
     m_index = self.motion_index(name)
-    offset = self.dof * m_index + dof_index
+    offset = dof_index * order * self.dof + m_index * self.dof
     return self.motions[offset : offset + dof]
   
   def joint_coord(self, dof : int, dof_index : int):
