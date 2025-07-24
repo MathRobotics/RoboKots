@@ -99,17 +99,17 @@ def test_joint_local_cmtm_numerical():
     for i in range(order-1):
         assert np.allclose(result_cmtm.elem_vecs(i), expected_cmtm[i*6:(i+1)*6])
 
-def test_link_rel_frame():
+def test_joint_rel_frame():
     # Create a mock joint with a specific select_mat
     joint = MockJoint(np.array([[0, 1, 0, 0, 0, 0]]).T)
     # Test with non-zero joint_coord  
     joint_coord = np.random.rand(1)
     expected_frame = joint.origin @ SE3.set_mat(SE3.exp(joint.select_mat @ joint_coord))
-    result_frame = link_rel_frame(joint, joint_coord)
+    result_frame = joint_rel_frame(joint, joint_coord)
 
     assert np.allclose(result_frame.mat(), expected_frame.mat())
     
-def test_link_rel_vec():
+def test_joint_rel_vec():
     # Create a mock joint with a specific select_mat
     joint = MockJoint(np.array([[0, 1, 0, 0, 0, 0]]).T)
 
@@ -119,7 +119,7 @@ def test_link_rel_vec():
     result_vel = local_tan_vec(joint.select_mat, joint_vec)
     assert np.allclose(result_vel, expected_vel)
 
-def test_link_rel_vec_numerical():
+def test_joint_rel_vec_numerical():
     # Create a mock joint with a specific select_mat
     joint = MockJoint(np.array([[0, 1, 0, 0, 0, 0]]).T)
 
@@ -129,23 +129,23 @@ def test_link_rel_vec_numerical():
 
     # Calculate numerical relative velocity
     joint_coord = np.random.rand(1)
-    h0 = link_rel_frame(joint, joint_coord)
+    h0 = joint_rel_frame(joint, joint_coord)
     joint_coord += joint_vec * delta
-    h1 = link_rel_frame(joint, joint_coord)
+    h1 = joint_rel_frame(joint, joint_coord)
     expected_vel = mr.SE3.sub_tan_vec(h0, h1, "bframe") / delta
 
     assert np.allclose(result_vel, expected_vel)
 
-def test_link_rel_cmtm():
+def test_joint_rel_cmtm():
     # Create a mock joint with a specific select_mat
     joint = MockJoint(np.array([[0, 1, 0, 0, 0, 0]]).T)
     order = 5
 
     # Test with non-zero joint_coord, joint_veloc, and joint_accel
     joint_motions = np.random.rand(order)
-    result_cmtm = link_rel_cmtm(joint, joint_motions, order)
+    result_cmtm = joint_rel_cmtm(joint, joint_motions, order)
 
-    expected_frame = link_rel_frame(joint, joint_motions[:joint.dof].reshape(joint.dof))
+    expected_frame = joint_rel_frame(joint, joint_motions[:joint.dof].reshape(joint.dof))
     if order > 1:
         expected_vecs = np.zeros((order-1, 6))
         for i in range(order-1):
@@ -155,7 +155,7 @@ def test_link_rel_cmtm():
 
     assert np.allclose(result_cmtm.elem_mat(), expected_cmtm.elem_mat())
 
-def test_link_rel_cmtm_numerical():
+def test_joint_rel_cmtm_numerical():
     # Create a mock joint with a specific select_mat
     joint = MockJoint(np.array([[0, 1, 0, 0, 0, 0]]).T)
     order = 5
@@ -163,10 +163,10 @@ def test_link_rel_cmtm_numerical():
     joint_motions = np.random.rand(order)
     
     # Test with non-zero joint_coord, joint_veloc, and joint_accel
-    result_cmtm = link_rel_cmtm(joint, joint_motions, order)
+    result_cmtm = joint_rel_cmtm(joint, joint_motions, order)
 
     def func(x):
-        return link_rel_cmtm(joint, x, order)
+        return joint_rel_cmtm(joint, x, order)
 
     def update_func(x_init, direct, eps):
         D, d = mr.build_integrator(joint.dof, order, eps, method="poly")
@@ -198,7 +198,7 @@ def test_vel_kinematics():
     joint_coord = np.random.rand(1)
     joint_veloc = np.random.rand(1)
     p_link_vel = np.random.rand(6)
-    rel_frame = link_rel_frame(joint, joint_coord)
+    rel_frame = joint_rel_frame(joint, joint_coord)
     rel_vel = local_tan_vec(joint.select_mat, joint_veloc)
     expected_vel = rel_frame.mat_inv_adj() @ p_link_vel + rel_vel
     result_vel = vel_kinematics(joint, p_link_vel, joint_coord, joint_veloc)
@@ -216,7 +216,7 @@ def test_vel_kinematics_numerical():
 
     # Calculate numerical relative velocity
     p_link_frame = SE3.rand()
-    rel_frame = link_rel_frame(joint, joint_coord)
+    rel_frame = joint_rel_frame(joint, joint_coord)
     h0 = kinematics(joint, p_link_frame, joint_coord)
     joint_coord += joint_veloc * delta
     h1 = kinematics(joint, p_link_frame, joint_coord)
@@ -233,7 +233,7 @@ def test_acc_kinematics():
     joint_accel = np.random.rand(1)
     p_link_vel = np.random.rand(6)
     p_link_acc = np.random.rand(6)
-    rel_frame = link_rel_frame(joint, joint_coord)
+    rel_frame = joint_rel_frame(joint, joint_coord)
     rel_vel = local_tan_vec(joint.select_mat, joint_veloc)
     rel_acc = local_tan_vec(joint.select_mat, joint_accel)
     expected_acc = rel_frame.mat_inv_adj() @ p_link_acc + \
@@ -254,7 +254,7 @@ def test_acc_kinematics_numerical():
     result_acc = acc_kinematics(joint, p_link_vel, p_link_acc, joint_coord, joint_veloc, joint_accel)
 
     # Calculate numerical acceleration
-    rel_frame = link_rel_frame(joint, joint_coord)
+    rel_frame = joint_rel_frame(joint, joint_coord)
     rel_veloc = local_tan_vec(joint.select_mat, joint_veloc)
 
     v0 = vel_kinematics(joint, p_link_vel, joint_coord, joint_veloc)
@@ -300,7 +300,7 @@ def test_kinematics_cmtm_numerical():
 
     result_cmtm = kinematics_cmtm(joint, p_link_cmtm, joint_motions, order)
 
-    rel_cmtm = link_rel_cmtm(joint, joint_motions, order)
+    rel_cmtm = joint_rel_cmtm(joint, joint_motions, order)
 
     # Calculate numerical kinematics
     def func(x):
@@ -343,7 +343,7 @@ def test_part_link_jacob_vec():
     joint_veloc = np.random.rand(1)
     
     # Test with a specific rel_frame
-    rel_frame = link_rel_frame(joint, joint_coord)
+    rel_frame = joint_rel_frame(joint, joint_coord)
     expected_vel = rel_frame.mat_inv_adj() @ vel_kinematics(joint, np.zeros(6), np.zeros(1), joint_veloc)
     result_vel = part_link_jacob(joint, rel_frame) @ joint_veloc
     assert np.allclose(result_vel, expected_vel)  
@@ -397,10 +397,10 @@ def test_part_link_cmtm_jacob_vec():
     joint_dmotions[0:order-1] = joint_motions[1:]
     
     # Test with a specific rel_frame
-    rel_cmtm = link_rel_cmtm(joint, rel_motions, order)
+    rel_cmtm = joint_rel_cmtm(joint, rel_motions, order)
     joint_cmtm = joint_local_cmtm(joint, joint_motions, order)
 
-    expected_cmtm = link_rel_cmtm(joint, joint_motions, order) @ rel_cmtm
+    expected_cmtm = joint_rel_cmtm(joint, joint_motions, order) @ rel_cmtm
     result_vecs = part_link_cmtm_jacob(joint, rel_cmtm, joint_cmtm, expected_cmtm) @ joint_dmotions
 
     for i in range(order-1):
