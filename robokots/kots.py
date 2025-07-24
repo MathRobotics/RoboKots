@@ -112,11 +112,11 @@ class Kots():
   def motion(self, name : str):
     return self.motions_.gen_values(name)
 
-  def joint_motions(self, joint : JointStruct):
-    return self.motions_.joint_motions(joint)
+  def joint_motions(self, joint : JointStruct, order : int = 1):
+    return self.motions_.joint_motions(joint.dof, joint.dof_index, order)
   
-  def link_motions(self, link : LinkStruct):
-    return self.motions_.link_motions(link)
+  def link_motions(self, link : LinkStruct, order : int = 1):
+    return self.motions_.link_motions(link.dof, link.dof_index, order)
   
   def state_df(self):
     return self.state_.df()
