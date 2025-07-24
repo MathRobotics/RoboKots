@@ -110,12 +110,19 @@ def link_diff_kinematics_numerical(robot : RobotStruct, motions : RobotMotions, 
   def update_func(x_init, direct, eps):
     x_ = x_init.copy()
 
+    # if update_method is None:
+    #   D, d = build_integrator(robot.dof, order, eps, method="poly")
+    # else:
+    #   D, d = build_integrator(robot.dof, order, eps, method=update_method)
+    # x_ = D @ x_init + d @ direct
+    # return x_
+    
     if update_method is None:
-      D, d = build_integrator(robot.dof, order, eps, method="poly")
+      D, d = build_integrator(1, order, eps, method="poly")
     else:
-      D, d = build_integrator(robot.dof, order, eps, method=update_method)
+      D, d = build_integrator(1, order, eps, method=update_method)
 
-    x_ = D @ x_init + d @ direct
+    x_ = np.kron(np.eye(robot.dof), D) @ x_init + np.kron(np.eye(robot.dof), d) @ direct
     return x_
 
   for i in range(len(link_name_list)):
