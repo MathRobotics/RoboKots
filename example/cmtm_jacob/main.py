@@ -14,17 +14,22 @@ def main():
     kots.import_motions(motion)
 
     kots.kinematics()
-    print("motion:", kots.motions())
+    print("motion:\n", kots.motions())
     velocity = kots.state_link_info_list("vel", target)
-    print("velocity:", velocity)
+    print("velocity:\n", velocity)
     acceleration = kots.state_link_info_list("acc", target)
-    print("acceleration:", acceleration)
+    print("acceleration:\n", acceleration)
 
     jacob = kots.link_jacobian(target, ORDER)
     jacob_num = kots.link_jacobian_numerical(target, "cmtm", ORDER)
 
-    veloc_jac = jacob[0:6,:2*kots.dof()] @ motion[kots.dof():3*kots.dof()]
-    accel_jac = jacob[6:12,:2*kots.dof()] @ motion[kots.dof():3*kots.dof()]
+    # veloc_jac = jacob[0:6,:2*kots.dof()] @ motion[kots.dof():3*kots.dof()]
+    # accel_jac = jacob[6:12,:2*kots.dof()] @ motion[kots.dof():3*kots.dof()]
+
+    vec = jacob @ motion
+    print(vec)
+    veloc_jac = vec[0:6]
+    accel_jac = vec[6:12]
 
     print("velocity", veloc_jac)
     print("acceleration", accel_jac)
