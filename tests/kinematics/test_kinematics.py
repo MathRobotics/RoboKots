@@ -190,7 +190,7 @@ def test_kinematics():
     result_frame = kinematics(joint, p_link_frame, joint_coord)
     assert np.allclose(result_frame.mat(), expected_frame.mat())
     
-def test_vel_kinematics():
+def test_kinematics_vel():
     # Create a mock joint with a specific select_mat
     joint = MockJoint(np.array([[0, 1, 0, 0, 0, 0]]).T)
 
@@ -201,10 +201,10 @@ def test_vel_kinematics():
     rel_frame = joint_rel_frame(joint, joint_coord)
     rel_vel = local_tan_vec(joint.select_mat, joint_veloc)
     expected_vel = rel_frame.mat_inv_adj() @ p_link_vel + rel_vel
-    result_vel = vel_kinematics(joint, p_link_vel, joint_coord, joint_veloc)
+    result_vel = kinematics_vel(joint, p_link_vel, joint_coord, joint_veloc)
     assert np.allclose(result_vel, expected_vel)
 
-def test_vel_kinematics_numerical():
+def test_kinematics_vel_numerical():
     # Create a mock joint with a specific select_mat
     joint = MockJoint(np.array([[0, 1, 0, 0, 0, 0]]).T)
     
@@ -212,7 +212,7 @@ def test_vel_kinematics_numerical():
     joint_coord = np.random.rand(1)
     joint_veloc = np.random.rand(1)
     p_link_vel = np.random.rand(6)
-    result_vel = vel_kinematics(joint, p_link_vel, joint_coord, joint_veloc)
+    result_vel = kinematics_vel(joint, p_link_vel, joint_coord, joint_veloc)
 
     # Calculate numerical relative velocity
     p_link_frame = SE3.rand()
@@ -223,7 +223,7 @@ def test_vel_kinematics_numerical():
     expected_vel = rel_frame.mat_inv_adj() @ p_link_vel + mr.SE3.sub_tan_vec(h0, h1, "bframe") / delta
     assert np.allclose(result_vel, expected_vel)
     
-def test_acc_kinematics():
+def test_kinematics_acc():
     # Create a mock joint with a specific select_mat
     joint = MockJoint(np.array([[0, 1, 0, 0, 0, 0]]).T)
 
@@ -238,10 +238,10 @@ def test_acc_kinematics():
     rel_acc = local_tan_vec(joint.select_mat, joint_accel)
     expected_acc = rel_frame.mat_inv_adj() @ p_link_acc + \
                    SE3.hat_adj(rel_frame.mat_inv_adj() @ p_link_vel ) @ rel_vel + rel_acc
-    result_acc = acc_kinematics(joint, p_link_vel, p_link_acc, joint_coord, joint_veloc, joint_accel)
+    result_acc = kinematics_acc(joint, p_link_vel, p_link_acc, joint_coord, joint_veloc, joint_accel)
     assert np.allclose(result_acc, expected_acc)
 
-def test_acc_kinematics_numerical():
+def test_kinematics_acc_numerical():
     # Create a mock joint with a specific select_mat
     joint = MockJoint(np.array([[0, 1, 0, 0, 0, 0]]).T)
     
@@ -251,15 +251,15 @@ def test_acc_kinematics_numerical():
     joint_accel = np.random.rand(1)
     p_link_vel = np.random.rand(6)
     p_link_acc = np.random.rand(6)
-    result_acc = acc_kinematics(joint, p_link_vel, p_link_acc, joint_coord, joint_veloc, joint_accel)
+    result_acc = kinematics_acc(joint, p_link_vel, p_link_acc, joint_coord, joint_veloc, joint_accel)
 
     # Calculate numerical acceleration
     rel_frame = joint_rel_frame(joint, joint_coord)
     rel_veloc = local_tan_vec(joint.select_mat, joint_veloc)
 
-    v0 = vel_kinematics(joint, p_link_vel, joint_coord, joint_veloc)
+    v0 = kinematics_vel(joint, p_link_vel, joint_coord, joint_veloc)
     joint_veloc += joint_accel * delta
-    v1 =  vel_kinematics(joint, p_link_vel, joint_coord, joint_veloc)
+    v1 =  kinematics_vel(joint, p_link_vel, joint_coord, joint_veloc)
     expected_acc = rel_frame.mat_inv_adj() @ p_link_acc + \
                   SE3.hat_adj(rel_frame.mat_inv_adj() @ p_link_vel ) @ rel_veloc + \
                   (v1 - v0) / delta
