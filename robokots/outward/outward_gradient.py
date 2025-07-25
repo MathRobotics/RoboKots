@@ -108,6 +108,7 @@ def __link_cmtm_tan_jacobian(robot : RobotStruct, motions: RobotMotions, state :
       joint_cmtm = state_dict_to_cmtm(state, joint.name, order)
       mat = __target_link_part_joint_cmtm_tan_jacob(target_link, joint, rel_cmtm, joint_cmtm)
 
+      # temp update
       # for i in range(order):
       #   jacob[:,i*robot.dof+joint.dof_index:i*robot.dof+joint.dof_index+joint.dof]  \
       #     = mat[:,i*joint.dof:(i+1)*joint.dof]
@@ -124,6 +125,7 @@ def __link_cmtm_tan_jacobian(robot : RobotStruct, motions: RobotMotions, state :
       link_cmtm = state_dict_to_cmtm(state, link.name, order)
       mat = __target_link_part_link_cmtm_tan_jacob(target_link, link, motions.link_motions(link.dof, link.dof_index, order), rel_cmtm, link_cmtm)
 
+      # temp update
       # for i in range(order):
       #   jacob[:,i*robot.dof+link.dof_index:i*robot.dof+link.dof_index+link.dof]  \
       #     = mat[:,i*link.dof:(i+1)*link.dof]
@@ -178,21 +180,32 @@ def link_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_na
     jacobs = np.zeros((dof*order*len(link_name_list),robot.dof*order))
   else:
     jacobs = np.zeros((dof*len(link_name_list),robot.dof*order))
-  motion = motions.motions[:robot.dof*order]
+
+  motion = np.zeros(robot.dof * order)
+  for joint in robot.joints:
+    m = motions.joint_motions(joint.dof, joint.dof_index, order)
+    motion[joint.dof_index*order:joint.dof_index*order+joint.dof*order] = m.flatten()
+  # temp update
+  # motion = motions.motions[:robot.dof*order]
 
   for i in range(len(link_name_list)):
     def kinematics_func(x):
-      motions.motions = x
-      state = outward_kinematics(robot, motions, order)
+      # temp update
+      # motions.motions = x
+      # state = outward_kinematics(robot, motions, order)
+      # y = extract_dict_link_info(state, data_type, link_name_list[i])
+      state = outward_kinematics(robot, x, order)
       y = extract_dict_link_info(state, data_type, link_name_list[i])
       return y
 
     if data_type == "rot":
-      jacobs[dof*i:dof*(i+1)] = numerical_grad(motions.motions, kinematics_func, sub_func = SO3.sub_tan_vec)
+      jacobs[dof*i:dof*(i+1)] = numerical_grad(motion, kinematics_func, sub_func = SO3.sub_tan_vec)
     elif data_type == "frame":
       jacobs[dof*i:dof*(i+1)] = numerical_grad(motion, kinematics_func, sub_func = SE3.sub_tan_vec)
     elif data_type == "cmtm":
-      state = outward_kinematics(robot, motions, order)
+      # temp update
+      # state = outward_kinematics(robot, motions, order)
+      state = outward_kinematics(robot, motion, order)
       jacobs[(dof*order)*i:(dof*order)*(i+1)] = \
         extract_dict_link_info(state, data_type, link_name_list[i]).tan_map_inv() @ numerical_grad(motion, kinematics_func, sub_func = CMTM.sub_tan_vec_var)
     else:

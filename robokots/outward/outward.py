@@ -18,7 +18,9 @@ from ..kinematics.kinematics_soft_link import soft_link_local_cmtm, calc_link_lo
 from ..dynamics.base import spatial_inertia
 from ..dynamics.dynamics import link_dynamics, joint_dynamics, link_dynamics_cmtm, joint_dynamics_cmtm
 
-def kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict:
+# temp update
+# def kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict:
+def kinematics(robot : RobotStruct, motions, order = 3) -> dict:
   '''
   Forward kinematics computation
   Args:
@@ -46,8 +48,11 @@ def kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict:
     joint_data = convert_joint_to_data(joint)
     link_data = convert_link_to_data(child)
 
-    joint_motions = motions.joint_motions(joint.dof, joint.dof_index, order)
-    link_motions = motions.link_motions(child.dof, child.dof_index, order)
+    # temp update
+    # joint_motions = motions.joint_motions(joint.dof, joint.dof_index, order)
+    # link_motions = motions.link_motions(child.dof, child.dof_index, order)
+    joint_motions = motions[joint.dof_index*order:joint.dof_index*order+joint.dof*order]
+    link_motions = motions[child.dof_index*order:child.dof_index*order+child.dof*order]
 
     p_link_cmtm = state_cmtm[parent.name]
     joint_cmtm = joint_rel_cmtm(joint_data, joint_motions, order)
@@ -109,7 +114,7 @@ def link_diff_kinematics_numerical(robot : RobotStruct, motions : RobotMotions, 
 
   def update_func(x_init, direct, eps):
     x_ = x_init.copy()
-
+    # temp update
     # if update_method is None:
     #   D, d = build_integrator(robot.dof, order, eps, method="poly")
     # else:
@@ -127,8 +132,10 @@ def link_diff_kinematics_numerical(robot : RobotStruct, motions : RobotMotions, 
 
   for i in range(len(link_name_list)):
     def kinematics_func(x):
-      motions.motions = x
-      state = kinematics(robot, motions, order)
+      # temp update
+      # motions.motions = x
+      # state = kinematics(robot, motions, order)
+      state = kinematics(robot, x, order)
       y = extract_dict_link_info(state, data_type, link_name_list[i])
       return y
 
@@ -147,7 +154,7 @@ def link_diff_kinematics_numerical(robot : RobotStruct, motions : RobotMotions, 
 def dynamics(robot : RobotStruct, motions : RobotMotions) -> dict:
   state_data = {}
   
-  state_data = kinematics(robot, motions)
+  state_data = kinematics(robot, motions.motions)
 
   world_name = robot.links[robot.joints[0].parent_link_id].name
   state_data.update([(world_name + "_link_force" , [0.,0.,0.,0.,0.,0.])])
@@ -182,7 +189,7 @@ def dynamics(robot : RobotStruct, motions : RobotMotions) -> dict:
 def dynamics_cmtm(robot : RobotStruct, motions : RobotMotions, dynamics_order = 1) -> dict:
   state_data = {}
   
-  state_data = kinematics(robot, motions, dynamics_order + 2)
+  state_data = kinematics(robot, motions.motions, dynamics_order + 2)
 
   world_name = robot.links[robot.joints[0].parent_link_id].name
   state_data.update([(world_name + "_link_force" , [0.,0.,0.,0.,0.,0.])])

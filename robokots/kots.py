@@ -143,8 +143,16 @@ class Kots():
     vecs = [v for v in values if v.size]
     return np.array(vecs)
 
-  def kinematics(self):
-    self.state_dict_ = outward_kinematics(self.robot_, self.motions_, self.order_)
+  def kinematics(self, order = None):
+    if order is None:
+      order = self.order_
+    motion = np.zeros(self.robot_.dof * order)
+    for joint in self.robot_.joints:
+      m = self.motions_.joint_motions(joint.dof, joint.dof_index, order)
+      motion[joint.dof_index*order:joint.dof_index*order+joint.dof*order] = m.flatten()
+    self.state_dict_ = outward_kinematics(self.robot_, motion, order)
+    # temp update
+    # self.state_dict_ = outward_kinematics(self.robot_, self.motions_, self.order_)
 
   def kinematics_point(self, s : float = 0.0):
     return calc_link_total_point_frame(self.robot_, self.motions_, self.state_dict_, s)
