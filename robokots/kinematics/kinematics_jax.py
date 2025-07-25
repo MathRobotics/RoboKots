@@ -3,6 +3,8 @@
 # 2025.09.22 Created by T.Ishigaki
 # kinematics module (JAX version)
 
+from typing import List
+
 import jax
 import jax.numpy as jnp
 from jax import lax
@@ -75,13 +77,32 @@ def joint_rel_cmtm(joint: JointData, joint_motions: jnp.ndarray, order: int = 3)
 def kinematics(joint: JointData, p_link_frame: SE3, joint_coord: jnp.ndarray) -> SE3:
     return p_link_frame @ joint_rel_frame(joint, joint_coord)
 
-def vel_kinematics(joint: JointData, p_link_vel: jnp.ndarray,
+def forward_kinematics(joints: List[JointData], joint_coords: jnp.ndarray):
+    frame_list = [SE3.eye(LIB='jax')]
+    for joint in joints:
+        joint_coord = joint_coords[joint.dof_index:joint.dof_index + joint.dof]
+        frame = kinematics(joint, frame_list[-1], joint_coord)
+        frame_list.append(frame)
+    return frame_list
+
+def kinematics_vel(joint: JointData, p_link_vel: jnp.ndarray,
                    joint_coord: jnp.ndarray, joint_veloc: jnp.ndarray) -> jnp.ndarray:
     rel = joint_rel_frame(joint, joint_coord)
     rel_vel = local_tan_vec(joint.select_mat, joint_veloc)
     return rel.mat_inv_adj() @ p_link_vel + rel_vel
 
-def acc_kinematics(joint: JointData, p_link_vel: jnp.ndarray, p_link_acc: jnp.ndarray,
+def forward_kinematics_vel(joints: List[JointData], joint_motions: jnp.ndarray):
+    joint_motions = joint_motions.flatten()
+    vel_list = [jnp.zeros(6)]
+    for joint in joints:
+        offset = joint.dof_index * 2
+        joint_coord = joint_motions[offset:offset + joint.dof]
+        joint_veloc = joint_motions[offset + joint.dof : offset + 2*joint.dof]
+        vel = kinematics_vel(joint, vel_list[-1], joint_coord, joint_veloc)
+        vel_list.append(vel)
+    return vel_list
+
+def kinematics_acc(joint: JointData, p_link_vel: jnp.ndarray, p_link_acc: jnp.ndarray,
                    joint_coord: jnp.ndarray, joint_veloc: jnp.ndarray,
                    joint_accel: jnp.ndarray) -> jnp.ndarray:
     rel = joint_rel_frame(joint, joint_coord)
