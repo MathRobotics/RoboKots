@@ -23,10 +23,7 @@ def main():
     jacob = kots.link_jacobian(target, ORDER)
     jacob_num = kots.link_jacobian_numerical(target, "cmtm", ORDER)
 
-    # veloc_jac = jacob[0:6,:2*kots.dof()] @ motion[kots.dof():3*kots.dof()]
-    # accel_jac = jacob[6:12,:2*kots.dof()] @ motion[kots.dof():3*kots.dof()]
-
-    vec = jacob @ motion
+    vec = jacob @ kots.motion_diff()
     print(vec)
     veloc_jac = vec[0:6]
     accel_jac = vec[6:12]
