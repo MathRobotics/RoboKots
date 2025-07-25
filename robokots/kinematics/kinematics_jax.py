@@ -112,6 +112,19 @@ def kinematics_acc(joint: JointData, p_link_vel: jnp.ndarray, p_link_acc: jnp.nd
             + SE3.hat_adj(rel.mat_inv_adj() @ p_link_vel) @ rv
             + ra)
 
+def forward_kinematics_acc(joints: List[JointData], joint_motions: jnp.ndarray):
+    joint_motions = joint_motions.flatten()
+    vel_list = [jnp.zeros(6)]
+    acc_list = [jnp.zeros(6)]
+    for joint in joints:
+        offset = joint.dof_index * 3
+        joint_coord = joint_motions[offset : offset + joint.dof]
+        joint_veloc = joint_motions[offset + joint.dof : offset + 2*joint.dof]
+        joint_accel = joint_motions[offset + 2*joint.dof : offset + 3*joint.dof]
+        vel_list.append(kinematics_vel(joint, vel_list[-1], joint_coord, joint_veloc))
+        acc_list.append(kinematics_acc(joint, vel_list[-1], acc_list[-1], joint_coord, joint_veloc, joint_accel))
+    return acc_list
+
 def kinematics_cmtm(joint: JointData, p_link_cmtm: CMTM,
                     joint_motions: jnp.ndarray, order: int = 3) -> CMTM:
     if joint.dof * order != joint_motions.size:
