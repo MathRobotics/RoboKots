@@ -83,6 +83,24 @@ def calc_link_total_point_frame(robot : RobotStruct, motions : RobotMotions, sta
       p_link_frame = state_dict_to_frame(state, p_link.name)
       coord = motions.link_motions(l.dof, l.dof_index, 1)[0]
       return calc_link_local_point_frame(l, coord, p_link_frame, point - base)
+  
+def __data_type_to_sub_func(data_type : str):
+  if data_type == "pos":
+    return None
+  elif data_type == "rot":
+    return SO3.sub_tan_vec
+  elif data_type == "vel":
+    return None
+  elif data_type == "acc":
+    return None
+  elif data_type == "jerk":
+    return None
+  elif data_type == "frame":
+    return SE3.sub_tan_vec
+  elif data_type == "cmtm":
+    return CMTM.sub_vec
+  else:
+    raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'frame' or 'cmtm'.")
 
 # temp update
 # def link_diff_kinematics_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str],  data_type : str, order = None, \
