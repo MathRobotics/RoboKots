@@ -159,24 +159,10 @@ def link_diff_kinematics_numerical(robot : RobotStruct, motions, link_name_list 
       state = kinematics(robot, x, order)
       y = extract_dict_link_info(state, data_type, link_name_list[i])
       return y
-
-    if data_type == "rot":
-      # temp update
-      # diff[i] = numerical_difference(motions.motions, kinematics_func, sub_func = SO3.sub_tan_vec, update_func = update_func, direction = update_direction, eps=eps)
-      diff[i] = numerical_difference(motions, kinematics_func, sub_func = SO3.sub_tan_vec, update_func = update_func, direction = update_direction, eps=eps)
-    if data_type == "frame":
-      # temp update
-      # diff[i] = numerical_difference(motions.motions, kinematics_func, sub_func = SE3.sub_tan_vec, update_func = update_func, direction = update_direction, eps=eps)
-      diff[i] = numerical_difference(motions, kinematics_func, sub_func = SE3.sub_tan_vec, update_func = update_func, direction = update_direction, eps=eps)
-    elif data_type == "cmtm":
-      # temp update
-      # diff[i] = numerical_difference(motions.motions, kinematics_func, sub_func = CMTM.sub_vec, update_func = update_func, direction = update_direction, eps=eps)
-      diff[i] = numerical_difference(motions, kinematics_func, sub_func = CMTM.sub_vec, update_func = update_func, direction = update_direction, eps=eps)
-    else:
-      # temp update
-      # diff[i] = numerical_difference(motions.motions, kinematics_func, update_func = update_func, direction = update_direction, eps=eps)
-      diff[i] = numerical_difference(motions, kinematics_func, update_func = update_func, direction = update_direction, eps=eps)
-
+    
+    sub_func = __data_type_to_sub_func(data_type)
+    # diff[i] = numerical_difference(motions.motions, kinematics_func, sub_func = sub_func, update_func = update_func, direction = update_direction, eps=eps)
+    diff[i] = numerical_difference(motions, kinematics_func, sub_func = sub_func, update_func = update_func, direction = update_direction, eps=eps)
 
   return diff
 
