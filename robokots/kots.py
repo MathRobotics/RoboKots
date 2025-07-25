@@ -145,12 +145,6 @@ class Kots():
       accel[joint.dof_index:joint.dof_index+joint.dof] = m.flatten()
     return accel
 
-  def joint_motions(self, joint : JointStruct, order : int = 1):
-    return self.motions_.joint_motions(joint.dof, joint.dof_index, order)
-  
-  def link_motions(self, link : LinkStruct, order : int = 1):
-    return self.motions_.link_motions(link.dof, link.dof_index, order)
-  
   def state_df(self):
     return self.state_.df()
   
