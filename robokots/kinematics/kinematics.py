@@ -22,11 +22,11 @@ def local_cmtm(select_mat : np.ndarray, joint_motions : np.ndarray, dof : int = 
   if order < 1:
     raise ValueError(f"Invalid order: {order}. Must be over 1.")
 
-  frame = local_frame(select_mat, joint_motions[:dof].reshape(dof))
+  frame = local_frame(select_mat, joint_motions[:dof].flatten())
   vecs = np.zeros((order-1, 6))
 
   for i in range(order-1):
-    vecs[i] = local_tan_vec(select_mat, joint_motions[(i+1)*dof:(i+2)*dof].reshape(dof))
+    vecs[i] = local_tan_vec(select_mat, joint_motions[(i+1)*dof:(i+2)*dof].flatten())
 
   m = CMTM[SE3](frame, vecs)
   return m
@@ -50,10 +50,10 @@ def joint_rel_cmtm(joint : JointData, joint_motions : np.ndarray, order = 3) -> 
   
   dof = joint.dof
 
-  frame = joint_rel_frame(joint, joint_motions[:dof].reshape(dof))
+  frame = joint_rel_frame(joint, joint_motions[:dof].flatten())
   vecs = np.zeros((order-1, 6))
   for i in range(order-1):
-    vecs[i] = local_tan_vec(joint.select_mat, joint_motions[(i+1)*dof:(i+2)*dof].reshape(dof))
+    vecs[i] = local_tan_vec(joint.select_mat, joint_motions[(i+1)*dof:(i+2)*dof].flatten())
 
   m = CMTM[SE3](frame, vecs)
   return m
