@@ -80,7 +80,7 @@ def kinematics(joint: JointData, p_link_frame: SE3, joint_coord: jnp.ndarray) ->
 def forward_kinematics(joints: List[JointData], joint_coords: jnp.ndarray):
     frame_list = [SE3.eye(LIB='jax')]
     for joint in joints:
-        joint_coord = joint_coords[joint.dof_index:joint.dof_index + joint.dof]
+        joint_coord = joint_coords[joint.dof_index : joint.dof_index + joint.dof]
         frame = kinematics(joint, frame_list[-1], joint_coord)
         frame_list.append(frame)
     return frame_list
@@ -96,7 +96,7 @@ def forward_kinematics_vel(joints: List[JointData], joint_motions: jnp.ndarray):
     vel_list = [jnp.zeros(6)]
     for joint in joints:
         offset = joint.dof_index * 2
-        joint_coord = joint_motions[offset:offset + joint.dof]
+        joint_coord = joint_motions[offset : offset + joint.dof]
         joint_veloc = joint_motions[offset + joint.dof : offset + 2*joint.dof]
         vel = kinematics_vel(joint, vel_list[-1], joint_coord, joint_veloc)
         vel_list.append(vel)
