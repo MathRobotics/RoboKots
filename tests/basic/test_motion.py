@@ -88,22 +88,22 @@ def test_coord_veloc_accel():
 def test_gen_value():
     motions = RobotMotions(test_robot_dof)
     motions.set_motion(np.array([1, 2, 3, 4, 5, 6, 7, 8, 9]))
-    assert np.array_equal(motions.gen_value(test_dof, test_dof_index, "coord"), np.array([2]))
+    assert np.array_equal(motions.gen_value(test_dof, test_dof_index, "coord"), np.array([4]))
     assert np.array_equal(motions.gen_value(test_dof, test_dof_index, "veloc"), np.array([5]))
-    assert np.array_equal(motions.gen_value(test_dof, test_dof_index, "accel"), np.array([8]))
+    assert np.array_equal(motions.gen_value(test_dof, test_dof_index, "accel"), np.array([6]))
 
 # Test the joint_coord, joint_veloc, and joint_accel methods
 def test_joint_coord_veloc_accel():
     motions = RobotMotions(test_robot_dof)
     motions.set_motion(np.array([1, 2, 3, 4, 5, 6, 7, 8, 9]))
-    assert np.array_equal(motions.joint_coord(test_dof, test_dof_index), np.array([2]))
+    assert np.array_equal(motions.joint_coord(test_dof, test_dof_index), np.array([4]))
     assert np.array_equal(motions.joint_veloc(test_dof, test_dof_index), np.array([5]))
-    assert np.array_equal(motions.joint_accel(test_dof, test_dof_index), np.array([8]))
+    assert np.array_equal(motions.joint_accel(test_dof, test_dof_index), np.array([6]))
     
 # Test the link_coord, link_veloc, and link_accel methods
 def test_link_coord_veloc_accel():
     motions = RobotMotions(test_robot_dof)
     motions.set_motion(np.array([1, 2, 3, 4, 5, 6, 7, 8, 9]))
-    assert np.array_equal(motions.link_coord(test_dof, test_dof_index), np.array([2]))
+    assert np.array_equal(motions.link_coord(test_dof, test_dof_index), np.array([4]))
     assert np.array_equal(motions.link_veloc(test_dof, test_dof_index), np.array([5]))
-    assert np.array_equal(motions.link_accel(test_dof, test_dof_index), np.array([8]))
+    assert np.array_equal(motions.link_accel(test_dof, test_dof_index), np.array([6]))
