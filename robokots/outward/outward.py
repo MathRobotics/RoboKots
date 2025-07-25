@@ -25,7 +25,7 @@ def kinematics(robot : RobotStruct, motions, order = 3) -> dict:
   Forward kinematics computation
   Args:
     robot (RobotStruct): robot model
-    motions (RobotMotions): robot motion
+    motions : robot motion
   Returns:
     dict: state data
   '''
@@ -84,7 +84,10 @@ def calc_link_total_point_frame(robot : RobotStruct, motions : RobotMotions, sta
       coord = motions.link_motions(l.dof, l.dof_index, 1)[0]
       return calc_link_local_point_frame(l, coord, p_link_frame, point - base)
 
-def link_diff_kinematics_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str],  data_type : str, order = None, \
+# temp update
+# def link_diff_kinematics_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str],  data_type : str, order = None, \
+#                                     eps = 1e-8, update_method = None, update_direction = None) -> np.ndarray:
+def link_diff_kinematics_numerical(robot : RobotStruct, motions, link_name_list : list[str],  data_type : str, order = None, \
                                     eps = 1e-8, update_method = None, update_direction = None) -> np.ndarray:
   if data_type not in ["pos", "rot", "vel", "acc", "jerk", "frame", "cmtm"]:
     raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'frame' or 'cmtm'.")
@@ -140,13 +143,22 @@ def link_diff_kinematics_numerical(robot : RobotStruct, motions : RobotMotions, 
       return y
 
     if data_type == "rot":
-      diff[i] = numerical_difference(motions.motions, kinematics_func, sub_func = SO3.sub_tan_vec, update_func = update_func, direction = update_direction, eps=eps)
+      # temp update
+      # diff[i] = numerical_difference(motions.motions, kinematics_func, sub_func = SO3.sub_tan_vec, update_func = update_func, direction = update_direction, eps=eps)
+      diff[i] = numerical_difference(motions, kinematics_func, sub_func = SO3.sub_tan_vec, update_func = update_func, direction = update_direction, eps=eps)
     if data_type == "frame":
-      diff[i] = numerical_difference(motions.motions, kinematics_func, sub_func = SE3.sub_tan_vec, update_func = update_func, direction = update_direction, eps=eps)
+      # temp update
+      # diff[i] = numerical_difference(motions.motions, kinematics_func, sub_func = SE3.sub_tan_vec, update_func = update_func, direction = update_direction, eps=eps)
+      diff[i] = numerical_difference(motions, kinematics_func, sub_func = SE3.sub_tan_vec, update_func = update_func, direction = update_direction, eps=eps)
     elif data_type == "cmtm":
-      diff[i] = numerical_difference(motions.motions, kinematics_func, sub_func = CMTM.sub_vec, update_func = update_func, direction = update_direction, eps=eps)
+      # temp update
+      # diff[i] = numerical_difference(motions.motions, kinematics_func, sub_func = CMTM.sub_vec, update_func = update_func, direction = update_direction, eps=eps)
+      diff[i] = numerical_difference(motions, kinematics_func, sub_func = CMTM.sub_vec, update_func = update_func, direction = update_direction, eps=eps)
     else:
-      diff[i] = numerical_difference(motions.motions, kinematics_func, update_func = update_func, direction = update_direction, eps=eps)
+      # temp update
+      # diff[i] = numerical_difference(motions.motions, kinematics_func, update_func = update_func, direction = update_direction, eps=eps)
+      diff[i] = numerical_difference(motions, kinematics_func, update_func = update_func, direction = update_direction, eps=eps)
+
 
   return diff
 

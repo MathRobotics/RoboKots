@@ -194,8 +194,31 @@ class Kots():
       raise ValueError("target_ is not set")
     return self.link_jacobian(self.target_.target_names, order)
 
+  def __order_from_data_type(self, data_type : str) -> int:
+    if data_type in ["pos", "rot"]:
+      return 1
+    elif data_type == "frame":
+      return 1
+    elif data_type == "vel":
+      return 2
+    elif data_type == "acc":
+      return 3
+    elif data_type == "jerk":
+      return 4
+    elif data_type == "cmtm":
+      return self.order_
+    else:
+      raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'jerk', 'frame' or 'cmtm'.")
+
   def link_diff_kinematics_numerical(self, link_name_list : list[str], data_type = "vel", order = None, eps = 1e-8, update_method = "poly", update_direction = None):
-    return link_diff_kinematics_numerical(self.robot_, self.motions_, link_name_list, data_type, order, eps, update_method, update_direction)
+    order = self.__order_from_data_type(data_type)
+    motion = np.zeros(self.robot_.dof * order)
+    for joint in self.robot_.joints:
+      m = self.motions_.joint_motions(joint.dof, joint.dof_index, order)
+      motion[joint.dof_index*order:joint.dof_index*order+joint.dof*order] = m.flatten()
+    return link_diff_kinematics_numerical(self.robot_, motion, link_name_list, data_type, order, eps, update_method, update_direction)
+    # temp update
+    # return link_diff_kinematics_numerical(self.robot_, self.motions_, link_name_list, data_type, order, eps, update_method, update_direction)
 
   def link_jacobian_numerical(self, link_name_list : list[str], data_type = "vel", order = None):
     return link_jacobian_numerical(self.robot_, self.motions_, link_name_list, data_type, order)
