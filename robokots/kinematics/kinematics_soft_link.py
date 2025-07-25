@@ -94,14 +94,14 @@ def kinematics(soft_link : SoftLinkData, p_link_frame : SE3, soft_link_coord : n
   frame = p_link_frame @ soft_link_local_frame(soft_link, soft_link_coord)
   return frame
 
-def vel_kinematics(soft_link : SoftLinkData, p_link_vel : np.ndarray, soft_link_coord : np.ndarray, soft_link_veloc : np.ndarray) -> np.ndarray:
+def kinematics_vel(soft_link : SoftLinkData, p_link_vel : np.ndarray, soft_link_coord : np.ndarray, soft_link_veloc : np.ndarray) -> np.ndarray:
   rel_frame = soft_link_local_frame(soft_link, soft_link_coord)
   rel_vel = soft_link_local_vel(soft_link, soft_link_coord, soft_link_veloc)
 
   vel = rel_frame.mat_inv_adj() @ p_link_vel  + rel_vel
   return vel
 
-def acc_kinematics(soft_link : SoftLinkData, p_link_vel : np.ndarray, p_link_acc : np.ndarray, soft_link_coord : np.ndarray, soft_link_veloc : np.ndarray, soft_link_accel : np.ndarray) -> np.ndarray:
+def kinematics_acc(soft_link : SoftLinkData, p_link_vel : np.ndarray, p_link_acc : np.ndarray, soft_link_coord : np.ndarray, soft_link_veloc : np.ndarray, soft_link_accel : np.ndarray) -> np.ndarray:
   rel_frame = soft_link_local_frame(soft_link, soft_link_coord)
   rel_vel = soft_link_local_vel(soft_link, soft_link_coord, soft_link_veloc)
   rel_acc = soft_link_local_acc(soft_link, soft_link_coord, soft_link_veloc, soft_link_accel)

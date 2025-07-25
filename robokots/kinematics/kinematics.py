@@ -63,14 +63,14 @@ def kinematics(joint : JointData, p_link_frame : SE3, joint_coord : np.ndarray) 
   frame = p_link_frame @ rel_frame
   return frame
 
-def vel_kinematics(joint : JointData, p_link_vel : np.ndarray, joint_coord : np.ndarray, joint_veloc : np.ndarray) -> np.ndarray:
+def kinematics_vel(joint : JointData, p_link_vel : np.ndarray, joint_coord : np.ndarray, joint_veloc : np.ndarray) -> np.ndarray:
   rel_frame = joint_rel_frame(joint, joint_coord)
   rel_vel = joint_local_vel(joint.select_mat, joint_veloc)
 
   vel = rel_frame.mat_inv_adj() @ p_link_vel  + rel_vel
   return vel
 
-def acc_kinematics(joint : JointData, p_link_vel : np.ndarray, p_link_acc : np.ndarray, joint_coord : np.ndarray, joint_veloc : np.ndarray, joint_accel : np.ndarray) -> np.ndarray:
+def kinematics_acc(joint : JointData, p_link_vel : np.ndarray, p_link_acc : np.ndarray, joint_coord : np.ndarray, joint_veloc : np.ndarray, joint_accel : np.ndarray) -> np.ndarray:
   rel_frame = joint_rel_frame(joint, joint_coord)
   rel_vel = joint_local_vel(joint.select_mat, joint_veloc)
   rel_acc = joint_local_acc(joint.select_mat, joint_accel)
