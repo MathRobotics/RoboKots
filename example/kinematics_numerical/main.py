@@ -31,9 +31,6 @@ def main():
 
     jac_vel = jacob[:6] @ motion_diff
 
-    print(jacob[:6,0])
-    print(jacob[:6,3])
-    print(jacob[:6,6])
     print(kots.link_jacobian_target(1)@kots.veloc())
 
     print("velocity analytical : \n", ana_vel)
@@ -42,7 +39,6 @@ def main():
     print("velocity jacobian : \n", jac_vel)
     print("norm: ", np.linalg.norm(ana_vel - num_vel))
 
-    acc = kots.accel()
     ana_acc = kots.state_target_link_info("acc")[-1]
     num_acc = kots.link_diff_kinematics_numerical(kots.target_.target_names, "vel", order = 3, update_direction=jark)
     num_acc2 = vec[:,6:12]
