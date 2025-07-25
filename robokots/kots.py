@@ -177,6 +177,10 @@ class Kots():
     for joint in self.robot_.joints:
       m = self.motions_.joint_motions(joint.dof, joint.dof_index, order)
       motion[joint.dof_index*order:joint.dof_index*order+joint.dof*order] = m.flatten()
+    for link in self.robot_.links:
+      m = self.motions_.link_motions(link.dof, link.dof_index, order)
+      motion[link.dof_index*order:link.dof_index*order+link.dof*order] = m.flatten()
+
     self.state_dict_ = outward_kinematics(self.robot_, motion, order)
     # temp update
     # self.state_dict_ = outward_kinematics(self.robot_, self.motions_, self.order_)

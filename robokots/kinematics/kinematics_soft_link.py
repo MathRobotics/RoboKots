@@ -84,6 +84,7 @@ def soft_link_local_cmtm(soft_link : SoftLinkData, soft_link_motions : np.ndarra
     return CMTM.eye(SE3, order)
  
   mot = soft_link_motions.copy()
+  mot = mot.reshape((order, soft_link.dof))
   mot[0] += soft_link.origin_coord
 
   mat = CMTM.set_mat(SE3, expm(soft_link.length * CMTM.hat(SE3, mot.reshape((order, 6)))))

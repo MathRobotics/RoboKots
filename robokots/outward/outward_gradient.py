@@ -185,6 +185,9 @@ def link_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_na
   for joint in robot.joints:
     m = motions.joint_motions(joint.dof, joint.dof_index, order)
     motion[joint.dof_index*order:joint.dof_index*order+joint.dof*order] = m.flatten()
+  for link in robot.links:
+    m = motions.link_motions(link.dof, link.dof_index, order)
+    motion[link.dof_index*order:link.dof_index*order+link.dof*order] = m.flatten()
   # temp update
   # motion = motions.motions[:robot.dof*order]
 
