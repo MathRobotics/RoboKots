@@ -28,7 +28,7 @@ def main():
     vec = kots.link_diff_kinematics_numerical(kots.target_.target_names, "cmtm", ORDER, update_direction=jark)
     num_vel2 = vec[:,:6]
 
-    jac_vel = jacob[:6,:kots.dof()] @ motion[kots.dof():2*kots.dof()]
+    jac_vel = jacob[:6] @ motion
 
     print("velocity analytical : ", ana_vel)
     print("velocity numerical  : ", num_vel)
@@ -39,14 +39,14 @@ def main():
     ana_acc = kots.state_target_link_info("acc")
     num_acc = kots.link_diff_kinematics_numerical(kots.target_.target_names, "vel", update_direction=jark)
     num_acc2 = vec[:,6:12]
-    jac_acc = jacob[6:12,:2*kots.dof()] @ motion[kots.dof():3*kots.dof()]
+    jac_acc = jacob[6:12] @ motion
     print("accleration analytical : ", ana_acc)
     print("accleration numerical  : ", num_acc)
     print("accleration numerical2 : ", num_acc2)
     print("accleration jacobian : ", jac_acc)
     print("norm: ", np.linalg.norm(ana_acc - num_acc))
 
-    num_jark = kots.link_diff_kinematics_numerical(kots.target_.target_names, "acc", ORDER, update_direction=jark)
+    num_jark = kots.link_diff_kinematics_numerical(kots.target_.target_names, "acc", update_direction=jark)
     num_jark2 = vec[:,12:18]
     print("jark numerical : ", num_jark)
     print("jark numerical cmtm : ", num_jark2)
