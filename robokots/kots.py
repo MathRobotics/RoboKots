@@ -119,9 +119,9 @@ class Kots():
       last_diff = np.zeros(self.robot_.dof)
     motion_diff = np.zeros(self.robot_.dof * order)
     for joint in self.robot_.joints:
-      m = self.motions_.joint_motions(joint.dof, joint.dof_index, order)
+      m = self.motions_.joint_motions(joint.dof, joint.dof_index, self.order_)
       m = np.append(m, last_diff[joint.dof_index:joint.dof_index+joint.dof])
-      motion_diff[joint.dof_index*order:joint.dof_index*order+joint.dof*order] = m.flatten()[1:]
+      motion_diff[joint.dof_index*order:joint.dof_index*order+joint.dof*order] = m.flatten()[1:order+1]
     return motion_diff
   
   def coord(self):
