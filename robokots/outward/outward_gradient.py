@@ -114,7 +114,7 @@ def __link_cmtm_tan_jacobian(robot : RobotStruct, motions: RobotMotions, state :
       #     = mat[:,i*joint.dof:(i+1)*joint.dof]
         
       for i in range(order):
-        jacob[:,joint.dof_index*order + joint.dof*i :joint.dof_index*order + joint.dof*(i+1)]  \
+        jacob[:,joint.dof_index*order + joint.dof*i : joint.dof_index*order + joint.dof*(i+1)]  \
           = mat[:,i*joint.dof:(i+1)*joint.dof]
 
   for l in link_route:
