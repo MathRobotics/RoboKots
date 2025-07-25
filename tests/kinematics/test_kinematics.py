@@ -280,8 +280,8 @@ def test_kinematics_cmtm():
     p_link_cmtm = CMTM[SE3](p_link_frame, np.array((p_link_vel, p_link_acc)))
 
     expected_frame = kinematics(joint, p_link_frame, joint_coord)
-    expected_vel = vel_kinematics(joint, p_link_vel, joint_coord, joint_veloc)
-    expected_acc = acc_kinematics(joint, p_link_vel, p_link_acc, joint_coord, joint_veloc, joint_accel)
+    expected_vel = kinematics_vel(joint, p_link_vel, joint_coord, joint_veloc)
+    expected_acc = kinematics_acc(joint, p_link_vel, p_link_acc, joint_coord, joint_veloc, joint_accel)
 
     joint_motions = np.array([joint_coord, joint_veloc, joint_accel])
     result_cmtm = kinematics_cmtm(joint, p_link_cmtm, joint_motions)
@@ -344,7 +344,7 @@ def test_part_link_jacob_vec():
     
     # Test with a specific rel_frame
     rel_frame = joint_rel_frame(joint, joint_coord)
-    expected_vel = rel_frame.mat_inv_adj() @ vel_kinematics(joint, np.zeros(6), np.zeros(1), joint_veloc)
+    expected_vel = rel_frame.mat_inv_adj() @ kinematics_vel(joint, np.zeros(6), np.zeros(1), joint_veloc)
     result_vel = part_link_jacob(joint, rel_frame) @ joint_veloc
     assert np.allclose(result_vel, expected_vel)  
 
