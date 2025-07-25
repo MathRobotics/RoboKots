@@ -11,7 +11,6 @@ from .base import JointData
 
 # Joint-space twist calculation with proper JAX conditional
 def local_tan_vec(select_mat: jnp.ndarray, joint_vec: jnp.ndarray) -> jnp.ndarray:
-  print(f"select_mat shape: {select_mat.shape}, joint_vec shape: {joint_vec.shape}")
   if len(joint_vec) == 0:
     return jnp.zeros(6)
   else:
