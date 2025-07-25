@@ -111,6 +111,39 @@ class Kots():
     
   def motion(self, name : str):
     return self.motions_.gen_values(name)
+  
+  def motion_diff(self, order : int = None, last_diff = None):
+    if order is None:
+      order = self.order_
+    if last_diff is None:
+      last_diff = np.zeros(self.robot_.dof)
+    motion_diff = np.zeros(self.robot_.dof * order)
+    for joint in self.robot_.joints:
+      m = self.motions_.joint_motions(joint.dof, joint.dof_index, order)
+      m = np.append(m, last_diff[joint.dof_index:joint.dof_index+joint.dof])
+      motion_diff[joint.dof_index*order:joint.dof_index*order+joint.dof*order] = m.flatten()[1:]
+    return motion_diff
+  
+  def coord(self):
+    coord = np.zeros(self.robot_.dof)
+    for joint in self.robot_.joints:
+      m = self.motions_.joint_motions(joint.dof, joint.dof_index, 1)
+      coord[joint.dof_index:joint.dof_index+joint.dof] = m.flatten()
+    return coord
+  
+  def veloc(self):
+    veloc = np.zeros(self.robot_.dof)
+    for joint in self.robot_.joints:
+      m = self.motions_.joint_motions(joint.dof, joint.dof_index, 2)[1:]
+      veloc[joint.dof_index:joint.dof_index+joint.dof] = m.flatten()
+    return veloc
+
+  def accel(self):
+    accel = np.zeros(self.robot_.dof)
+    for joint in self.robot_.joints:
+      m = self.motions_.joint_motions(joint.dof, joint.dof_index, 3)[2:]
+      accel[joint.dof_index:joint.dof_index+joint.dof] = m.flatten()
+    return accel
 
   def joint_motions(self, joint : JointStruct, order : int = 1):
     return self.motions_.joint_motions(joint.dof, joint.dof_index, order)
@@ -211,7 +244,8 @@ class Kots():
       raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'jerk', 'frame' or 'cmtm'.")
 
   def link_diff_kinematics_numerical(self, link_name_list : list[str], data_type = "vel", order = None, eps = 1e-8, update_method = "poly", update_direction = None):
-    order = self.__order_from_data_type(data_type)
+    if order is None:
+      order = self.__order_from_data_type(data_type)
     motion = np.zeros(self.robot_.dof * order)
     for joint in self.robot_.joints:
       m = self.motions_.joint_motions(joint.dof, joint.dof_index, order)
