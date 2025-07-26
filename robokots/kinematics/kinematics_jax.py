@@ -88,7 +88,7 @@ def forward_kinematics(joints: List[JointData], joint_coords: jnp.ndarray):
 def kinematics_vel(joint: JointData, p_link_vel: jnp.ndarray,
                    joint_coord: jnp.ndarray, joint_veloc: jnp.ndarray) -> jnp.ndarray:
     rel = joint_rel_frame(joint, joint_coord)
-    rel_vel = local_tan_vec(joint.select_mat, joint_veloc)
+    rel_vel = joint_local_vel(joint.select_mat, joint_veloc)
     return rel.mat_inv_adj() @ p_link_vel + rel_vel
 
 def forward_kinematics_vel(joints: List[JointData], joint_motions: jnp.ndarray):
@@ -106,10 +106,10 @@ def kinematics_acc(joint: JointData, p_link_vel: jnp.ndarray, p_link_acc: jnp.nd
                    joint_coord: jnp.ndarray, joint_veloc: jnp.ndarray,
                    joint_accel: jnp.ndarray) -> jnp.ndarray:
     rel = joint_rel_frame(joint, joint_coord)
-    rv = local_tan_vec(joint.select_mat, joint_veloc)
-    ra = local_tan_vec(joint.select_mat, joint_accel)
+    rv = joint_local_vel(joint.select_mat, joint_veloc)
+    ra = joint_local_acc(joint.select_mat, joint_accel)
     return (rel.mat_inv_adj() @ p_link_acc
-            + SE3.hat_adj(rel.mat_inv_adj() @ p_link_vel) @ rv
+            + SE3.hat_adj(rel.mat_inv_adj() @ p_link_vel, LIB = "jax") @ rv
             + ra)
 
 def forward_kinematics_acc(joints: List[JointData], joint_motions: jnp.ndarray):
@@ -121,8 +121,10 @@ def forward_kinematics_acc(joints: List[JointData], joint_motions: jnp.ndarray):
         joint_coord = joint_motions[offset : offset + joint.dof]
         joint_veloc = joint_motions[offset + joint.dof : offset + 2*joint.dof]
         joint_accel = joint_motions[offset + 2*joint.dof : offset + 3*joint.dof]
-        vel_list.append(kinematics_vel(joint, vel_list[-1], joint_coord, joint_veloc))
-        acc_list.append(kinematics_acc(joint, vel_list[-1], acc_list[-1], joint_coord, joint_veloc, joint_accel))
+        vel = kinematics_vel(joint, vel_list[-1], joint_coord, joint_veloc)
+        acc = kinematics_acc(joint, vel_list[-1], acc_list[-1], joint_coord, joint_veloc, joint_accel)
+        vel_list.append(vel)
+        acc_list.append(acc)
     return acc_list
 
 def kinematics_cmtm(joint: JointData, p_link_cmtm: CMTM,
