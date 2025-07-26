@@ -2,6 +2,7 @@ import numpy as np
 
 import mathrobo as mr
 from robokots.kots import *
+from robokots.kinematics.kinematics_jax import *
 
 METHOD = "poly"
 ORDER = 3
@@ -13,6 +14,20 @@ kots.import_motions(motion)
 kots.set_target_from_file("target_list.json")
 
 kots.kinematics()
+
+def test_kinematics():
+    h_list = kots.state_link_info_list("frame", kots.link_name_list())
+    v_list = kots.state_link_info_list("vel", kots.link_name_list())
+    a_list = kots.state_link_info_list("acc", kots.link_name_list())    
+
+    h_list2 = forward_kinematics(kots.robot_.joints, kots.motion(order=1))
+    v_list2 = forward_kinematics_vel(kots.robot_.joints, kots.motion(order=2))
+    a_list2 = forward_kinematics_acc(kots.robot_.joints, kots.motion(order=3))
+
+    for i in range(len(h_list)):
+        assert np.allclose(h_list[i].mat(), h_list2[i].mat())
+        assert np.allclose(v_list[i], v_list2[i])
+        assert np.allclose(a_list[i], a_list2[i])
 
 def test_kinematics_numerical():
     jark = np.random.rand(kots.dof())
