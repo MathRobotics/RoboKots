@@ -3,6 +3,7 @@
 # 2024.12.13 Created by T.Ishigaki
 
 import numpy as np
+from typing import List
 
 from .basic.motion import RobotMotions
 from .basic.state import RobotState
@@ -109,8 +110,17 @@ class Kots():
   def import_motions(self, vecs : np.ndarray):
     self.motions_.set_motion(vecs)
     
-  def motion(self, name : str):
-    return self.motions_.gen_values(name)
+  # def motion(self, name : str):
+  #   return self.motions_.gen_values(name)
+
+  def motion(self, order : int = None):
+    if order is None:
+      order = self.order_
+    motion = np.zeros(self.robot_.dof * order)
+    for joint in self.robot_.joints:
+      m = self.motions_.joint_motions(joint.dof, joint.dof_index, self.order_)
+      motion[joint.dof_index*order:joint.dof_index*order+joint.dof*order] = m.flatten()[:order]
+    return motion
   
   def motion_diff(self, order : int = None, last_diff = None):
     if order is None:
