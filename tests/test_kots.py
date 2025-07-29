@@ -5,7 +5,7 @@ from robokots.kots import *
 from robokots.kinematics.kinematics_jax import *
 
 METHOD = "poly"
-ORDER = 3
+ORDER = 5
 kots = Kots.from_json_file("./test_model/sample_robot.json", order=ORDER)
 
 motion = np.random.rand(kots.order()*kots.dof())
@@ -30,36 +30,26 @@ def test_kinematics():
         assert np.allclose(a_list[i], a_list2[i])
 
 def test_kinematics_numerical():
-    jark = np.random.rand(kots.dof())
-    motion_diff = kots.motion_diff(ORDER, jark)    
+    dv = np.random.rand(kots.dof())
+    motion_diff = kots.motion_diff(ORDER, dv)
 
     jacob = kots.link_jacobian_target(ORDER)
+    vec = kots.link_diff_kinematics_numerical(kots.target_.target_names, "cmtm", ORDER, update_direction=dv)
 
-    ana_vel = kots.state_target_link_info("vel")[-1]
-    num_vel = kots.link_diff_kinematics_numerical(kots.target_.target_names, "frame", order = 3, update_direction=jark)
+    alias = ["frame", "vel", "acc", "jerk", "snap"]
 
-    vec = kots.link_diff_kinematics_numerical(kots.target_.target_names, "cmtm", ORDER, update_direction=jark)
-    num_vel2 = vec[:,:6]
+    for i in range(ORDER-1):
+        ana_vec = kots.state_target_link_info(alias[i+1])[-1]
+        num_vec = kots.link_diff_kinematics_numerical(kots.target_.target_names, alias[i], order = ORDER, update_direction=dv)
 
-    jac_vel = jacob[:6] @ motion_diff
+        num_vec2 = vec[:,6*i:6*(i+1)]
 
-    assert np.allclose(ana_vel, num_vel)
-    assert np.allclose(ana_vel, num_vel2)
-    assert np.allclose(ana_vel, jac_vel)
-    
-    ana_acc = kots.state_target_link_info("acc")[-1]
-    num_acc = kots.link_diff_kinematics_numerical(kots.target_.target_names, "vel", order = 3, update_direction=jark)
-    num_acc2 = vec[:,6:12]
-    jac_acc = jacob[6:12] @ motion_diff
+        jac_vec = jacob[6*i:6*(i+1)] @ motion_diff
 
-    assert np.allclose(ana_acc, num_acc)
-    assert np.allclose(ana_acc, num_acc2)
-    assert np.allclose(ana_acc, jac_acc)
-    
-    num_jark = kots.link_diff_kinematics_numerical(kots.target_.target_names, "acc", order = 3, update_direction=jark)
-    num_jark2 = vec[:,12:18]
-    assert np.allclose(num_jark, num_jark2)
-    
+        assert np.allclose(ana_vec, num_vec)
+        assert np.allclose(ana_vec, num_vec2)
+        assert np.allclose(ana_vec, jac_vec)
+
 def test_jacobian_numerical():
     jacob = kots.link_jacobian_target(1)
     jacob_num = kots.link_jacobian_target_numerical("frame")
