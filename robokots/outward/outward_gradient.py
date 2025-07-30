@@ -212,9 +212,9 @@ def link_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_na
     elif data_type == "cmtm":
       # temp update
       # state = outward_kinematics(robot, motions, order)
-      state = outward_kinematics(robot, motion, order)
-      jacobs[(dof*order)*i:(dof*order)*(i+1)] = \
-        extract_dict_link_info(state, data_type, link_name_list[i]).tan_map_inv() @ numerical_grad(motion, kinematics_func, sub_func = CMTM.sub_tan_vec_var)
+      # state = outward_kinematics(robot, motion, order)
+      jacobs[(dof*order)*i:(dof*order)*(i+1)] = numerical_grad(motion, kinematics_func, sub_func = CMTM.sub_vec)
+        # extract_dict_link_info(state, data_type, link_name_list[i]).tan_map_inv() @ numerical_grad(motion, kinematics_func, sub_func = CMTM.sub_tan_vec_var)
     else:
       jacobs[dof*i:dof*(i+1)] = numerical_grad(motion, kinematics_func)
 
