@@ -156,8 +156,8 @@ def link_cmtm_jacobian(robot : RobotStruct, motions : RobotMotions, state : dict
   return jacobs
 
 def link_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str], data_type : str, order_ = None) -> np.ndarray:
-  if data_type not in ["pos", "rot", "vel", "acc", "frame", "cmtm"]:
-    raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'frame' or 'cmtm'.")
+  if data_type not in ["pos", "rot", "vel", "acc", "jerk", "snap", "frame", "cmtm"]:
+    raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'jerk', 'snap', 'frame' or 'cmtm'.")
 
   order = 3
   dof = 6
@@ -170,6 +170,10 @@ def link_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_na
     order = 2
   elif data_type == "acc":
     order = 3
+  elif data_type == "jerk":
+    order = 4
+  elif data_type == "snap":
+    order = 5
   elif data_type == "cmtm":
     if order_ is None:
       order = 3
