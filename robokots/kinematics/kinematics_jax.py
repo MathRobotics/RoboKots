@@ -48,6 +48,7 @@ def joint_local_frame(joint: JointData, joint_coord: jnp.ndarray) -> SE3:
 
 joint_local_vel = local_tan_vec
 joint_local_acc = local_tan_vec
+joint_local_jerk = local_tan_vec
 
 def joint_local_cmtm(joint: JointData, joint_motions: jnp.ndarray, order: int = 3) -> CMTM:
     return local_cmtm(joint.select_mat, joint_motions, joint.dof, order)
@@ -126,6 +127,40 @@ def forward_kinematics_acc(joints: List[JointData], joint_motions: jnp.ndarray):
         vel_list.append(vel)
         acc_list.append(acc)
     return acc_list
+
+def kinematics_jerk(joint: JointData, p_link_vel: jnp.ndarray, p_link_acc: jnp.ndarray,
+                   p_link_jerk: jnp.ndarray, joint_coord: jnp.ndarray,
+                   joint_veloc: jnp.ndarray, joint_accel: jnp.ndarray,
+                   joint_jerk: jnp.ndarray) -> jnp.ndarray:
+    rel = joint_rel_frame(joint, joint_coord)
+    rv = joint_local_vel(joint.select_mat, joint_veloc)
+    ra = joint_local_acc(joint.select_mat, joint_accel)
+    rj = joint_local_jerk(joint.select_mat, joint_jerk)
+    return (rel.mat_inv_adj() @ p_link_jerk
+            + 2 * SE3.hat_adj(rel.mat_inv_adj() @ p_link_acc, LIB = "jax") @ rv
+            + SE3.hat_adj( SE3.hat_adj(rel.mat_inv_adj() @ p_link_vel, LIB = "jax") @ rv, LIB="jax") @ rv
+            + SE3.hat_adj(rel.mat_inv_adj() @ p_link_vel, LIB = "jax") @ ra
+            + rj)
+
+def forward_kinematics_jerk(joints: List[JointData], joint_motions: jnp.ndarray):
+    joint_motions = joint_motions.flatten()
+    vel_list = [jnp.zeros(6)]
+    acc_list = [jnp.zeros(6)]
+    jerk_list = [jnp.zeros(6)]
+    for joint in joints:
+        offset = joint.dof_index * 4
+        joint_coord = joint_motions[offset : offset + joint.dof]
+        joint_veloc = joint_motions[offset + joint.dof : offset + 2*joint.dof]
+        joint_accel = joint_motions[offset + 2*joint.dof : offset + 3*joint.dof]
+        joint_jerk = joint_motions[offset + 3*joint.dof : offset + 4*joint.dof]
+        vel = kinematics_vel(joint, vel_list[-1], joint_coord, joint_veloc)
+        acc = kinematics_acc(joint, vel_list[-1], acc_list[-1], joint_coord, joint_veloc, joint_accel)
+        jerk = kinematics_jerk(joint, vel_list[-1], acc_list[-1], jerk_list[-1], 
+                              joint_coord, joint_veloc, joint_accel, joint_jerk)
+        vel_list.append(vel)
+        acc_list.append(acc)
+        jerk_list.append(jerk)
+    return jerk_list
 
 def kinematics_cmtm(joint: JointData, p_link_cmtm: CMTM,
                     joint_motions: jnp.ndarray, order: int = 3) -> CMTM:
