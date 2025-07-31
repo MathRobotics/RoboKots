@@ -36,6 +36,7 @@ def joint_local_frame(joint : JointData, joint_coord : np.ndarray) -> SE3:
 
 joint_local_vel = local_tan_vec
 joint_local_acc = local_tan_vec
+joint_local_jerk = local_tan_vec
 
 def joint_local_cmtm(joint : JointData, joint_motions : np.ndarray, order = 3) -> CMTM:
   return local_cmtm(joint.select_mat, joint_motions, joint.dof, order)
@@ -77,6 +78,19 @@ def kinematics_acc(joint : JointData, p_link_vel : np.ndarray, p_link_acc : np.n
 
   acc =  rel_frame.mat_inv_adj() @ p_link_acc + SE3.hat_adj( rel_frame.mat_inv_adj() @ p_link_vel ) @ rel_vel + rel_acc
   return acc
+
+def kinematics_jerk(joint : JointData, 
+                    p_link_vel : np.ndarray, p_link_acc : np.ndarray, p_link_jerk : np.ndarray, 
+                    joint_coord : np.ndarray, joint_veloc : np.ndarray, joint_accel : np.ndarray, joint_jerk : np.ndarray) -> np.ndarray:
+  rel_frame = joint_rel_frame(joint, joint_coord)
+  rel_vel = joint_local_vel(joint.select_mat, joint_veloc)
+  rel_acc = joint_local_acc(joint.select_mat, joint_accel)
+  rel_jerk = joint_local_jerk(joint.select_mat, joint_jerk)
+  return (rel_frame.mat_inv_adj() @ p_link_jerk
+          + 2 * SE3.hat_adj(rel_frame.mat_inv_adj() @ p_link_acc) @ rel_vel
+          + SE3.hat_adj(SE3.hat_adj(rel_frame.mat_inv_adj() @ p_link_vel) @ rel_vel) @ rel_vel
+          + SE3.hat_adj(rel_frame.mat_inv_adj() @ p_link_vel) @ rel_acc
+          + rel_jerk)
 
 def kinematics_cmtm(joint : JointData, p_link_cmtm : CMTM, joint_motions : np.ndarray, order = 3) -> CMTM:
   if joint.dof * order != len(joint_motions):
