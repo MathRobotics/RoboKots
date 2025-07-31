@@ -33,7 +33,7 @@ def test_joint_local_vec():
     # Test with non-zero joint_vel
     joint_vel = np.random.rand(1)
     expected_vel = joint.select_mat @ joint_vel
-    result_vel = local_tan_vec(joint.select_mat, joint_vel)
+    result_vel = joint_local_vel(joint.select_mat, joint_vel)
     assert np.allclose(result_vel, expected_vel)
 
 def test_joint_local_vec_numerical_1dof():
@@ -42,7 +42,7 @@ def test_joint_local_vec_numerical_1dof():
 
     # Test with non-zero joint_vel
     joint_vel = np.random.rand(1)
-    result_vel = local_tan_vec(joint.select_mat, joint_vel)
+    result_vel = joint_local_vel(joint.select_mat, joint_vel)
 
     # Calculate numerical velocity
     joint_coord = np.random.rand(1)
@@ -71,6 +71,8 @@ def test_joint_local_cmtm():
     expected_cmtm = CMTM[SE3](expected_frame, expected_vecs)
 
     assert np.allclose(result_cmtm.elem_mat(), expected_cmtm.elem_mat())
+    for i in range(order-1):
+        assert np.allclose(result_cmtm.elem_vecs(i), expected_cmtm.elem_vecs(i))
 
 def test_joint_local_cmtm_numerical():
     # Create a mock joint with a specific select_mat
@@ -81,9 +83,6 @@ def test_joint_local_cmtm_numerical():
     
     # Test with non-zero joint_coord, joint_veloc, and joint_accel
     result_cmtm = joint_local_cmtm(joint, joint_motions, order)
-
-    # Calculate numerical Jacobian
-    p0 = joint_local_frame(joint, joint_motions[:joint.dof].reshape(joint.dof))
 
     def func(x):
         return joint_local_cmtm(joint, x, order)
@@ -116,7 +115,7 @@ def test_joint_rel_vec():
     # Test with non-zero joint_vec
     joint_vec = np.random.rand(1)
     expected_vel = joint.select_mat @ joint_vec
-    result_vel = local_tan_vec(joint.select_mat, joint_vec)
+    result_vel = joint_local_vel(joint.select_mat, joint_vec)
     assert np.allclose(result_vel, expected_vel)
 
 def test_joint_rel_vec_numerical():
@@ -125,7 +124,7 @@ def test_joint_rel_vec_numerical():
 
     # Test with non-zero joint_vec
     joint_vec = np.random.rand(1)
-    result_vel = local_tan_vec(joint.select_mat, joint_vec)
+    result_vel = joint_local_vel(joint.select_mat, joint_vec)
 
     # Calculate numerical relative velocity
     joint_coord = np.random.rand(1)
