@@ -175,9 +175,6 @@ def test_joint_jerk_part_jacobian():
         print(f"Joint {i} Jerk Jacobian: \n{jacob_ana[12+i:13+i]}")
         print(f"Joint {i} Jerk Auto Jacobian:\n{jacob_auto[i:i+1]}")
         print(f"Joint {i} Jerk Numerical Jacobian:\n{jacob_num[i:i+1]}")
-        # assert np.allclose(jacob_ana[18+i::1], jacob_auto[i::1], atol=1e-6, rtol=1e-6)
-    assert np.allclose(jacob_ana[18:], jacob_auto, atol=1e-6, rtol=1e-6)
-    assert np.allclose(jacob_ana[18:], jacob_num, atol=1e-8, rtol=1e-3)
 
     assert np.allclose(jacob_ana[12:], jacob_auto, atol=1e-6, rtol=1e-6)
     assert np.allclose(jacob_ana[12:], jacob_num, atol=1e-3, rtol=1e-3)
@@ -225,6 +222,6 @@ def test_joint_snap_part_jacobian():
         print(f"Joint {i} Jerk Jacobian: \n{jacob_ana[18+i:19+i]}")
         print(f"Joint {i} Jerk Auto Jacobian:\n{jacob_auto[i:i+1]}")
         print(f"Joint {i} Jerk Numerical Jacobian:\n{jacob_num[i:i+1]}")
-        # assert np.allclose(jacob_ana[18+i::1], jacob_auto[i::1], atol=1e-6, rtol=1e-6)
+
     assert np.allclose(jacob_ana[18:], jacob_auto, atol=1e-6, rtol=1e-6)
     assert np.allclose(jacob_ana[18:], jacob_num, atol=1e-3, rtol=1e-3)
