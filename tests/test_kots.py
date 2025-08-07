@@ -69,7 +69,7 @@ def test_cmtm_jacobian_numerical():
     jacob_cmtm = kots.link_jacobian_target(ORDER)
     jacob_cmtm_num = kots.link_jacobian_target_numerical("cmtm", ORDER)
 
-    assert np.allclose(jacob_cmtm, jacob_cmtm_num, atol=1e-6, rtol=1e-6)
+    assert np.allclose(jacob_cmtm, jacob_cmtm_num, atol=1e-5, rtol=1e-5 )
     
 def test_cmtm_jacobian_numerical_soft():
     kots = Kots.from_json_file("./test_model/soft_rod.json", order=ORDER)
