@@ -144,4 +144,5 @@ def part_soft_link_cmtm_tan_jacob(soft_link : SoftLinkData,  soft_link_motion : 
   return mat
 
 def part_soft_link_cmtm_jacob(soft_link : SoftLinkData,  soft_link_motion : np.ndarray, rel_cmtm : CMTM, soft_link_cmtm : CMTM, link_cmtm : CMTM) -> np.ndarray:
-  return link_cmtm.tan_map_inv() @ part_soft_link_cmtm_tan_jacob(soft_link, soft_link_motion, rel_cmtm, soft_link_cmtm)
+  # return link_cmtm.tan_map_inv() @ part_soft_link_cmtm_tan_jacob(soft_link, soft_link_motion, rel_cmtm, soft_link_cmtm)
+  return link_cmtm.tangent_mat_inv() @ part_soft_link_cmtm_tan_jacob(soft_link, soft_link_motion, rel_cmtm, soft_link_cmtm)

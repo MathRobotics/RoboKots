@@ -114,7 +114,8 @@ def part_link_cmtm_tan_jacob(joint : JointData, rel_cmtm : CMTM, joint_cmtm : CM
   '''
 
   mat = np.zeros((rel_cmtm._n * 6, rel_cmtm._n * joint.dof))
-  tmp = rel_cmtm.mat_inv_adj() @ joint_cmtm.tan_map() 
+  # tmp = rel_cmtm.mat_inv_adj() @ joint_cmtm.tan_map() 
+  tmp = rel_cmtm.mat_inv_adj() @ joint_cmtm.tangent_mat()
 
   for i in range(rel_cmtm._n):
     for j in range(i+1):
@@ -123,4 +124,5 @@ def part_link_cmtm_tan_jacob(joint : JointData, rel_cmtm : CMTM, joint_cmtm : CM
   return mat
 
 def part_link_cmtm_jacob(joint : JointData, rel_cmtm : CMTM, joint_cmtm : CMTM, link_cmtm : CMTM) -> np.ndarray:
-  return link_cmtm.tan_map_inv() @ part_link_cmtm_tan_jacob(joint, rel_cmtm, joint_cmtm)
+  # return link_cmtm.tan_map_inv() @ part_link_cmtm_tan_jacob(joint, rel_cmtm, joint_cmtm)
+  return link_cmtm.tangent_mat_inv() @ part_link_cmtm_tan_jacob(joint, rel_cmtm, joint_cmtm)
