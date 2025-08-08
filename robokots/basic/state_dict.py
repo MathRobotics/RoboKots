@@ -4,6 +4,8 @@ import re
 import numpy as np
 from mathrobo import SE3, CMTM, SO3
 
+from .state import keys, keys_order
+
 def extract_state_keys(state: dict, prefix: str = "") -> list:
     """
     Extracts the suffix part of keys from a dictionary that match known physical quantities.
@@ -15,7 +17,7 @@ def extract_state_keys(state: dict, prefix: str = "") -> list:
     Returns:
         list: Suffixes such as "pos", "rot", "vel", etc.
     """
-    keywords = ("pos", "rot", "vel", "acc", "acc_diff", "jerk", "snap")
+  
     result = []
 
     for k in state.keys():
@@ -26,7 +28,7 @@ def extract_state_keys(state: dict, prefix: str = "") -> list:
             suffix = k
 
         # Check if the suffix matches any keyword
-        if any(kw in suffix for kw in keywords):
+        if any(kw in suffix for kw in keys):
             result.append(suffix)
 
     return result
@@ -49,15 +51,6 @@ def count_dict_order(state: dict) -> int:
     Returns:
         int: The maximum derivative order detected in the keys.
     """
-    # Mapping from keyword to corresponding derivative order
-    keyword_order_map = {
-        "pos": 1,
-        "rot": 1,
-        "vel": 2,
-        "acc": 3,
-        "jerk": 4,
-        "snap": 5
-    }
 
     keys = extract_state_keys(state)
     max_order = 0
@@ -67,11 +60,11 @@ def count_dict_order(state: dict) -> int:
         match = re.search(r"acc_diff(\d+)", k)
         if match:
             diff_order = int(match.group(1))
-            max_order = max(max_order, 3 + diff_order)
+            max_order = max(max_order, keys_order["acc"] + diff_order)
             continue  # Skip other checks if acc_diff matched
 
         # Match against known keywords
-        for keyword, order in keyword_order_map.items():
+        for keyword, order in keys_order.items():
             if keyword in k:
                 max_order = max(max_order, order)
                 break  # Stop checking once a match is found
@@ -103,7 +96,7 @@ def cmtm_to_state_list(cmtm : CMTM, name : str) -> list:
     accel = cmtm.elem_vecs(1)
     state.append((name+"_acc" , accel.tolist()))
   if order > 3:
-    for i in range(order-3):
+    for i in range(order-keys_order["acc"]):
       vec = cmtm.elem_vecs(i+2)
       state.append((name+"_acc_diff"+str(i+1) , vec.tolist()))
   
@@ -301,6 +294,18 @@ def extract_dict_link_info(state : dict, data_type : str, link_name : str, frame
         return np.array(state[link_name+"_acc_diff1"])
     elif data_type == "snap":
         return np.array(state[link_name+"_acc_diff2"])
+    elif data_type == "crackle":
+        return np.array(state[link_name+"_acc_diff3"])
+    elif data_type == "pop":
+        return np.array(state[link_name+"_acc_diff4"])
+    elif data_type == "lock":
+        return np.array(state[link_name+"_acc_diff5"])
+    elif data_type == "drop":
+        return np.array(state[link_name+"_acc_diff6"])
+    elif data_type == "shot":
+        return np.array(state[link_name+"_acc_diff7"])
+    elif data_type == "put":
+        return np.array(state[link_name+"_acc_diff8"])
     elif data_type == "frame":
         return state_dict_to_frame(state, link_name)
     elif data_type == "cmtm":
