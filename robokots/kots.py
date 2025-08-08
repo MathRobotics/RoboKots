@@ -6,7 +6,7 @@ import numpy as np
 from typing import List
 
 from .basic.motion import RobotMotions
-from .basic.state import RobotState
+from .basic.state_df import RobotState
 from .basic.state_dict import extract_dict_link_info, extract_dict_joint_info, dict_to_links_pos
 from .basic.robot import RobotStruct, JointStruct, LinkStruct
 from .basic.target import TargetList
