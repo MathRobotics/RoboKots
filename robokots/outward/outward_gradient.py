@@ -5,6 +5,7 @@ from mathrobo import SO3, SE3, CMTM, numerical_grad
 
 from ..basic.robot import RobotStruct, LinkStruct, JointStruct
 from ..basic.motion import RobotMotions
+from ..basic.state import keys_order, data_type_dof, data_type_to_sub_func
 
 from ..basic.state_dict import state_dict_to_rel_frame, state_dict_to_rel_cmtm, state_dict_to_cmtm, extract_dict_link_info
 from ..kinematics.base import convert_joint_to_data, convert_link_to_data
@@ -151,32 +152,18 @@ def link_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_na
   if data_type not in ["pos", "rot", "vel", "acc", "jerk", "snap", "frame", "cmtm"]:
     raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'jerk', 'snap', 'frame' or 'cmtm'.")
 
-  order = 3
-  dof = 6
-  if data_type == "pos" or data_type == "rot" :
-    dof = 3
+  if data_type == "frame":
     order = 1
-  elif data_type == "frame":
-    order = 1
-  elif data_type == "vel":
-    order = 2
-  elif data_type == "acc":
-    order = 3
-  elif data_type == "jerk":
-    order = 4
-  elif data_type == "snap":
-    order = 5
   elif data_type == "cmtm":
     if order_ is None:
       order = 3
     else:
       order = order_
-
-  if data_type  == "cmtm":
-    jacobs = np.zeros((dof*order*len(link_name_list),robot.dof*order))
   else:
-    jacobs = np.zeros((dof*len(link_name_list),robot.dof*order))
+    order = keys_order[data_type]
+  dof = data_type_dof(data_type, order, dim = 3)
 
+  jacobs = np.zeros((dof*len(link_name_list),robot.dof*order))
   motion = np.zeros(robot.dof * order)
 
   for joint in robot.joints:
@@ -198,8 +185,10 @@ def link_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_na
     elif data_type == "frame":
       jacobs[dof*i:dof*(i+1)] = numerical_grad(motion, kinematics_func, sub_func = SE3.sub_tan_vec)
     elif data_type == "cmtm":
-      jacobs[(dof*order)*i:(dof*order)*(i+1)] = numerical_grad(motion, kinematics_func, sub_func = CMTM.sub_vec)
+      jacobs[dof*i:dof*(i+1)] = numerical_grad(motion, kinematics_func, sub_func = CMTM.sub_vec)
     else:
       jacobs[dof*i:dof*(i+1)] = numerical_grad(motion, kinematics_func)
+
+    # jacobs[dof*i:dof*(i+1)] = numerical_grad(motion, kinematics_func, sub_func = data_type_to_sub_func(data_type))
 
   return jacobs

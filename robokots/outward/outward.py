@@ -82,7 +82,7 @@ def calc_link_total_point_frame(robot : RobotStruct, motions : RobotMotions, sta
   
 def link_diff_kinematics_numerical(robot : RobotStruct, motions, link_name_list : list[str],  data_type : str, order = None, \
                                     eps = 1e-8, update_method = None, update_direction = None) -> np.ndarray:
-  if data_type not in ["pos", "rot", "vel", "acc", "jerk", "frame", "cmtm"]:
+  if data_type not in ["pos", "rot", "vel", "acc", "jerk", "snap", "frame", "cmtm"]:
     raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'frame' or 'cmtm'.")
 
   if order is None:

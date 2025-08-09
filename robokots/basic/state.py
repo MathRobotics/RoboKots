@@ -35,39 +35,40 @@ keys_name = {
 }
 
 def data_type_to_sub_func(data_type : str):
-  if data_type == "pos":
-    return None
-  elif data_type == "rot":
-    return SO3.sub_tan_vec
-  elif data_type == "vel":
-    return None
-  elif data_type == "acc":
-    return None
-  elif data_type == "jerk":
-    return None
-  elif data_type == "frame":
-    return SE3.sub_tan_vec
-  elif data_type == "cmtm":
-    return CMTM.sub_vec
-  else:
-    raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'jerk', 'frame' or 'cmtm'.")
+    if data_type == "pos":
+        return None
+    elif data_type == "rot":
+        return SO3.sub_tan_vec
+    elif data_type == "vel":
+        return None
+    elif data_type == "acc":
+        return None
+    elif data_type in ["jerk", "snap", "crackle", "pop", "lock", "drop", "shot", "put"]:
+        return None
+    elif data_type == "frame":
+        return SE3.sub_tan_vec
+    elif data_type == "cmtm":
+        return CMTM.sub_vec
+    else:
+        raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'jerk', 'frame' or 'cmtm'.")
 
 def data_type_dof(data_type : str, order = None, dim = 3):
-  if data_type == "pos" or data_type == "rot":
-    return dim
-  elif data_type == "vel" or data_type == "acc" or data_type == "jerk":
-    return dim * 2
-  elif data_type == "frame":
-    return dim * 2
-  elif data_type == "cmtm":
-    if order is None:
-      return dim * 2
+    if data_type == "pos" or data_type == "rot":
+        return dim
+    elif data_type == "vel" or data_type == "acc" or data_type == "jerk" or data_type == "snap" or data_type == "crackle" or data_type == "pop" or data_type == "lock" or data_type == "drop" or data_type == "shot" or data_type == "put":
+        return dim * 2
+    elif data_type == "frame":
+        return dim * 2
+    elif data_type == "cmtm":
+        if order is None:
+            return dim * 2
+        else:
+            return dim * 2 * order
+    elif data_type == "cmtm_so3":
+        if order is None:
+            return dim * 2
+        else:
+            return dim * order
     else:
-      return dim * 2 * order
-  elif data_type == "cmtm_so3":
-    if order is None:
-      return dim
-    else:
-      return dim * order
-  else:
-    raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'frame' or 'cmtm'.")
+        raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'frame' or 'cmtm'.")
+  
