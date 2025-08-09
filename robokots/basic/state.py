@@ -1,3 +1,4 @@
+from mathrobo import SO3, SE3, CMTM
 
 keys = ("pos", "rot", "vel", "acc", "acc_diff", \
                  "jerk", "snap", "crackle", "pop", \
@@ -32,3 +33,21 @@ keys_name = {
     "shot" : "acc_diff7",
     "put" : "acc_diff8"
 }
+
+def data_type_to_sub_func(data_type : str):
+  if data_type == "pos":
+    return None
+  elif data_type == "rot":
+    return SO3.sub_tan_vec
+  elif data_type == "vel":
+    return None
+  elif data_type == "acc":
+    return None
+  elif data_type == "jerk":
+    return None
+  elif data_type == "frame":
+    return SE3.sub_tan_vec
+  elif data_type == "cmtm":
+    return CMTM.sub_vec
+  else:
+    raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'frame' or 'cmtm'.")

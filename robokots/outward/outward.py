@@ -10,6 +10,7 @@ from mathrobo import SO3, SE3, CMTM, numerical_difference, build_integrator
 from ..basic.robot import RobotStruct
 from ..basic.motion import RobotMotions
 from ..basic.state_dict import state_dict_to_cmtm, extract_dict_link_info, vecs_to_state_dict, cmtm_to_state_list, state_dict_to_frame, state_dict_to_force_vecs
+from ..basic.state import data_type_to_sub_func
 
 from ..kinematics.base import convert_joint_to_data, convert_link_to_data
 from ..kinematics.kinematics import joint_local_cmtm, joint_rel_cmtm, joint_rel_frame
@@ -79,24 +80,6 @@ def calc_link_total_point_frame(robot : RobotStruct, motions : RobotMotions, sta
       coord = motions.link_motions(l.dof, l.dof_index, 1)[0]
       return calc_link_local_point_frame(l, coord, p_link_frame, point - base)
   
-def __data_type_to_sub_func(data_type : str):
-  if data_type == "pos":
-    return None
-  elif data_type == "rot":
-    return SO3.sub_tan_vec
-  elif data_type == "vel":
-    return None
-  elif data_type == "acc":
-    return None
-  elif data_type == "jerk":
-    return None
-  elif data_type == "frame":
-    return SE3.sub_tan_vec
-  elif data_type == "cmtm":
-    return CMTM.sub_vec
-  else:
-    raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'frame' or 'cmtm'.")
-
 def link_diff_kinematics_numerical(robot : RobotStruct, motions, link_name_list : list[str],  data_type : str, order = None, \
                                     eps = 1e-8, update_method = None, update_direction = None) -> np.ndarray:
   if data_type not in ["pos", "rot", "vel", "acc", "jerk", "frame", "cmtm"]:
@@ -142,7 +125,7 @@ def link_diff_kinematics_numerical(robot : RobotStruct, motions, link_name_list 
       y = extract_dict_link_info(state, data_type, link_name_list[i])
       return y
     
-    sub_func = __data_type_to_sub_func(data_type)
+    sub_func = data_type_to_sub_func(data_type)
     # diff[i] = numerical_difference(motions.motions, kinematics_func, sub_func = sub_func, update_func = update_func, direction = update_direction, eps=eps)
     diff[i] = numerical_difference(motions, kinematics_func, sub_func = sub_func, update_func = update_func, direction = update_direction, eps=eps)
 
