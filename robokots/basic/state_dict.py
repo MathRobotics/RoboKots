@@ -222,7 +222,7 @@ def state_dict_to_cmtm(state : dict, name : str, order = None) -> CMTM:
     if order > 2:
         vec[1] = np.array(state[name+"_acc"])
     if order > 3:
-        for i in range(order-3):
+        for i in range(order-keys_order["acc"]):
             vec[i+2] = np.array(state[name+"_acc_diff"+str(i+1)])
     
     cmtm = CMTM[SE3](mat, vec)
