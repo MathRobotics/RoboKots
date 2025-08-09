@@ -183,6 +183,7 @@ class Kots():
   def kinematics(self, order = None):
     if order is None:
       order = self.order_
+
     motion = np.zeros(self.robot_.dof * order)
     for joint in self.robot_.joints:
       m = self.motions_.joint_motions(joint.dof, joint.dof_index, order)
@@ -192,8 +193,6 @@ class Kots():
       motion[link.dof_index*order:link.dof_index*order+link.dof*order] = m.flatten()
 
     self.state_dict_ = outward_kinematics(self.robot_, motion, order)
-    # temp update
-    # self.state_dict_ = outward_kinematics(self.robot_, self.motions_, self.order_)
 
   def kinematics_point(self, s : float = 0.0):
     return calc_link_total_point_frame(self.robot_, self.motions_, self.state_dict_, s)
@@ -254,14 +253,14 @@ class Kots():
   def link_diff_kinematics_numerical(self, link_name_list : list[str], data_type = "vel", order = None, eps = 1e-8, update_method = "poly", update_direction = None):
     if order is None:
       order = self.__order_from_data_type(data_type)
+      
     motion = np.zeros(self.robot_.dof * order)
     for joint in self.robot_.joints:
       m = self.motions_.joint_motions(joint.dof, joint.dof_index, order)
       motion[joint.dof_index*order:joint.dof_index*order+joint.dof*order] = m.flatten()
-    return link_diff_kinematics_numerical(self.robot_, motion, link_name_list, data_type, order, eps, update_method, update_direction)
-    # temp update
-    # return link_diff_kinematics_numerical(self.robot_, self.motions_, link_name_list, data_type, order, eps, update_method, update_direction)
 
+    return link_diff_kinematics_numerical(self.robot_, motion, link_name_list, data_type, order, eps, update_method, update_direction)
+  
   def link_jacobian_numerical(self, link_name_list : list[str], data_type = "vel", order = None):
     return link_jacobian_numerical(self.robot_, self.motions_, link_name_list, data_type, order)
   

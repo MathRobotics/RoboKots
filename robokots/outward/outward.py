@@ -18,8 +18,6 @@ from ..kinematics.kinematics_soft_link import soft_link_local_cmtm, calc_link_lo
 from ..dynamics.base import spatial_inertia
 from ..dynamics.dynamics import link_dynamics, joint_dynamics, link_dynamics_cmtm, joint_dynamics_cmtm
 
-# temp update
-# def kinematics(robot : RobotStruct, motions : RobotMotions, order = 3) -> dict:
 def kinematics(robot : RobotStruct, motions, order = 3) -> dict:
   '''
   Forward kinematics computation
@@ -48,9 +46,6 @@ def kinematics(robot : RobotStruct, motions, order = 3) -> dict:
     joint_data = convert_joint_to_data(joint)
     link_data = convert_link_to_data(child)
 
-    # temp update
-    # joint_motions = motions.joint_motions(joint.dof, joint.dof_index, order)
-    # link_motions = motions.link_motions(child.dof, child.dof_index, order)
     joint_motions = motions[joint.dof_index*order:joint.dof_index*order+joint.dof*order]
     link_motions = motions[child.dof_index*order:child.dof_index*order+child.dof*order]
 
@@ -102,9 +97,6 @@ def __data_type_to_sub_func(data_type : str):
   else:
     raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'frame' or 'cmtm'.")
 
-# temp update
-# def link_diff_kinematics_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str],  data_type : str, order = None, \
-#                                     eps = 1e-8, update_method = None, update_direction = None) -> np.ndarray:
 def link_diff_kinematics_numerical(robot : RobotStruct, motions, link_name_list : list[str],  data_type : str, order = None, \
                                     eps = 1e-8, update_method = None, update_direction = None) -> np.ndarray:
   if data_type not in ["pos", "rot", "vel", "acc", "jerk", "frame", "cmtm"]:
@@ -135,13 +127,6 @@ def link_diff_kinematics_numerical(robot : RobotStruct, motions, link_name_list 
 
   def update_func(x_init, direct, eps):
     x_ = x_init.copy()
-    # temp update
-    # if update_method is None:
-    #   D, d = build_integrator(robot.dof, order, eps, method="poly")
-    # else:
-    #   D, d = build_integrator(robot.dof, order, eps, method=update_method)
-    # x_ = D @ x_init + d @ direct
-    # return x_
     
     if update_method is None:
       D, d = build_integrator(1, order, eps, method="poly")
@@ -153,9 +138,6 @@ def link_diff_kinematics_numerical(robot : RobotStruct, motions, link_name_list 
 
   for i in range(len(link_name_list)):
     def kinematics_func(x):
-      # temp update
-      # motions.motions = x
-      # state = kinematics(robot, motions, order)
       state = kinematics(robot, x, order)
       y = extract_dict_link_info(state, data_type, link_name_list[i])
       return y

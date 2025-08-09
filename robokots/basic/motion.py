@@ -60,12 +60,6 @@ class RobotMotions:
   def accel(self):
     return self.gen_values("accel")
   
-  # temp update
-  # def gen_value(self, dof : int, dof_index : int, name : str):
-  #   m_index = self.motion_index(name)
-  #   offset = self.dof * m_index + dof_index
-  #   return self.motions[offset : offset + dof]
-  
   def gen_value(self, dof : int, dof_index : int, name : str):
     order = len(self.aliases)
     m_index = self.motion_index(name)
