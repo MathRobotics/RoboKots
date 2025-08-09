@@ -10,7 +10,7 @@ from mathrobo import SO3, SE3, CMTM, numerical_difference, build_integrator
 from ..basic.robot import RobotStruct
 from ..basic.motion import RobotMotions
 from ..basic.state_dict import state_dict_to_cmtm, extract_dict_link_info, vecs_to_state_dict, cmtm_to_state_list, state_dict_to_frame, state_dict_to_force_vecs
-from ..basic.state import data_type_to_sub_func
+from ..basic.state import data_type_to_sub_func, data_type_dof
 
 from ..kinematics.base import convert_joint_to_data, convert_link_to_data
 from ..kinematics.kinematics import joint_local_cmtm, joint_rel_cmtm, joint_rel_frame
@@ -85,26 +85,10 @@ def link_diff_kinematics_numerical(robot : RobotStruct, motions, link_name_list 
   if data_type not in ["pos", "rot", "vel", "acc", "jerk", "frame", "cmtm"]:
     raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'frame' or 'cmtm'.")
 
-  dof = 6
-
   if order is None:
     order = 3
 
-  if data_type == "pos" or data_type == "rot":
-    dof = 3
-  elif data_type == "frame":
-    dof = 6
-  elif data_type == "vel":
-    dof = 6
-  elif data_type == "acc":
-    dof = 6
-  elif data_type == "jerk":
-    dof = 6
-  elif data_type == "cmtm":
-    if order is None:
-      dof = 3 * 6
-    else:
-      dof = order * 6
+  dof = data_type_dof(data_type, order, dim=3)
 
   diff = np.zeros((len(link_name_list), dof))
 
