@@ -17,3 +17,18 @@ keys_order = {
     "shot": 10,
     "put": 11
 }
+
+keys_name = {
+    "pos" : "pos",
+    "rot" : "rot",
+    "vel" : "vel",
+    "acc" : "acc",
+    "jerk" : "acc_diff1",
+    "snap" : "acc_diff2",
+    "crackle" : "acc_diff3",
+    "pop" : "acc_diff4",
+    "lock" : "acc_diff5",
+    "drop" : "acc_diff6",
+    "shot" : "acc_diff7",
+    "put" : "acc_diff8"
+}

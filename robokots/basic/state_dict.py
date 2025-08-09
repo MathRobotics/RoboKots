@@ -4,7 +4,7 @@ import re
 import numpy as np
 from mathrobo import SE3, CMTM, SO3
 
-from .state import keys, keys_order
+from .state import keys, keys_order, keys_name
 
 def extract_state_keys(state: dict, prefix: str = "") -> list:
     """
@@ -282,30 +282,8 @@ def state_dict_to_force_vecs(state : dict, name : str, type_name : str) -> np.nd
     return np.concatenate(vecs)
 
 def extract_dict_link_info(state : dict, data_type : str, link_name : str, frame = "dummy", rel_frame = 'dummy'):
-    if data_type == "pos":
-      return np.array(state[link_name+"_pos"])
-    elif data_type == "rot":
+    if data_type == "rot":
       return state_dict_to_rot(state, link_name)
-    elif data_type == "vel":
-      return np.array(state[link_name+"_vel"])
-    elif data_type == "acc":
-      return np.array(state[link_name+"_acc"])
-    elif data_type == "jerk":
-        return np.array(state[link_name+"_acc_diff1"])
-    elif data_type == "snap":
-        return np.array(state[link_name+"_acc_diff2"])
-    elif data_type == "crackle":
-        return np.array(state[link_name+"_acc_diff3"])
-    elif data_type == "pop":
-        return np.array(state[link_name+"_acc_diff4"])
-    elif data_type == "lock":
-        return np.array(state[link_name+"_acc_diff5"])
-    elif data_type == "drop":
-        return np.array(state[link_name+"_acc_diff6"])
-    elif data_type == "shot":
-        return np.array(state[link_name+"_acc_diff7"])
-    elif data_type == "put":
-        return np.array(state[link_name+"_acc_diff8"])
     elif data_type == "frame":
         return state_dict_to_frame(state, link_name)
     elif data_type == "cmtm":
@@ -313,16 +291,10 @@ def extract_dict_link_info(state : dict, data_type : str, link_name : str, frame
     elif data_type == "force":
         return np.array(state[link_name+"_link_force"])
     else:
-        raise ValueError(f"Invalid type: {set(data_type)}")
+        return np.array(state[link_name+"_"+keys_name[data_type]])
     
 def extract_dict_joint_info(state : dict, data_type : str, joint_name : str, frame = "dummy", rel_frame = 'dummy'):
-    if data_type == "coord":
-        return np.array(state[joint_name+"_coord"])
-    elif data_type == "veloc":
-        return np.array(state[joint_name+"_veloc"])
-    elif data_type == "accel":
-        return np.array(state[joint_name+"_accel"])
-    elif data_type == "frame":
+    if data_type == "frame":
         return state_dict_to_frame(state, joint_name)
     elif data_type == "cmtm":
         return state_dict_to_cmtm(state, joint_name)
@@ -331,26 +303,12 @@ def extract_dict_joint_info(state : dict, data_type : str, joint_name : str, fra
     elif data_type == "torque":
         return np.array(state[joint_name+"_joint_torque"])
     else:
-        raise ValueError(f"Invalid type: {set(data_type)}")
-    
+        return np.array(state[joint_name+"_"+data_type])
+
 def extract_dict_total_info(data : dict, data_type : str, name : str, frame = "dummy", rel_frame = 'dummy'):
     'dummy'
 
 def extract_dict_info(data : dict, data_type : str, group : str, name : str, frame = "dummy", rel_frame = 'dummy'):
-    '''
-    group : str
-      link
-      joint
-      total
-    type : str
-      pos
-      rot
-      vel
-      acc
-      frame
-    name : str
-      link name or joint name
-    '''
 
     if group == "link":
       return extract_dict_link_info(data, data_type, name, frame, rel_frame)
