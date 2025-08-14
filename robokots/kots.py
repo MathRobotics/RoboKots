@@ -31,9 +31,8 @@ class Kots():
   order_ : int
   dim_ : int
   lib_ : str
-  
-  def __init__(self, robot : RobotStruct, order : int, dim : int, lib : str = "numpy"):
 
+  def order_to_aliases(self, order: int) -> List[str]:
     m_aliases = []
     l_aliases = []
     j_aliases = []
@@ -64,6 +63,12 @@ class Kots():
       j_aliases.append("joint_torque_diff"+str(i+1))
       j_aliases.append("joint_force_diff"+str(i+1))
 
+    return m_aliases, l_aliases, j_aliases
+  
+  def __init__(self, robot : RobotStruct, order : int, dim : int, lib : str = "numpy"):
+
+    m_aliases, l_aliases, j_aliases = self.order_to_aliases(order)
+
     self.robot_ = robot
     self.motions_ = RobotMotions(robot.dof, m_aliases)
     self.state_ = RobotState(robot.link_names, robot.joint_names, l_aliases, j_aliases)
@@ -71,6 +76,14 @@ class Kots():
     self.order_ = order
     self.dim_ = dim
     self.lib_ = lib
+
+  def set_order(self, order: int):
+    if order < 1:
+      raise ValueError("order must be greater than 0")
+    m_aliases, l_aliases, j_aliases = self.order_to_aliases(order)
+    self.order_ = order
+    self.motions_ = RobotMotions(self.robot_.dof, m_aliases)
+    self.state_ = RobotState(self.robot_.link_names, self.robot_.joint_names, l_aliases, j_aliases)
 
   @staticmethod
   def from_json_file(model_file_name : str, order=default_order, dim=default_dim, lib : str = "numpy") -> "Kots":
@@ -210,6 +223,9 @@ class Kots():
     if not isinstance(target_file, str):
       raise TypeError("target_file must be a string")
     self.target_ = load_target_json_file(target_file)
+    type_order = [keys_order[item] for sublist in self.target_.target_types for item in sublist]
+    max_order = max(type_order)
+    self.set_order(max_order)
 
   def print_targets(self):
     print_target_list(self.target_)
