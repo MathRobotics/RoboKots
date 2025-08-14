@@ -71,4 +71,11 @@ def data_type_dof(data_type : str, order = None, dim = 3):
             return dim * order
     else:
         raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'frame' or 'cmtm'.")
-  
+
+def dim_to_dof(dim : int):
+    if dim == 1:
+        return 2
+    elif dim == 2:
+        return 3
+    elif dim == 3:
+        return 6
