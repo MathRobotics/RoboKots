@@ -37,6 +37,12 @@ class RobotStruct:
     for name in name_list:
       link_list.append(self.link(name))
     return link_list
+  
+  def is_link(self, name : str) -> bool:
+    for l in self.links:
+      if name == l.name:
+        return True
+    return False
 
   def joint(self, name : str) -> "JointStruct":
     for l in self.joints:
@@ -50,6 +56,12 @@ class RobotStruct:
     for name in name_list:
       joint_list.append(self.joint(name))
     return joint_list
+  
+  def is_joint(self, name : str) -> bool:
+    for j in self.joints:
+      if name == j.name:
+        return True
+    return False
 
   def robot_init(self):
     self.joint_num = len(self.joints)  
