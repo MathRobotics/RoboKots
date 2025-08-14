@@ -3,7 +3,7 @@
 # 2024.12.13 Created by T.Ishigaki
 
 import numpy as np
-from typing import List
+from typing import List, Dict, Any
 
 from .basic.motion import RobotMotions
 from .basic.state_df import RobotState
@@ -166,7 +166,30 @@ class Kots():
       values += (extract_dict_joint_info(self.state_dict_, data_type, name),)
     vecs = [v for v in values if v.size]
     return np.array(vecs)
+  
+  def target_info(self) -> Dict[str, Dict[str, Any]]:
+      if self.target_ is None:
+          raise ValueError("target is not set")
 
+      names = self.target_.target_names
+      types_list = self.target_.target_types
+      if len(names) != len(types_list):
+          raise ValueError(f"length mismatch: target_names={len(names)} vs target_types={len(types_list)}")
+
+      out: Dict[str, Dict[str, Any]] = {}
+      for name, t_list in zip(names, types_list):
+          out[name] = {t: extract_dict_link_info(self.state_dict_, t, name) for t in t_list}
+      return out
+  
+  def target_info_vecs(self) -> np.ndarray:
+      target_info = self.target_info()
+      vecs = []
+      for name, info in target_info.items():
+          for data_type, vec in info.items():
+              if vec.size > 0:
+                  vecs.append(vec)
+      return np.concatenate(vecs) if vecs else np.array([]) 
+  
   def kinematics(self, order = None):
     if order is None:
       order = self.order_
