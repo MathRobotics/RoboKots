@@ -116,10 +116,10 @@ def link_diff_kinematics_numerical(robot : RobotStruct, motions, link_name_list 
   return diff
 
 # specific 3d space (magic number 6)
-def dynamics(robot : RobotStruct, motions : RobotMotions) -> dict:
+def dynamics(robot : RobotStruct, joint_motions) -> dict:
   state_data = {}
   
-  state_data = kinematics(robot, motions.motions)
+  state_data = kinematics(robot, joint_motions, 3)
 
   world_name = robot.links[robot.joints[0].parent_link_id].name
   state_data.update([(world_name + "_link_force" , [0.,0.,0.,0.,0.,0.])])
@@ -128,12 +128,12 @@ def dynamics(robot : RobotStruct, motions : RobotMotions) -> dict:
     child = robot.links[joint.child_link_id]
     joint_data = convert_joint_to_data(joint)
     
-    joint_coord = motions.joint_coord(joint.dof, joint.dof_index)
+    joint_coord = joint_motions[joint.dof_index:joint.dof_index+joint.dof]
 
     inertia = spatial_inertia(child.mass, child.inertia, child.cog)
 
-    link_veloc = state_data[child.name + "_vel"]
-    link_accel = state_data[child.name + "_acc"]
+    link_veloc = np.array(state_data[child.name + "_vel"])
+    link_accel = np.array(state_data[child.name + "_acc"])
     
     link_force = link_dynamics(inertia, link_veloc, link_accel)  
     state_data.update([(child.name + "_link_force" , link_force.tolist())])
