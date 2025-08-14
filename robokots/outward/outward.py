@@ -151,10 +151,10 @@ def dynamics(robot : RobotStruct, joint_motions) -> dict:
     
   return state_data
 
-def dynamics_cmtm(robot : RobotStruct, motions : RobotMotions, dynamics_order = 1) -> dict:
+def dynamics_cmtm(robot : RobotStruct, joint_motions, dynamics_order = 1) -> dict:
   state_data = {}
   
-  state_data = kinematics(robot, motions.motions, dynamics_order + 2)
+  state_data = kinematics(robot, joint_motions, dynamics_order + 2)
 
   world_name = robot.links[robot.joints[0].parent_link_id].name
   state_data.update([(world_name + "_link_force" , [0.,0.,0.,0.,0.,0.])])
@@ -163,7 +163,7 @@ def dynamics_cmtm(robot : RobotStruct, motions : RobotMotions, dynamics_order = 
     child = robot.links[joint.child_link_id]
     joint_data = convert_joint_to_data(joint)
     
-    joint_motion = motions.joint_motions(joint.dof, joint.dof_index, dynamics_order + 2)  
+    joint_motion = joint_motions[joint.dof_index*dynamics_order + 2:joint.dof_index*dynamics_order + 2+joint.dof*dynamics_order + 2]
   
     inertia = spatial_inertia(child.mass, child.inertia, child.cog)
 
