@@ -134,28 +134,11 @@ class Kots():
       m = self.motions_.joint_motions(joint.dof, joint.dof_index, self.order_)
       m = np.append(m, last_diff[joint.dof_index:joint.dof_index+joint.dof])
       motion_diff[joint.dof_index*order:joint.dof_index*order+joint.dof*order] = m.flatten()[1:order+1]
+    for link in self.robot_.links:
+      m = self.motions_.link_motions(link.dof, link.dof_index, self.order_)
+      m = np.append(m, last_diff[link.dof_index:link.dof_index+link.dof])
+      motion_diff[link.dof_index*order:link.dof_index*order+link.dof*order] = m.flatten()[1:order+1]
     return motion_diff
-  
-  def coord(self):
-    coord = np.zeros(self.robot_.dof)
-    for joint in self.robot_.joints:
-      m = self.motions_.joint_motions(joint.dof, joint.dof_index, 1)
-      coord[joint.dof_index:joint.dof_index+joint.dof] = m.flatten()
-    return coord
-  
-  def veloc(self):
-    veloc = np.zeros(self.robot_.dof)
-    for joint in self.robot_.joints:
-      m = self.motions_.joint_motions(joint.dof, joint.dof_index, 2)[1:]
-      veloc[joint.dof_index:joint.dof_index+joint.dof] = m.flatten()
-    return veloc
-
-  def accel(self):
-    accel = np.zeros(self.robot_.dof)
-    for joint in self.robot_.joints:
-      m = self.motions_.joint_motions(joint.dof, joint.dof_index, 3)[2:]
-      accel[joint.dof_index:joint.dof_index+joint.dof] = m.flatten()
-    return accel
 
   def state_df(self):
     return self.state_.df()
