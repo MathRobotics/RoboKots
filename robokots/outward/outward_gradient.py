@@ -180,15 +180,6 @@ def link_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_na
       y = extract_dict_link_info(state, data_type, link_name_list[i])
       return y
 
-    if data_type == "rot":
-      jacobs[dof*i:dof*(i+1)] = numerical_grad(motion, kinematics_func, sub_func = SO3.sub_tan_vec)
-    elif data_type == "frame":
-      jacobs[dof*i:dof*(i+1)] = numerical_grad(motion, kinematics_func, sub_func = SE3.sub_tan_vec)
-    elif data_type == "cmtm":
-      jacobs[dof*i:dof*(i+1)] = numerical_grad(motion, kinematics_func, sub_func = CMTM.sub_vec)
-    else:
-      jacobs[dof*i:dof*(i+1)] = numerical_grad(motion, kinematics_func)
-
-    # jacobs[dof*i:dof*(i+1)] = numerical_grad(motion, kinematics_func, sub_func = data_type_to_sub_func(data_type))
+    jacobs[dof*i:dof*(i+1)] = numerical_grad(motion, kinematics_func, sub_func = data_type_to_sub_func(data_type))
 
   return jacobs
