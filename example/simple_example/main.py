@@ -4,7 +4,7 @@ import mathrobo as mr
 from robokots.kots import *
 
 def main():
-    kots = Kots.from_json_file("../model/sample_robot.json", 5)
+    kots = Kots.from_json_file("../model/sample_robot.json")
     kots.print_structure()
 
     kots.set_target_from_file("target_list.json")
@@ -37,7 +37,7 @@ def main():
       print(fk_acc[i])
       print(jacob_acc[12*i+6:12*i+12])
     
-    print(kots.target_info_vecs())
+    print(kots.target_info())
 
     kots.dynamics()
   
