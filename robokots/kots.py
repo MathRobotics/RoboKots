@@ -20,6 +20,8 @@ from .outward.outward import dynamics_cmtm as outward_dynamics
 from .outward.outward import link_diff_kinematics_numerical, calc_link_total_point_frame
 from .outward.outward_gradient import link_jacobian, link_cmtm_jacobian, link_jacobian_numerical 
   
+default_order = 3 
+default_dim = 3
 class Kots():
   robot_ : RobotStruct
   motions_ : RobotMotions
@@ -71,13 +73,13 @@ class Kots():
     self.lib_ = lib
 
   @staticmethod
-  def from_json_file(model_file_name : str, order=3, dim=3, lib : str = "numpy") -> "Kots":
+  def from_json_file(model_file_name : str, order=default_order, dim=default_dim, lib : str = "numpy") -> "Kots":
     robot = load_robot_json_file(model_file_name, lib=lib)
 
     return Kots(robot, order, dim, lib)
 
   @staticmethod
-  def from_json_data(model_data : dict, order=3, dim=3, lib : str = "numpy") -> "Kots":
+  def from_json_data(model_data : dict, order=default_order, dim=default_dim, lib : str = "numpy") -> "Kots":
     robot = load_robot_json(model_data, lib=lib)
 
     return Kots(robot, order, dim, lib)
@@ -189,7 +191,7 @@ class Kots():
   def print_targets(self):
     print_target_list(self.target_)
 
-  def link_jacobian(self, link_name_list : list[str], order = 3):
+  def link_jacobian(self, link_name_list : list[str], order = default_order):
     if order < 1:
       raise ValueError("order must be greater than 0")
     if order > self.order_:
