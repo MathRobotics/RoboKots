@@ -31,9 +31,12 @@ class TargetList:
   @staticmethod
   def from_dict(data: Dict) -> "TargetList":  
     targets = []
+
+    def normalize_types(ts):
+        return [ts] if isinstance(ts, str) else list(ts)
     
     targets = [Target(
-        type=target["type"],
+        type=normalize_types(target["type"]),
         link_name=target["link"],
         pos=np.array(target.get("pos", [0., 0., 0.]))
     ) for target in data["targets"]]
