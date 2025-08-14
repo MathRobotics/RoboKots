@@ -210,21 +210,55 @@ class Kots():
       raise ValueError("target_ is not set")
     return self.link_jacobian(self.target_.target_names, order)
 
-  def __order_from_data_type(self, data_type : str) -> int:
-    if data_type in ["pos", "rot"]:
-      return 1
-    elif data_type == "frame":
-      return 1
-    elif data_type == "vel":
-      return 2
-    elif data_type == "acc":
-      return 3
-    elif data_type == "jerk":
-      return 4
-    elif data_type == "cmtm":
-      return self.order_
-    else:
-      raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'jerk', 'frame' or 'cmtm'.")
+  def jacobian(self, name_list : List[str], data_type_list : List[str]):
+    if not name_list:
+      raise ValueError("name_list is empty")
+    if not data_type_list:
+      raise ValueError("data_type_list is empty")
+
+    if type(name_list) is str:
+      name_list = [name_list]
+    if type(data_type_list) is str:
+      data_type_list = [[data_type_list]]
+
+    if len(name_list) != len(data_type_list):
+      raise ValueError("name_list and data_type_list must have the same length")
+
+    max_order = 0
+    total_target_dof = 0
+    for name, link_dt_list in zip(name_list, data_type_list):
+      if name not in self.robot_.link_names and name not in self.robot_.joint_names:
+        raise ValueError(f"Invalid name: {name}. Must be a link or joint name.")
+      for data_type in link_dt_list:
+        if data_type not in keys_order:
+          raise ValueError(f"Invalid data_type: {data_type}. Must be one of {list(keys_order.keys())}.")
+        order = keys_order[data_type]
+        if order > max_order:
+          max_order = order
+        total_target_dof += data_type_dof(data_type, dim=self.dim_)
+    
+    total_jacobian = link_cmtm_jacobian(self.robot_, self.motions_, self.state_dict_, name_list, max_order-1)
+    jacobian = np.zeros((total_target_dof, self.robot_.dof * (max_order-1)))
+
+    index = 0
+    for i, name in enumerate(name_list):
+      index = i * max_order * dim_to_dof(self.dim_)
+      for data_type in data_type_list[i]:
+        order = keys_order[data_type]
+        dof = data_type_dof(data_type, order, dim=self.dim_)
+        jacobian[index:index+dof, :] = total_jacobian[dim_to_dof(self.dim_)*(order-2):dim_to_dof(self.dim_)*(order-2)+dof, :]
+        index += dof
+
+    return jacobian
+  
+  def jacobian_target(self):
+    if not self.target_:
+      raise ValueError("target_ is not set")
+    
+    name_list = self.target_.target_names
+    data_type_list = self.target_.target_types
+
+    return self.jacobian(name_list, data_type_list)
 
   def link_diff_kinematics_numerical(self, link_name_list : list[str], data_type = "vel", order = None, eps = 1e-8, update_method = "poly", update_direction = None):
     if order is None:
