@@ -7,8 +7,9 @@ from typing import List
 
 from .basic.motion import RobotMotions
 from .basic.state_df import RobotState
+from .basic.state import keys_order, data_type_dof, dim_to_dof
 from .basic.state_dict import extract_dict_link_info, extract_dict_joint_info, dict_to_links_pos
-from .basic.robot import RobotStruct, JointStruct, LinkStruct
+from .basic.robot import RobotStruct
 from .basic.target import TargetList
 from .basic.robot_drow import *
 
@@ -252,7 +253,7 @@ class Kots():
 
   def link_diff_kinematics_numerical(self, link_name_list : list[str], data_type = "vel", order = None, eps = 1e-8, update_method = "poly", update_direction = None):
     if order is None:
-      order = self.__order_from_data_type(data_type)
+      order = keys_order(data_type)
       
     motion = np.zeros(self.robot_.dof * order)
     for joint in self.robot_.joints:
