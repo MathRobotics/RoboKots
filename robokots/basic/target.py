@@ -44,5 +44,6 @@ class TargetList:
       print(f"Target Number: {self.target_num}")
       print("\nTargets:")
       for t in self.targets:
-          print(f"  Type: {t.type}, Link: {t.link_name}, Index: {t.index}")
+          print(f"  Type: {t.type}")
+          print(f"  Link: {t.link_name}, Index: {t.index}")
           print(f"  Pos: {t.pos}\n")
