@@ -31,7 +31,7 @@ def main():
 
     jac_vel = jacob[:6] @ motion_diff
 
-    print(kots.link_jacobian_target(1)@kots.veloc())
+    print(kots.link_jacobian_target(1)@kots.motion(1))
 
     print("velocity analytical : \n", ana_vel)
     print("velocity numerical  : \n", num_vel)
