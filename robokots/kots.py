@@ -292,14 +292,30 @@ class Kots():
 
     return jacobian
   
-  def jacobian_target(self):
+  def jacobian_target(self, data_type_list : List[str] = None):
     if not self.target_:
       raise ValueError("target_ is not set")
     
     name_list = self.target_.target_names
-    data_type_list = self.target_.target_types
+    if data_type_list is None:
+      data_type_list = self.target_.target_types
 
     return self.jacobian(name_list, data_type_list)
+  
+  def jacobian_cmtm(self, name_list : List[str], order = None):
+    if order is None:
+      order = self.order_
+    if order < 1:
+      raise ValueError("order must be greater than 0")
+    if order > self.order_:
+      raise ValueError(f"order must be less than or equal to {self.order_}")
+
+    if not name_list:
+      raise ValueError("name_list is empty")
+    if not all(name in self.robot_.link_names or name in self.robot_.joint_names for name in name_list):
+      raise ValueError("name_list contains invalid names")
+
+    return link_cmtm_jacobian(self.robot_, self.motions_, self.state_dict_, name_list, order)
 
   def link_diff_kinematics_numerical(self, link_name_list : list[str], data_type = "vel", order = None, eps = 1e-8, update_method = "poly", update_direction = None):
     if order is None:
@@ -319,6 +335,57 @@ class Kots():
     if not self.target_:
       raise ValueError("target_ is not set")
     return self.link_jacobian_numerical(self.target_.target_names, data_type, order)
+  
+  def jacobian_numerical(self, name_list : List[str], data_type_list : List[str]):
+    if not name_list:
+      raise ValueError("name_list is empty")
+    if not data_type_list:
+      raise ValueError("data_type_list is empty")
+
+    if type(name_list) is str:
+      name_list = [name_list]
+    if type(data_type_list) is str:
+      data_type_list = [[data_type_list]]
+
+    if len(name_list) != len(data_type_list):
+      raise ValueError("name_list and data_type_list must have the same length")
+
+    max_order = 0
+    total_target_dof = 0
+    for name, link_dt_list in zip(name_list, data_type_list):
+      if name not in self.robot_.link_names and name not in self.robot_.joint_names:
+        raise ValueError(f"Invalid name: {name}. Must be a link or joint name.")
+      for data_type in link_dt_list:
+        if data_type not in keys_order:
+          raise ValueError(f"Invalid data_type: {data_type}. Must be one of {list(keys_order.keys())}.")
+        order = keys_order[data_type]
+        if order > max_order:
+          max_order = order
+        total_target_dof += data_type_dof(data_type, dim=self.dim_)
+    
+    total_jacobian = link_jacobian_numerical(self.robot_, self.motions_, name_list, "cmtm", max_order)
+    jacobian = np.zeros((total_target_dof, self.robot_.dof * max_order))
+
+    index = 0
+    for i, name in enumerate(name_list):
+      index = i * max_order * dim_to_dof(self.dim_)
+      for data_type in data_type_list[i]:
+        order = keys_order[data_type]
+        dof = data_type_dof(data_type, order, dim=self.dim_)
+        jacobian[index:index+dof, :] = total_jacobian[dim_to_dof(self.dim_)*(order-1):dim_to_dof(self.dim_)*(order-1)+dof, :]
+        index += dof
+
+    return jacobian
+  
+  def jacobian_target_numerical(self, data_type_list : List[str] = None):
+    if not self.target_:
+      raise ValueError("target_ is not set")
+    
+    name_list = self.target_.target_names
+    if data_type_list is None:
+      data_type_list = self.target_.target_types
+
+    return self.jacobian_numerical(name_list, data_type_list)
   
   def show_robot(self, save = False):
     conectivity = np.zeros((self.robot_.joint_num, 2), dtype='int64')
