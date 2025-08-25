@@ -278,8 +278,8 @@ class Kots():
           max_order = order
         total_target_dof += data_type_dof(data_type, dim=self.dim_)
     
-    total_jacobian = link_cmtm_jacobian(self.robot_, self.motions_, self.state_dict_, name_list, max_order-1)
-    jacobian = np.zeros((total_target_dof, self.robot_.dof * (max_order-1)))
+    total_jacobian = link_cmtm_jacobian(self.robot_, self.motions_, self.state_dict_, name_list, max_order)
+    jacobian = np.zeros((total_target_dof, self.robot_.dof * max_order))
 
     index = 0
     for i, name in enumerate(name_list):
@@ -287,7 +287,7 @@ class Kots():
       for data_type in data_type_list[i]:
         order = keys_order[data_type]
         dof = data_type_dof(data_type, order, dim=self.dim_)
-        jacobian[index:index+dof, :] = total_jacobian[dim_to_dof(self.dim_)*(order-2):dim_to_dof(self.dim_)*(order-2)+dof, :]
+        jacobian[index:index+dof, :] = total_jacobian[dim_to_dof(self.dim_)*(order-1):dim_to_dof(self.dim_)*(order-1)+dof, :]
         index += dof
 
     return jacobian

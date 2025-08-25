@@ -7,6 +7,7 @@ keys = ("pos", "rot", "vel", "acc", "acc_diff", \
 keys_order = {
     "pos": 1,
     "rot": 1,
+    "frame": 1,
     "vel": 2,
     "acc": 3,
     "jerk": 4,
@@ -22,6 +23,7 @@ keys_order = {
 keys_name = {
     "pos" : "pos",
     "rot" : "rot",
+    "frame" : "frame",
     "vel" : "vel",
     "acc" : "acc",
     "jerk" : "acc_diff1",
