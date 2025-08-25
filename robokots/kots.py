@@ -14,6 +14,7 @@ from .basic.target import TargetList
 from .basic.robot_drow import *
 
 from .robot_io import *
+from .misc import check_valid_name_list, check_valid_data_type_list, count_order, filter_cmtm_row_data_to_target
 
 from .outward.outward import kinematics as outward_kinematics
 from .outward.outward import dynamics_cmtm as outward_dynamics
@@ -231,43 +232,16 @@ class Kots():
     print_target_list(self.target_)
 
   def jacobian(self, name_list : List[str], data_type_list : List[str]):
-    if not name_list:
-      raise ValueError("name_list is empty")
-    if not data_type_list:
-      raise ValueError("data_type_list is empty")
-
-    if type(name_list) is str:
-      name_list = [name_list]
-    if type(data_type_list) is str:
-      data_type_list = [[data_type_list]]
+    name_list = check_valid_name_list(name_list)
+    data_type_list = check_valid_data_type_list(data_type_list)
 
     if len(name_list) != len(data_type_list):
       raise ValueError("name_list and data_type_list must have the same length")
 
-    max_order = 0
-    total_target_dof = 0
-    for name, link_dt_list in zip(name_list, data_type_list):
-      if name not in self.robot_.link_names and name not in self.robot_.joint_names:
-        raise ValueError(f"Invalid name: {name}. Must be a link or joint name.")
-      for data_type in link_dt_list:
-        if data_type not in keys_order:
-          raise ValueError(f"Invalid data_type: {data_type}. Must be one of {list(keys_order.keys())}.")
-        order = keys_order[data_type]
-        if order > max_order:
-          max_order = order
-        total_target_dof += data_type_dof(data_type, dim=self.dim_)
-    
+    max_order = count_order(self.robot_, name_list, data_type_list)
     total_jacobian = link_cmtm_jacobian(self.robot_, self.motions_, self.state_dict_, name_list, max_order)
-    jacobian = np.zeros((total_target_dof, self.robot_.dof * max_order))
 
-    index = 0
-    for i, name in enumerate(name_list):
-      index = i * max_order * dim_to_dof(self.dim_)
-      for data_type in data_type_list[i]:
-        order = keys_order[data_type]
-        dof = data_type_dof(data_type, order, dim=self.dim_)
-        jacobian[index:index+dof, :] = total_jacobian[dim_to_dof(self.dim_)*(order-1):dim_to_dof(self.dim_)*(order-1)+dof, :]
-        index += dof
+    jacobian = filter_cmtm_row_data_to_target(total_jacobian, name_list, data_type_list, dim=self.dim_)
 
     return jacobian
   
@@ -308,43 +282,16 @@ class Kots():
     return link_diff_kinematics_numerical(self.robot_, motion, link_name_list, data_type, order, eps, update_method, update_direction)
   
   def jacobian_numerical(self, name_list : List[str], data_type_list : List[str]):
-    if not name_list:
-      raise ValueError("name_list is empty")
-    if not data_type_list:
-      raise ValueError("data_type_list is empty")
-
-    if type(name_list) is str:
-      name_list = [name_list]
-    if type(data_type_list) is str:
-      data_type_list = [[data_type_list]]
+    name_list = check_valid_name_list(name_list)
+    data_type_list = check_valid_data_type_list(data_type_list)
 
     if len(name_list) != len(data_type_list):
       raise ValueError("name_list and data_type_list must have the same length")
-
-    max_order = 0
-    total_target_dof = 0
-    for name, link_dt_list in zip(name_list, data_type_list):
-      if name not in self.robot_.link_names and name not in self.robot_.joint_names:
-        raise ValueError(f"Invalid name: {name}. Must be a link or joint name.")
-      for data_type in link_dt_list:
-        if data_type not in keys_order:
-          raise ValueError(f"Invalid data_type: {data_type}. Must be one of {list(keys_order.keys())}.")
-        order = keys_order[data_type]
-        if order > max_order:
-          max_order = order
-        total_target_dof += data_type_dof(data_type, dim=self.dim_)
-    
+  
+    max_order = count_order(self.robot_, name_list, data_type_list)
     total_jacobian = link_jacobian_numerical(self.robot_, self.motions_, name_list, "cmtm", max_order)
-    jacobian = np.zeros((total_target_dof, self.robot_.dof * max_order))
 
-    index = 0
-    for i, name in enumerate(name_list):
-      index = i * max_order * dim_to_dof(self.dim_)
-      for data_type in data_type_list[i]:
-        order = keys_order[data_type]
-        dof = data_type_dof(data_type, order, dim=self.dim_)
-        jacobian[index:index+dof, :] = total_jacobian[dim_to_dof(self.dim_)*(order-1):dim_to_dof(self.dim_)*(order-1)+dof, :]
-        index += dof
+    jacobian = filter_cmtm_row_data_to_target(total_jacobian, name_list, data_type_list, dim=self.dim_)
 
     return jacobian
   

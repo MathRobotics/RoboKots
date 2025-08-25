@@ -1,0 +1,56 @@
+from typing import List
+import numpy as np
+
+from .basic.state import keys_order, data_type_dof, dim_to_dof
+from .basic.robot import RobotStruct
+
+def check_valid_name_list(name_list : List[str]):
+    if not name_list:
+        raise ValueError("name_list is empty")
+  
+    if type(name_list) is str:
+        name_list = [name_list]
+
+    if not all(isinstance(name, str) for name in name_list):
+        raise ValueError("name_list must contain only strings")
+
+    return name_list
+
+def check_valid_data_type_list(data_type_list : List[str]):
+    if not data_type_list:
+        raise ValueError("data_type_list is empty")
+  
+    if type(data_type_list) is str:
+        data_type_list = [[data_type_list]]
+
+    return data_type_list
+
+def count_order(robot : RobotStruct, name_list : List[str], data_type_list : List[str]) -> int:
+    max_order = 0
+    for name, link_dt_list in zip(name_list, data_type_list):
+      if name not in robot.link_names and name not in robot.joint_names:
+        raise ValueError(f"Invalid name: {name}. Must be a link or joint name.")
+      for data_type in link_dt_list:
+        if data_type not in keys_order:
+          raise ValueError(f"Invalid data_type: {data_type}. Must be one of {list(keys_order.keys())}.")
+        order = keys_order[data_type]
+        if order > max_order:
+          max_order = order
+
+    return max_order
+
+def filter_cmtm_row_data_to_target(cmtm_row_data : np.array, name_list : List[str], data_type_list : List[str], dim = 3) -> np.array:
+    idx = []
+    base = dim_to_dof(dim)
+
+    for i, name in enumerate(name_list):
+        for data_type in data_type_list[i]:
+            order = keys_order[data_type]
+            dof   = data_type_dof(data_type, order, dim)
+            start = base * (order - 1)
+            idx.extend(range(start, start + dof))
+
+    if not idx:
+        return cmtm_row_data[:0, :]
+
+    return cmtm_row_data[np.asarray(idx, dtype=int), :]
