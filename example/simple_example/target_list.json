@@ -2,7 +2,7 @@
   "targets":[
     {
       "type": ["vel", "acc", "jerk", "snap"],
-      "link": "arm3"
+      "link": "end"
     }
   ]
 }

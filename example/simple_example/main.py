@@ -15,27 +15,27 @@ def main():
 
     kots.kinematics()
 
-    jacob = kots.link_jacobian_target(1)
-    jacob_num = kots.link_jacobian_target_numerical("frame")
+    jacob = kots.jacobian(["end"], "frame")
+    jacob_num = kots.jacobian_numerical(["end"], "frame")
     print("norm: ", np.linalg.norm(jacob - jacob_num))
 
-    jacob = kots.link_jacobian_target(4)
-    jacob_target = kots.jacobian_target()
+    jacob = kots.jacobian_target()
+    jacob_target = kots.jacobian_target([["vel", "acc", "jerk", "snap"]])
     print("norm: ", np.linalg.norm(jacob - jacob_target))
 
     fk_vel = kots.state_target_link_info('vel')
-    jacob_vel = kots.link_jacobian_target(1)@kots.motion_diff(1)
+    jacob_vel = kots.jacobian_target("frame")@kots.motion_diff(1)
 
     for i in range(len(fk_vel)):
       print(fk_vel[i])
       print(jacob_vel[6*i:6*(i+1)])
 
     fk_acc = kots.state_target_link_info('acc')
-    jacob_acc = kots.link_jacobian_target(2)@kots.motion_diff(2)
+    jacob_acc = kots.jacobian_target("vel")@kots.motion_diff(2)
 
-    for i in range(len(fk_acc)):
-      print(fk_acc[i])
-      print(jacob_acc[12*i+6:12*i+12])
+      
+    print(fk_acc[0])
+    print(jacob_acc)
     
     print(kots.target_info())
 

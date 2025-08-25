@@ -1,7 +1,7 @@
 {
   "targets":[
     {
-      "type": "pos",
+      "type": "acc",
       "link": "arm3",
       "pos" : [0,0,0]
     }
