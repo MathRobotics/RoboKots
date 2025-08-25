@@ -87,7 +87,7 @@ def test_load_target_json_file():
         json.dump(target_data, f)
     target_list = load_target_json_file("./file/test_target.json")
     assert isinstance(target_list, TargetList)
-    assert target_list.targets[0].type == "pos"
+    assert target_list.targets[0].type == ["pos"]
     assert target_list.targets[1].link_name == "link2"
     
     # Test loading a non-existent target JSON file
