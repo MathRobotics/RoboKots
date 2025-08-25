@@ -230,27 +230,6 @@ class Kots():
   def print_targets(self):
     print_target_list(self.target_)
 
-  def link_jacobian(self, link_name_list : list[str], order = default_order):
-    if order < 1:
-      raise ValueError("order must be greater than 0")
-    if order > self.order_:
-      raise ValueError(f"order must be less than or equal to {self.order_}")
-
-    if not link_name_list:
-      raise ValueError("link_name_list is empty")
-    if not all(link_name in self.robot_.link_names for link_name in link_name_list):
-      raise ValueError("link_name_list contains invalid link names")
-
-    if order == 1:
-        return link_jacobian(self.robot_, self.motions_, self.state_dict_, link_name_list)
-    else:
-        return link_cmtm_jacobian(self.robot_, self.motions_, self.state_dict_, link_name_list, order)
-  
-  def link_jacobian_target(self, order = 3):
-    if not self.target_:
-      raise ValueError("target_ is not set")
-    return self.link_jacobian(self.target_.target_names, order)
-
   def jacobian(self, name_list : List[str], data_type_list : List[str]):
     if not name_list:
       raise ValueError("name_list is empty")
@@ -327,14 +306,6 @@ class Kots():
       motion[joint.dof_index*order:joint.dof_index*order+joint.dof*order] = m.flatten()
 
     return link_diff_kinematics_numerical(self.robot_, motion, link_name_list, data_type, order, eps, update_method, update_direction)
-  
-  def link_jacobian_numerical(self, link_name_list : list[str], data_type = "vel", order = None):
-    return link_jacobian_numerical(self.robot_, self.motions_, link_name_list, data_type, order)
-  
-  def link_jacobian_target_numerical(self, data_type = "vel", order = None):
-    if not self.target_:
-      raise ValueError("target_ is not set")
-    return self.link_jacobian_numerical(self.target_.target_names, data_type, order)
   
   def jacobian_numerical(self, name_list : List[str], data_type_list : List[str]):
     if not name_list:
