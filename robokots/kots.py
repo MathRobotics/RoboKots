@@ -110,14 +110,8 @@ class Kots():
   def link_name_list(self):
     return self.robot_.link_names
   
-  def link_list(self, name_list : list[str]):
-    return self.robot_.link_list(name_list)
-  
   def joint_name_list(self):
     return self.robot_.joint_names
-  
-  def joint_list(self, name_list : list[str]):
-    return self.robot_.joint_list(name_list)
 
   def motions(self):
     return self.motions_.motions
