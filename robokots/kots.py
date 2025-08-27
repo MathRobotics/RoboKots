@@ -237,17 +237,6 @@ class Kots():
 
     return link_diff_kinematics_numerical(self.robot_, motion, link_name_list, data_type, order, eps, update_method, update_direction)
   
-  def link_diff_dynamics_numerical(self, link_name_list : list[str], data_type = "link_force", order = None, eps = 1e-8, update_method = "poly", update_direction = None):
-    if order is None:
-      order = keys_order(data_type)
-      
-    motion = np.zeros(self.robot_.dof * order)
-    for joint in self.robot_.joints:
-      m = self.motions_.joint_motions(joint.dof, joint.dof_index, order)
-      motion[joint.dof_index*order:joint.dof_index*order+joint.dof*order] = m.flatten()
-
-    return link_diff_kinematics_numerical(self.robot_, motion, link_name_list, data_type, order, eps, update_method, update_direction)
-  
   def __jacobian(self, name_list : List[str], data_type_list : List[str], numerical : bool = False):
     name_list = check_valid_str_list(name_list)
     data_type_list = check_valid_data_type_list(data_type_list)
