@@ -80,13 +80,10 @@ def calc_link_total_point_frame(robot : RobotStruct, motions : RobotMotions, sta
       coord = motions.link_motions(l.dof, l.dof_index, 1)[0]
       return calc_link_local_point_frame(l, coord, p_link_frame, point - base)
   
-def link_diff_kinematics_numerical(robot : RobotStruct, motions, link_name_list : list[str],  data_type : str, order = None, \
+def link_diff_kinematics_numerical(robot : RobotStruct, motions, link_name_list : list[str],  data_type : str, order = 3, \
                                     eps = 1e-8, update_method = None, update_direction = None) -> np.ndarray:
   if data_type not in ["pos", "rot", "vel", "acc", "jerk", "snap", "frame", "cmtm"]:
     raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'frame' or 'cmtm'.")
-
-  if order is None:
-    order = 3
 
   dof = data_type_dof(data_type, order, dim=3)
 
@@ -162,9 +159,8 @@ def dynamics_cmtm(robot : RobotStruct, joint_motions, dynamics_order = 1) -> dic
   for joint in reversed(robot.joints):
     child = robot.links[joint.child_link_id]
     joint_data = convert_joint_to_data(joint)
-    
-    joint_motion = joint_motions[joint.dof_index*dynamics_order + 2:joint.dof_index*dynamics_order + 2+joint.dof*dynamics_order + 2]
-  
+
+    joint_motion = joint_motions[joint.dof_index*(dynamics_order+2):joint.dof_index*(dynamics_order+2) + joint.dof*(dynamics_order+2)]
     inertia = spatial_inertia(child.mass, child.inertia, child.cog)
 
     link_cmtm = state_dict_to_cmtm(state_data, child.name, dynamics_order + 2)
