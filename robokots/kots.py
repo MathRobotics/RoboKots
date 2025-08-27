@@ -203,6 +203,7 @@ class Kots():
       order = self.order_
     self.state_dict_ = outward_kinematics(self.robot_, self.motion(order), order)
 
+  # ToDo: change function name
   def kinematics_point(self, s : float = 0.0):
     return calc_link_total_point_frame(self.robot_, self.motions_, self.state_dict_, s)
   
