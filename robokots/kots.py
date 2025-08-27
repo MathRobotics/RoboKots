@@ -7,14 +7,14 @@ from typing import List, Dict, Any
 
 from .basic.motion import RobotMotions
 from .basic.state_df import RobotState
-from .basic.state import keys_order, data_type_dof, dim_to_dof
+from .basic.state import keys_order
 from .basic.state_dict import extract_dict_link_info, extract_dict_joint_info, dict_to_links_pos
 from .basic.robot import RobotStruct
 from .basic.target import TargetList
 from .basic.robot_drow import *
 
 from .robot_io import *
-from .misc import check_valid_name_list, check_valid_data_type_list, count_order, filter_cmtm_row_data_to_target
+from .misc import check_valid_str_list, check_valid_data_type_list, count_order, filter_cmtm_row_data_to_target
 
 from .outward.outward import kinematics as outward_kinematics
 from .outward.outward import dynamics_cmtm as outward_dynamics
@@ -225,30 +225,68 @@ class Kots():
   def print_targets(self):
     print_target_list(self.target_)
 
-  def jacobian(self, name_list : List[str], data_type_list : List[str]):
-    name_list = check_valid_name_list(name_list)
+  def link_diff_kinematics_numerical(self, link_name_list : list[str], data_type = "vel", order = None, eps = 1e-8, update_method = "poly", update_direction = None):
+    if order is None:
+      order = keys_order(data_type)
+      
+    motion = np.zeros(self.robot_.dof * order)
+    for joint in self.robot_.joints:
+      m = self.motions_.joint_motions(joint.dof, joint.dof_index, order)
+      motion[joint.dof_index*order:joint.dof_index*order+joint.dof*order] = m.flatten()
+
+    return link_diff_kinematics_numerical(self.robot_, motion, link_name_list, data_type, order, eps, update_method, update_direction)
+  
+  def link_diff_dynamics_numerical(self, link_name_list : list[str], data_type = "link_force", order = None, eps = 1e-8, update_method = "poly", update_direction = None):
+    if order is None:
+      order = keys_order(data_type)
+      
+    motion = np.zeros(self.robot_.dof * order)
+    for joint in self.robot_.joints:
+      m = self.motions_.joint_motions(joint.dof, joint.dof_index, order)
+      motion[joint.dof_index*order:joint.dof_index*order+joint.dof*order] = m.flatten()
+
+    return link_diff_kinematics_numerical(self.robot_, motion, link_name_list, data_type, order, eps, update_method, update_direction)
+  
+  def __jacobian(self, name_list : List[str], data_type_list : List[str], numerical : bool = False):
+    name_list = check_valid_str_list(name_list)
     data_type_list = check_valid_data_type_list(data_type_list)
 
     if len(name_list) != len(data_type_list):
       raise ValueError("name_list and data_type_list must have the same length")
 
     max_order = count_order(self.robot_, name_list, data_type_list)
-    total_jacobian = link_cmtm_jacobian(self.robot_, self.motions_, self.state_dict_, name_list, max_order)
+    if numerical:
+      total_jacobian = link_jacobian_numerical(self.robot_, self.motions_, name_list, "cmtm", max_order)
+    else:
+      total_jacobian = link_cmtm_jacobian(self.robot_, self.motions_, self.state_dict_, name_list, max_order)
 
     jacobian = filter_cmtm_row_data_to_target(total_jacobian, name_list, data_type_list, dim=self.dim_)
 
     return jacobian
+
+  def jacobian(self, name_list : List[str], data_type_list : List[str]):
+    return self.__jacobian(name_list, data_type_list, numerical=False)
+
+  def jacobian_numerical(self, name_list : List[str], data_type_list : List[str]):
+    return self.__jacobian(name_list, data_type_list, numerical=True)
   
-  def jacobian_target(self, data_type_list : List[str] = None):
+  def __check_target(self, data_type_list : List[str] = None):
     if not self.target_:
       raise ValueError("target_ is not set")
     
     name_list = self.target_.target_names
     if data_type_list is None:
       data_type_list = self.target_.target_types
+    return name_list, data_type_list
 
+  def jacobian_target(self, data_type_list : List[str] = None):
+    name_list, data_type_list = self.__check_target(data_type_list)
     return self.jacobian(name_list, data_type_list)
-  
+
+  def jacobian_target_numerical(self, data_type_list : List[str] = None):
+    name_list, data_type_list = self.__check_target(data_type_list)
+    return self.jacobian_numerical(name_list, data_type_list)
+
   def jacobian_cmtm(self, name_list : List[str], order = None):
     if order is None:
       order = self.order_
@@ -264,41 +302,6 @@ class Kots():
 
     return link_cmtm_jacobian(self.robot_, self.motions_, self.state_dict_, name_list, order)
 
-  def link_diff_kinematics_numerical(self, link_name_list : list[str], data_type = "vel", order = None, eps = 1e-8, update_method = "poly", update_direction = None):
-    if order is None:
-      order = keys_order(data_type)
-      
-    motion = np.zeros(self.robot_.dof * order)
-    for joint in self.robot_.joints:
-      m = self.motions_.joint_motions(joint.dof, joint.dof_index, order)
-      motion[joint.dof_index*order:joint.dof_index*order+joint.dof*order] = m.flatten()
-
-    return link_diff_kinematics_numerical(self.robot_, motion, link_name_list, data_type, order, eps, update_method, update_direction)
-  
-  def jacobian_numerical(self, name_list : List[str], data_type_list : List[str]):
-    name_list = check_valid_name_list(name_list)
-    data_type_list = check_valid_data_type_list(data_type_list)
-
-    if len(name_list) != len(data_type_list):
-      raise ValueError("name_list and data_type_list must have the same length")
-  
-    max_order = count_order(self.robot_, name_list, data_type_list)
-    total_jacobian = link_jacobian_numerical(self.robot_, self.motions_, name_list, "cmtm", max_order)
-
-    jacobian = filter_cmtm_row_data_to_target(total_jacobian, name_list, data_type_list, dim=self.dim_)
-
-    return jacobian
-  
-  def jacobian_target_numerical(self, data_type_list : List[str] = None):
-    if not self.target_:
-      raise ValueError("target_ is not set")
-    
-    name_list = self.target_.target_names
-    if data_type_list is None:
-      data_type_list = self.target_.target_types
-
-    return self.jacobian_numerical(name_list, data_type_list)
-  
   def show_robot(self, save = False):
     conectivity = np.zeros((self.robot_.joint_num, 2), dtype='int64')
     for i in range(self.robot_.joint_num):

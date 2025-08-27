@@ -4,17 +4,17 @@ import numpy as np
 from .basic.state import keys_order, data_type_dof, dim_to_dof
 from .basic.robot import RobotStruct
 
-def check_valid_name_list(name_list : List[str]):
-    if not name_list:
-        raise ValueError("name_list is empty")
+def check_valid_str_list(str_list : List[str]):
+    if not str_list:
+        raise ValueError("str_list is empty")
   
-    if type(name_list) is str:
-        name_list = [name_list]
+    if type(str_list) is str:
+        str_list = [str_list]
 
-    if not all(isinstance(name, str) for name in name_list):
-        raise ValueError("name_list must contain only strings")
+    if not all(isinstance(s, str) for s in str_list):
+        raise ValueError("str_list must contain only strings")
 
-    return name_list
+    return str_list
 
 def check_valid_data_type_list(data_type_list : List[str]):
     if not data_type_list:
