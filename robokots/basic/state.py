@@ -1,10 +1,38 @@
 from mathrobo import SO3, SE3, CMTM
 
-keys = ("pos", "rot", "vel", "acc", "acc_diff", \
-                 "jerk", "snap", "crackle", "pop", \
-                 "lock", "drop", "shot", "put")
+keys_kinematics = \
+    ("pos", "rot", "frame", "vel", "acc", "jerk", "snap", "crackle", "pop", "lock", "drop", "shot", "put")
 
-keys_order = {
+keys_dynamics = \
+    ("force", "torque")
+
+keys = keys_kinematics + keys_dynamics
+
+def is_in_keys_kinematics(keys_list):
+    for k in keys_list:
+        if k not in keys_kinematics:
+            return False
+    return True
+
+def is_in_keys_dynamics(keys_list):
+    for k in keys_list:
+        if k not in keys_dynamics:
+            return False
+    return True
+
+def is_in_keys(keys_list):
+    for k in keys_list:
+        if k not in keys:
+            return False
+    return True
+
+def filter_keys_kinematics(keys_list):
+    return [k for k in keys_list if k in keys_kinematics]
+
+def filter_keys_dynamics(keys_list):
+    return [k for k in keys_list if k in keys_dynamics]
+
+keys_order_kinematics = {
     "pos": 1,
     "rot": 1,
     "frame": 1,
@@ -19,6 +47,13 @@ keys_order = {
     "shot": 10,
     "put": 11
 }
+
+keys_dynamics_order = {
+    "force": 1,
+    "torque": 2
+}
+
+keys_order = {**keys_order_kinematics, **keys_dynamics_order}
 
 keys_name = {
     "pos" : "pos",
@@ -57,7 +92,10 @@ def data_type_to_sub_func(data_type : str):
 def data_type_dof(data_type : str, order = None, dim = 3):
     if data_type == "pos" or data_type == "rot":
         return dim
-    elif data_type == "vel" or data_type == "acc" or data_type == "jerk" or data_type == "snap" or data_type == "crackle" or data_type == "pop" or data_type == "lock" or data_type == "drop" or data_type == "shot" or data_type == "put":
+    elif data_type == "vel" or data_type == "acc" or data_type == "jerk"  \
+        or data_type == "snap" or data_type == "crackle" or data_type == "pop" \
+        or data_type == "lock" or data_type == "drop" or data_type == "shot" or data_type == "put" \
+        or data_type == "force":
         return dim * 2
     elif data_type == "frame":
         return dim * 2

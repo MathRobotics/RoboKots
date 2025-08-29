@@ -8,7 +8,8 @@ import numpy as np
 from ..basic.robot import RobotStruct
 from ..basic.state_dict import state_dict_to_rel_cmtm
 
-from ..dynamics.dynamics_matrix import inertia_diag_mat
+from ..dynamics.base import spatial_inertia
+from ..dynamics.dynamics_matrix import inertia_diag_mat, momentum_to_force_mat
 from ..kinematics.kinematics_matrix import joint_select_diag_mat
 
 
@@ -43,8 +44,20 @@ def link_inertia_mat(r : RobotStruct, order : int = 3, dim : int = 6) -> np.ndar
     mat = np.zeros((r.link_num * n_, r.link_num * n_))
 
     for i, link in enumerate(r.links):
-        mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = inertia_diag_mat(link.inertia, order)
+        mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = inertia_diag_mat(spatial_inertia(link.mass, link.inertia, link.cog), order)
 
+    return mat
+
+def total_momentum_to_force_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
+    n_ = dim * order
+    m_ = dim * (order+1)
+    mat = np.zeros((r.link_num * n_, r.link_num * m_))
+
+    for i, joint in enumerate(r.joints):
+        child_link = r.links[joint.child_link_id]
+        parent_link = r.links[joint.parent_link_id]
+        rel_cmtm = state_dict_to_rel_cmtm(state, child_link.name, parent_link.name, order+1)
+        mat[i*n_:(i+1)*n_, i*m_:(i+1)*m_] = momentum_to_force_mat(rel_cmtm, order)
     return mat
 
 def coord_to_joint_mat(r : RobotStruct, order : int = 3, dim : int = 6) -> np.ndarray:
@@ -71,11 +84,13 @@ def coord_to_link_mat(r : RobotStruct, state : dict, order : int = 3, dim : int 
     return joint_to_link_mat(r, state, order, dim) @ coord_to_joint_mat(r, order, dim)
 
 def coord_to_link_momentum_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
-    return link_inertia_mat(r, order, dim) @ joint_to_link_mat(r, state, order, dim) @ coord_to_joint_mat(r, order, dim)
+    return link_inertia_mat(r, order=order, dim=dim) @ coord_to_link_mat(r, state, order, dim)
 
 def coord_to_joint_momentum_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
-    return link_to_joint_mat(r, state, order, dim) @ link_inertia_mat(r, order, dim) @ \
-            joint_to_link_mat(r, state, order, dim) @ coord_to_joint_mat(r, order, dim)
+    return link_to_joint_mat(r, state, order, dim) @ coord_to_link_momentum_mat(r, state, order, dim)
+
+def coord_to_link_force_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
+    return total_momentum_to_force_mat(r, state, order-1, dim) @ coord_to_link_momentum_mat(r, state, order, dim)
 
 def link_jacobian(robot : RobotStruct, state : dict, link_name_list : list[str], order : int = 3, dim : int = 6) -> np.ndarray:
     links = robot.link_list(link_name_list)
@@ -106,11 +121,11 @@ def joint_jacobian_momentum(robot : RobotStruct, state : dict, joint_name_list :
 
 def link_jacobian_force(robot : RobotStruct, state : dict, link_name_list : list[str], order : int = 3, dim : int = 6) -> np.ndarray:
     links = robot.link_list(link_name_list)
-    mat = coord_to_link_momentum_mat(robot, state, order=order, dim=dim)
-    jacobs = np.zeros((dim * order * len(links), robot.dof * order))
+    mat = coord_to_link_force_mat(robot, state, order=order, dim=dim)
+    jacobs = np.zeros((dim * (order-1) * len(links), robot.dof * order))
 
     for i, link in enumerate(links):
-        jacobs[i*dim*order:(i+1)*dim*order, :] = mat[link.id*dim*order:(link.id+1)*dim*order, :]
+        jacobs[i*dim*(order-1):(i+1)*dim*(order-1), :] = mat[link.id*dim*(order-1):(link.id+1)*dim*(order-1), :]
     return jacobs
 
 def joint_jacobian_force(robot : RobotStruct, state : dict, joint_name_list : list[str], order : int = 3, dim : int = 6) -> np.ndarray:

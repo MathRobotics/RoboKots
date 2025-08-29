@@ -7,7 +7,7 @@ from typing import List, Dict, Any
 
 from .basic.motion import RobotMotions
 from .basic.state_df import RobotState
-from .basic.state import keys_order
+from .basic.state import keys_order, filter_keys_kinematics, filter_keys_dynamics
 from .basic.state_dict import extract_dict_link_info, extract_dict_joint_info, dict_to_links_pos
 from .basic.robot import RobotStruct
 from .basic.target import TargetList
@@ -20,6 +20,7 @@ from .outward.outward import kinematics as outward_kinematics
 from .outward.outward import dynamics_cmtm as outward_dynamics
 from .outward.outward import link_diff_kinematics_numerical, calc_link_total_point_frame
 from .outward.outward_gradient import link_jacobian, link_cmtm_jacobian, link_jacobian_numerical 
+from .outward.outward_matrix import link_jacobian_force
   
 default_order = 3 
 default_dim = 3
@@ -192,8 +193,8 @@ class Kots():
   def target_info_vecs(self) -> np.ndarray:
       target_info = self.target_info()
       vecs = []
-      for name, info in target_info.items():
-          for data_type, vec in info.items():
+      for _, info in target_info.items():
+          for _, vec in info.items():
               if vec.size > 0:
                   vecs.append(vec)
       return np.concatenate(vecs) if vecs else np.array([]) 
@@ -207,8 +208,10 @@ class Kots():
   def kinematics_point(self, s : float = 0.0):
     return calc_link_total_point_frame(self.robot_, self.motions_, self.state_dict_, s)
   
-  def dynamics(self):
-    self.state_dict_ = outward_dynamics(self.robot_, self.motion(3), self.order_-2)
+  def dynamics(self, order = None):
+    if order is None:
+      order = self.order_
+    self.state_dict_ = outward_dynamics(self.robot_, self.motion(order), order-2)
 
   def set_state_df(self):
     self.state_.import_state(self.state_dict_)
@@ -246,11 +249,22 @@ class Kots():
 
     max_order = count_order(self.robot_, name_list, data_type_list)
     if numerical:
-      total_jacobian = link_jacobian_numerical(self.robot_, self.motions_, name_list, "cmtm", max_order)
+      total_jacobian_kinematics = link_jacobian_numerical(self.robot_, self.motions_, name_list, "cmtm", max_order)
+      total_jacobian_dynamics = np.zeros((max_order*6*len(name_list), self.robot_.dof*max_order))
     else:
-      total_jacobian = link_cmtm_jacobian(self.robot_, self.motions_, self.state_dict_, name_list, max_order)
+      total_jacobian_kinematics = link_cmtm_jacobian(self.robot_, self.motions_, self.state_dict_, name_list, max_order)
+      if max_order > 2:
+        total_jacobian_dynamics = link_jacobian_force(self.robot_, self.state_dict_, name_list, max_order)
+      else:
+        total_jacobian_dynamics = np.zeros((max_order*6*len(name_list), self.robot_.dof*max_order))
 
-    jacobian = filter_cmtm_row_data_to_target(total_jacobian, name_list, data_type_list, dim=self.dim_)
+    data_type_list_kinematics = [filter_keys_kinematics(data_type) for data_type in data_type_list]
+    data_type_list_dynamics = [filter_keys_dynamics(data_type) for data_type in data_type_list]
+
+    jacobian_kinematics = filter_cmtm_row_data_to_target(total_jacobian_kinematics, name_list, data_type_list_kinematics, dim=self.dim_)
+    jacobian_dynamics = filter_cmtm_row_data_to_target(total_jacobian_dynamics, name_list, data_type_list_dynamics, dim=self.dim_)
+
+    jacobian = np.vstack((jacobian_kinematics, jacobian_dynamics))
 
     return jacobian
 

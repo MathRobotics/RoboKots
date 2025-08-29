@@ -17,7 +17,7 @@ def  natural_num_diag_mat(order : int = 1, dim : int = 6) -> np.ndarray:
     return diagonal matrix with natural numbers from 1 to order repeated dim times
     size is (dim * order, dim * order)
     '''
-    v = np.repeat(np.arange(1, order), dim)
+    v = np.repeat(np.arange(1, order+1), dim)
     return np.diag(v)
 
 def momentum_to_force_mat(m : CMTM, order : int = 1, dim : int = 6) -> np.ndarray:
@@ -25,10 +25,10 @@ def momentum_to_force_mat(m : CMTM, order : int = 1, dim : int = 6) -> np.ndarra
     force_dof = dim * order
     mat = np.zeros((force_dof, momentum_dof))
     
-    mat[:, dim:] = natural_num_diag_mat(force_dof, dim)
+    mat[:, dim:] = natural_num_diag_mat(order, dim)
     if dim == 6:
-      mat[:, :force_dof] += -CMTM.hat(SE3, m.tan_vecs(order+1)).T
+      mat[:, :force_dof] += -CMTM.hat_adj(SE3, m.tan_vecs(order+1)).T
     elif dim == 3:
-      mat[:, :force_dof] += -CMTM.hat(SO3, m.tan_vecs(order+1)).T
+      mat[:, :force_dof] += -CMTM.hat_adj(SO3, m.tan_vecs(order+1)).T
       
     return mat
