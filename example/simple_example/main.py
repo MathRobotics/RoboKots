@@ -19,9 +19,13 @@ def main():
     jacob_num = kots.jacobian_numerical(["end"], "frame")
     print("norm: ", np.linalg.norm(jacob - jacob_num))
 
-    jacob = kots.jacobian_target()
-    jacob_target = kots.jacobian_target([["vel", "acc", "jerk", "snap"]])
+    jacob = kots.jacobian_target() 
+    jacob_target = kots.jacobian_target([["vel", "acc", "jerk", "snap", "force"]])
     print("norm: ", np.linalg.norm(jacob - jacob_target))
+
+    jacob = kots.jacobian(["end"], "force")
+    jacob_num = kots.jacobian_numerical(["end"], "force")
+    print("norm: ", np.linalg.norm(jacob - jacob_num))
 
     fk_vel = kots.state_target_link_info('vel')
     jacob_vel = kots.jacobian_target("frame")@kots.motion_diff(1)
@@ -37,9 +41,9 @@ def main():
     print(fk_acc[0])
     print(jacob_acc)
     
-    print(kots.target_info())
-
     kots.dynamics()
+
+    print(kots.target_info())
   
     kots.show_robot()
 
