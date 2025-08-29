@@ -104,7 +104,7 @@ def joint_jacobian_momentum(robot : RobotStruct, state : dict, joint_name_list :
         jacobs[i*dim*order:(i+1)*dim*order, :] = mat[joint.id*dim*order:(joint.id+1)*dim*order, :]
     return jacobs
 
-def link_jacob_force(robot : RobotStruct, state : dict, link_name_list : list[str], order : int = 3, dim : int = 6) -> np.ndarray:
+def link_jacobian_force(robot : RobotStruct, state : dict, link_name_list : list[str], order : int = 3, dim : int = 6) -> np.ndarray:
     links = robot.link_list(link_name_list)
     mat = coord_to_link_momentum_mat(robot, state, order=order, dim=dim)
     jacobs = np.zeros((dim * order * len(links), robot.dof * order))
@@ -113,7 +113,7 @@ def link_jacob_force(robot : RobotStruct, state : dict, link_name_list : list[st
         jacobs[i*dim*order:(i+1)*dim*order, :] = mat[link.id*dim*order:(link.id+1)*dim*order, :]
     return jacobs
 
-def joint_jacob_force(robot : RobotStruct, state : dict, joint_name_list : list[str], order : int = 3, dim : int = 6) -> np.ndarray:
+def joint_jacobian_force(robot : RobotStruct, state : dict, joint_name_list : list[str], order : int = 3, dim : int = 6) -> np.ndarray:
     joints = robot.joint_list(joint_name_list)
     mat = coord_to_joint_momentum_mat(robot, state, order=order, dim=dim)
     jacobs = np.zeros((dim * order * len(joints), robot.dof * order))
