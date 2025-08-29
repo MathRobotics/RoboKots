@@ -43,7 +43,7 @@ def filter_cmtm_row_data_to_target(cmtm_row_data : np.array, name_list : List[st
     idx = []
     base = dim_to_dof(dim)
 
-    for i, name in enumerate(name_list):
+    for i, _ in enumerate(name_list):
         for data_type in data_type_list[i]:
             order = keys_order[data_type]
             dof   = data_type_dof(data_type, order, dim)
