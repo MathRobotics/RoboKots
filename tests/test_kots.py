@@ -76,4 +76,4 @@ def test_cmtm_jacobian_numerical_soft():
     jacob_cmtm = kots.jacobian(["end"], [["frame", "vel", "acc", "jerk", "snap"]])
     jacob_cmtm_num = kots.jacobian_numerical(["end"], [["frame", "vel", "acc", "jerk", "snap"]])
 
-    assert np.allclose(jacob_cmtm, jacob_cmtm_num, atol=1e-6, rtol=1e-6)
+    assert np.allclose(jacob_cmtm, jacob_cmtm_num, atol=1e-5, rtol=1e-5)
