@@ -246,6 +246,9 @@ class Kots():
 
     if len(name_list) != len(data_type_list):
       raise ValueError("name_list and data_type_list must have the same length")
+    
+    data_type_list_kinematics = [filter_keys_kinematics(data_type) for data_type in data_type_list]
+    data_type_list_dynamics = [filter_keys_dynamics(data_type) for data_type in data_type_list]
 
     max_order = count_order(self.robot_, name_list, data_type_list)
     if numerical:
@@ -253,13 +256,10 @@ class Kots():
       total_jacobian_dynamics = np.zeros((max_order*6*len(name_list), self.robot_.dof*max_order))
     else:
       total_jacobian_kinematics = link_cmtm_jacobian(self.robot_, self.motions_, self.state_dict_, name_list, max_order)
-      if max_order > 2:
+      if max_order > 2 and self.robot_.joint_dof > 0:
         total_jacobian_dynamics = link_jacobian_force(self.robot_, self.state_dict_, name_list, max_order)
       else:
         total_jacobian_dynamics = np.zeros((max_order*6*len(name_list), self.robot_.dof*max_order))
-
-    data_type_list_kinematics = [filter_keys_kinematics(data_type) for data_type in data_type_list]
-    data_type_list_dynamics = [filter_keys_dynamics(data_type) for data_type in data_type_list]
 
     jacobian_kinematics = filter_cmtm_row_data_to_target(total_jacobian_kinematics, name_list, data_type_list_kinematics, dim=self.dim_)
     jacobian_dynamics = filter_cmtm_row_data_to_target(total_jacobian_dynamics, name_list, data_type_list_dynamics, dim=self.dim_)
