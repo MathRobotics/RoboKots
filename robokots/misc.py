@@ -1,7 +1,7 @@
 from typing import List
 import numpy as np
 
-from .basic.state import keys_order, data_type_dof, dim_to_dof
+from .basic.state import keys_order, keys_time_order, data_type_dof, dim_to_dof
 from .basic.robot import RobotStruct
 
 def check_valid_str_list(str_list : List[str]):
@@ -25,15 +25,15 @@ def check_valid_data_type_list(data_type_list : List[str]):
 
     return data_type_list
 
-def count_order(robot : RobotStruct, name_list : List[str], data_type_list : List[str]) -> int:
+def count_time_order(robot : RobotStruct, name_list : List[str], data_type_list : List[str]) -> int:
     max_order = 0
     for name, link_dt_list in zip(name_list, data_type_list):
       if name not in robot.link_names and name not in robot.joint_names:
         raise ValueError(f"Invalid name: {name}. Must be a link or joint name.")
       for data_type in link_dt_list:
-        if data_type not in keys_order:
-          raise ValueError(f"Invalid data_type: {data_type}. Must be one of {list(keys_order.keys())}.")
-        order = keys_order[data_type]
+        if data_type not in keys_time_order:
+          raise ValueError(f"Invalid data_type: {data_type}. Must be one of {list(keys_time_order.keys())}.")
+        order = keys_time_order[data_type]
         if order > max_order:
           max_order = order
 
