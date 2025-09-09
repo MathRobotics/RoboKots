@@ -14,7 +14,7 @@ from .basic.target import TargetList
 from .basic.robot_drow import *
 
 from .robot_io import *
-from .misc import check_valid_str_list, check_valid_data_type_list, count_order, filter_cmtm_row_data_to_target
+from .misc import check_valid_str_list, check_valid_data_type_list, count_time_order, filter_cmtm_row_data_to_target
 
 from .outward.outward import kinematics as outward_kinematics
 from .outward.outward import dynamics_cmtm as outward_dynamics
@@ -246,20 +246,21 @@ class Kots():
 
     if len(name_list) != len(data_type_list):
       raise ValueError("name_list and data_type_list must have the same length")
+    
+    max_order = count_time_order(self.robot_, name_list, data_type_list)
+    data_type_list_kinematics = [filter_keys_kinematics(data_type) for data_type in data_type_list]
+    data_type_list_dynamics = [filter_keys_dynamics(data_type) for data_type in data_type_list]
 
-    max_order = count_order(self.robot_, name_list, data_type_list)
     if numerical:
       total_jacobian_kinematics = link_jacobian_numerical(self.robot_, self.motions_, name_list, "cmtm", max_order)
       total_jacobian_dynamics = np.zeros((max_order*6*len(name_list), self.robot_.dof*max_order))
     else:
       total_jacobian_kinematics = link_cmtm_jacobian(self.robot_, self.motions_, self.state_dict_, name_list, max_order)
-      if max_order > 2:
+  
+      if any(data_type_list_dynamics):
         total_jacobian_dynamics = link_jacobian_force(self.robot_, self.state_dict_, name_list, max_order)
       else:
         total_jacobian_dynamics = np.zeros((max_order*6*len(name_list), self.robot_.dof*max_order))
-
-    data_type_list_kinematics = [filter_keys_kinematics(data_type) for data_type in data_type_list]
-    data_type_list_dynamics = [filter_keys_dynamics(data_type) for data_type in data_type_list]
 
     jacobian_kinematics = filter_cmtm_row_data_to_target(total_jacobian_kinematics, name_list, data_type_list_kinematics, dim=self.dim_)
     jacobian_dynamics = filter_cmtm_row_data_to_target(total_jacobian_dynamics, name_list, data_type_list_dynamics, dim=self.dim_)
