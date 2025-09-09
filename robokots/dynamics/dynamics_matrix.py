@@ -20,15 +20,14 @@ def  natural_num_diag_mat(order : int = 1, dim : int = 6) -> np.ndarray:
     v = np.repeat(np.arange(1, order+1), dim)
     return np.diag(v)
 
-def momentum_to_force_mat(m : CMTM, order : int = 1, dim : int = 6) -> np.ndarray:
-    momentum_dof = dim * (order+1)
-    force_dof = dim * order
+def momentum_to_force_mat(m : CMTM, force_order : int = 1, dim : int = 6) -> np.ndarray:
+    momentum_dof = dim * (force_order+1)
+    force_dof = dim * force_order
     mat = np.zeros((force_dof, momentum_dof))
-    
-    mat[:, dim:] = natural_num_diag_mat(order, dim)
+
+    mat[:, dim:] = natural_num_diag_mat(force_order, dim)
     if dim == 6:
-      mat[:, :force_dof] += -CMTM.hat_adj(SE3, m.tan_vecs(order+1)).T
+      mat[:, :-dim] += -CMTM.hat_adj(SE3, m.vecs(force_order+1)).T
     elif dim == 3:
-      mat[:, :force_dof] += -CMTM.hat_adj(SO3, m.tan_vecs(order+1)).T
-      
+      mat[:, :-dim] += -CMTM.hat_adj(SO3, m.vecs(force_order+1)).T
     return mat

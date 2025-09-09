@@ -56,18 +56,18 @@ def link_momentum_cmtm(inertia : np.ndarray, vecs : np.ndarray) -> np.ndarray:
         inertia (numpy.ndarray): 6x6 spatial inertia matrix of the link.
         vecs (numpy.ndarray): nx6 spatial vectors of the link.
     Returns:
-        numpy.ndarray: 6xn spatial momentum vectors of the link.
+        numpy.ndarray: 6n spatial momentum vectors of the link.
     """
-    return (inertia @ vecs.T).reshape(-1)
+    return (vecs @ inertia.T).reshape(-1)
 
 def link_force_cmtm(vels : np.ndarray, momentums : np.ndarray, dim : int = 6) -> np.ndarray:
     """
     Calculate the link force and centripetal momentum.
     Args:
-        vecs (numpy.ndarray): 6xn spatial vectors of the link.
-        momentums (numpy.ndarray): 6xn+1 spatial momentum vectors of the link.
+        vecs (numpy.ndarray): dim x n spatial vectors of the link.
+        momentums (numpy.ndarray): dim x n+1 spatial momentum vectors of the link.
     Returns:
-        numpy.ndarray: 6xn spatial force vectors of the link.
+        numpy.ndarray: dim x n spatial force vectors of the link.
     """
     ## remain : implement frac
     return momentums[dim:] - CMTM.hat_adj(SE3, vels).T @ momentums[:-dim]
@@ -77,7 +77,7 @@ def link_dynamics_cmtm(inertia : np.ndarray, vecs : np.ndarray) -> np.ndarray:
     Calculate the link force and centripetal momentum.
     Args:
         momentum (numpy.ndarray): 6xn spatial momentum vectors of the link.
-        vecs (numpy.ndarray): 6xn spatial vectors of the link.
+        vecs (numpy.ndarray): nx6 spatial vectors of the link.
     Returns:
         numpy.ndarray: 6xn spatial force vectors of the link.
     """

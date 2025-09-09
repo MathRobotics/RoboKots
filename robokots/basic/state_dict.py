@@ -290,6 +290,8 @@ def extract_dict_link_info(state : dict, data_type : str, link_name : str, frame
         return state_dict_to_cmtm(state, link_name)
     elif data_type == "force":
         return np.array(state[link_name+"_link_force"])
+    elif data_type == "momentum":
+        return np.array(state[link_name+"_link_momentum"])
     else:
         return np.array(state[link_name+"_"+keys_name[data_type]])
     

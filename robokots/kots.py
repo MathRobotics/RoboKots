@@ -20,7 +20,7 @@ from .outward.outward import kinematics as outward_kinematics
 from .outward.outward import dynamics_cmtm as outward_dynamics
 from .outward.outward import link_diff_kinematics_numerical, calc_link_total_point_frame
 from .outward.outward_gradient import link_jacobian, link_cmtm_jacobian, link_jacobian_numerical 
-from .outward.outward_matrix import link_jacobian_force
+from .outward.outward_matrix import link_jacobian_force, link_jacobian_momentum
   
 default_order = 3 
 default_dim = 3
@@ -253,19 +253,23 @@ class Kots():
 
     if numerical:
       total_jacobian_kinematics = link_jacobian_numerical(self.robot_, self.motions_, name_list, "cmtm", max_order)
-      total_jacobian_dynamics = np.zeros((max_order*6*len(name_list), self.robot_.dof*max_order))
+      total_jacobian_force = np.zeros((max_order*6*len(name_list), self.robot_.dof*max_order))
+      total_jacobian_momentum = np.zeros((max_order*6*len(name_list), self.robot_.dof*max_order))
     else:
       total_jacobian_kinematics = link_cmtm_jacobian(self.robot_, self.motions_, self.state_dict_, name_list, max_order)
   
       if any(data_type_list_dynamics):
-        total_jacobian_dynamics = link_jacobian_force(self.robot_, self.state_dict_, name_list, max_order)
+        total_jacobian_force = link_jacobian_force(self.robot_, self.state_dict_, name_list, max_order-2)
+        total_jacobian_momentum = link_jacobian_momentum(self.robot_, self.state_dict_, name_list, max_order-2)
       else:
-        total_jacobian_dynamics = np.zeros((max_order*6*len(name_list), self.robot_.dof*max_order))
+        total_jacobian_force = np.zeros(((max_order-2)*6*len(name_list), self.robot_.dof*max_order))
+        total_jacobian_momentum = np.zeros(((max_order-2)*6*len(name_list), self.robot_.dof*max_order))
 
     jacobian_kinematics = filter_cmtm_row_data_to_target(total_jacobian_kinematics, name_list, data_type_list_kinematics, dim=self.dim_)
-    jacobian_dynamics = filter_cmtm_row_data_to_target(total_jacobian_dynamics, name_list, data_type_list_dynamics, dim=self.dim_)
+    jacobian_force = filter_cmtm_row_data_to_target(total_jacobian_force, name_list, data_type_list_dynamics, dim=self.dim_)
+    jacobian_momentum = filter_cmtm_row_data_to_target(total_jacobian_momentum, name_list, data_type_list_dynamics, dim=self.dim_)
 
-    jacobian = np.vstack((jacobian_kinematics, jacobian_dynamics))
+    jacobian = np.vstack((jacobian_kinematics, jacobian_force))
 
     return jacobian
 
