@@ -32,7 +32,7 @@ def filter_keys_kinematics(keys_list):
 def filter_keys_dynamics(keys_list):
     return [k for k in keys_list if k in keys_dynamics]
 
-keys_order_kinematics = {
+keys_time_order = {
     "pos": 1,
     "rot": 1,
     "frame": 1,
@@ -45,15 +45,31 @@ keys_order_kinematics = {
     "lock": 8,
     "drop": 9,
     "shot": 10,
-    "put": 11
+    "put": 11,
+    "force": 3,
+    "torque": 3
 }
 
-keys_dynamics_order = {
+keys_order_kinematics = {
+    "frame": 1,
+    "vel": 2,
+    "acc": 3,
+    "jerk": 4,
+    "snap": 5,
+    "crackle": 6,
+    "pop": 7,
+    "lock": 8,
+    "drop": 9,
+    "shot": 10,
+    "put": 11,
+}
+
+keys_order_dynamics = {
     "force": 1,
     "torque": 2
 }
 
-keys_order = {**keys_order_kinematics, **keys_dynamics_order}
+keys_order = {**keys_order_kinematics, **keys_order_dynamics}
 
 keys_name = {
     "pos" : "pos",

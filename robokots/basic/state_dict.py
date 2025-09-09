@@ -4,7 +4,7 @@ import re
 import numpy as np
 from mathrobo import SE3, CMTM, SO3
 
-from .state import keys, keys_order, keys_name
+from .state import keys, keys_order, keys_time_order, keys_name
 
 def extract_state_keys(state: dict, prefix: str = "") -> list:
     """
@@ -33,7 +33,7 @@ def extract_state_keys(state: dict, prefix: str = "") -> list:
 
     return result
 
-def count_dict_order(state: dict) -> int:
+def count_dict_time_order(state: dict) -> int:
     """
     Determines the highest derivative order present in the state's keys.
 
@@ -60,11 +60,11 @@ def count_dict_order(state: dict) -> int:
         match = re.search(r"acc_diff(\d+)", k)
         if match:
             diff_order = int(match.group(1))
-            max_order = max(max_order, keys_order["acc"] + diff_order)
+            max_order = max(max_order, keys_time_order["acc"] + diff_order)
             continue  # Skip other checks if acc_diff matched
 
         # Match against known keywords
-        for keyword, order in keys_order.items():
+        for keyword, order in keys_time_order.items():
             if keyword in k:
                 max_order = max(max_order, order)
                 break  # Stop checking once a match is found
@@ -208,7 +208,7 @@ def state_dict_to_cmtm(state : dict, name : str, order = None) -> CMTM:
         CMTM: CMTM object
     '''
     if order is None:
-        order = count_dict_order(state)
+        order = count_dict_time_order(state)
     
     if order < 1:
         raise ValueError("order must be over 1")
