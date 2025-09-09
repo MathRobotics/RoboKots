@@ -53,9 +53,8 @@ def total_momentum_to_force_mat(r : RobotStruct, state : dict, force_order : int
     m_ = dim * (force_order+1)
     mat = np.zeros((r.link_num * n_, r.link_num * m_))
 
-    for i, joint in enumerate(r.joints):
-        child_link = r.links[joint.child_link_id]
-        cmtm = state_dict_to_cmtm(state, child_link.name, force_order+1)
+    for i, link in enumerate(r.links):
+        cmtm = state_dict_to_cmtm(state, link.name, force_order+1)
         mat[i*n_:(i+1)*n_, i*m_:(i+1)*m_] = momentum_to_force_mat(cmtm, force_order=force_order, dim=dim)
     return mat
 
