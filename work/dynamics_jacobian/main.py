@@ -38,10 +38,19 @@ def main():
     # print(np.count_nonzero(total_momentum_to_force))
     # print(total_momentum_to_force.shape)
 
-    print(kots.jacobian_target("force").shape, kots.motion(3).shape)
+    print("momentum")
+    id_momentum = kots.state_target_link_info('momentum')
+    jac_momentum = outward_matrix.link_jacobian_momentum(kots.robot_, kots.state_dict_, kots.target_.target_names, order=kots.order()-1)@kots.motion_diff(2)
 
+    print(id_momentum[0])
+    print(jac_momentum)
+
+    print("force")
     id_force = kots.state_target_link_info('force')
-    jac_force = kots.jacobian_target("force")@kots.motion(3)
+    # jac_force = kots.jacobian_target("force")@kots.motion_diff(3)
+    print(np.count_nonzero(outward_matrix.link_jacobian_force(kots.robot_, kots.state_dict_, kots.target_.target_names)))
+    print(kots.motion_diff(2))
+    jac_force = outward_matrix.link_jacobian_force(kots.robot_, kots.state_dict_, kots.target_.target_names)@kots.motion_diff(2)
 
     print(id_force[0])
     print(jac_force)
