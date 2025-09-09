@@ -17,7 +17,7 @@ from ..kinematics.kinematics import joint_local_cmtm, joint_rel_cmtm, joint_rel_
 from ..kinematics.kinematics_soft_link import soft_link_local_cmtm, calc_link_local_point_frame
 
 from ..dynamics.base import spatial_inertia
-from ..dynamics.dynamics import link_dynamics, joint_dynamics, link_dynamics_cmtm, joint_dynamics_cmtm
+from ..dynamics.dynamics import link_dynamics, joint_dynamics, link_momentum_cmtm, link_force_cmtm, link_dynamics_cmtm, joint_dynamics_cmtm
 
 def kinematics(robot : RobotStruct, motions, order = 3) -> dict:
   '''
@@ -164,8 +164,11 @@ def dynamics_cmtm(robot : RobotStruct, joint_motions, dynamics_order = 1) -> dic
     inertia = spatial_inertia(child.mass, child.inertia, child.cog)
 
     link_cmtm = state_dict_to_cmtm(state_data, child.name, dynamics_order + 2)
-    
-    link_forces = link_dynamics_cmtm(inertia, link_cmtm.vecs())  
+
+    link_momentums = link_momentum_cmtm(inertia, link_cmtm)
+    link_forces = link_force_cmtm(link_cmtm.vecs(), link_momentums)
+
+    # link_forces = link_dynamics_cmtm(inertia, link_cmtm.vecs())  
 
     state = vecs_to_state_dict(link_forces, child.name, "link_force", dynamics_order)
     state_data.update(state)

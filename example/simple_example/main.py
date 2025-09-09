@@ -36,7 +36,6 @@ def main():
 
     fk_acc = kots.state_target_link_info('acc')
     jacob_acc = kots.jacobian_target("vel")@kots.motion_diff(2)
-
       
     print(fk_acc[0])
     print(jacob_acc)
@@ -46,6 +45,8 @@ def main():
     print(kots.target_info())
   
     kots.show_robot()
+
+    print(kots.jacobian_target("force"))
 
 if __name__ == "__main__":
     main()

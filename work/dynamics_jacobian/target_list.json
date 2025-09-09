@@ -1,0 +1,8 @@
+{
+  "targets":[
+    {
+      "type": ["vel", "acc", "force"],
+      "link": "end"
+    }
+  ]
+}
