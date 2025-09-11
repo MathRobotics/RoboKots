@@ -1,6 +1,7 @@
 import numpy as np
 
 import mathrobo as mr
+from robokots import kots
 from robokots.kots import *
 from robokots import *
 
@@ -38,22 +39,31 @@ def main():
     # print(np.count_nonzero(total_momentum_to_force))
     # print(total_momentum_to_force.shape)
   
-    kots.print_state_dict()
+    # kots.print_state_dict()
+
+    print("velocity")
+    jac_vel = outward_matrix.link_jacobian(kots.robot_, kots.state_dict_, kots.target_.target_names, order=kots.order()-1)@kots.motion_diff(order=kots.order()-1)
+    print(kots.state_target_link_info('vel')[0])
+    print(kots.state_target_link_info('acc')[0])
+    print(kots.state_target_link_info('jerk')[0])
+    print(kots.state_target_link_info('snap')[0])
+    print(jac_vel)
 
     print("momentum")
-    id_momentum = kots.state_target_link_info('momentum')
-    id_momentum_diff = kots.state_target_link_info('momentum_diff1')
     jac_momentum = outward_matrix.link_jacobian_momentum(kots.robot_, kots.state_dict_, kots.target_.target_names, order=kots.order()-1)@kots.motion_diff(kots.order()-1)
 
-    print(id_momentum[0])
-    print(id_momentum_diff[0])
+    print(kots.state_target_link_info('momentum')[0])
+    print(kots.state_target_link_info('momentum_diff1')[0])
+    print(kots.state_target_link_info('momentum_diff2')[0])
+    print(kots.state_target_link_info('momentum_diff3')[0])
     print(jac_momentum)
 
     print("force")
-    id_force = kots.state_target_link_info('force')
-    jac_force = outward_matrix.link_jacobian_force(kots.robot_, kots.state_dict_, kots.target_.target_names,)@kots.motion_diff(2)
+    jac_force = outward_matrix.link_jacobian_force(kots.robot_, kots.state_dict_, kots.target_.target_names,kots.order()-2)@kots.motion_diff(order=kots.order()-1)
 
-    print(id_force[0])
+    print(kots.state_target_link_info('force')[0])
+    print(kots.state_target_link_info('force_diff1')[0])
+    print(kots.state_target_link_info('force_diff2')[0])
     print(jac_force)
 
 if __name__ == "__main__":
