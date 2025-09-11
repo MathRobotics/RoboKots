@@ -5,6 +5,8 @@
 
 import numpy as np
 
+from mathrobo import CMTM
+
 from ..basic.robot import RobotStruct
 from ..basic.state_dict import state_dict_to_rel_cmtm, state_dict_to_cmtm
 
@@ -36,7 +38,8 @@ def joint_to_link_mat(r : RobotStruct, state : dict, order : int = 1, dim : int 
         for j in joint_route:
             joint = r.joints[j]
             rel_cmtm = state_dict_to_rel_cmtm(state, link.name, r.links[joint.child_link_id].name, order)
-            mat[i*n_:(i+1)*n_, j*n_:(j+1)*n_] = rel_cmtm.mat_adj()
+            link_cmtm = state_dict_to_cmtm(state, link.name, order)
+            mat[i*n_:(i+1)*n_, j*n_:(j+1)*n_] = link_cmtm.tangent_mat_inv() @ rel_cmtm.mat_adj()
     return mat
 
 def link_inertia_mat(r : RobotStruct, order : int = 3, dim : int = 6) -> np.ndarray:
@@ -58,28 +61,34 @@ def total_momentum_to_force_mat(r : RobotStruct, state : dict, force_order : int
         mat[i*n_:(i+1)*n_, i*m_:(i+1)*m_] = momentum_to_force_mat(cmtm, force_order=force_order, dim=dim)
     return mat
 
-def coord_to_joint_mat(r : RobotStruct, order : int = 3, dim : int = 6) -> np.ndarray:
+def coord_to_joint_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
     n_ = dim * order
     mat = np.zeros((r.joint_num * n_, r.joint_dof * order))
 
     for i, joint in enumerate(r.joints):
         if joint.dof == 0:  # Joint with no degree of freedom
             continue
-        mat[i*n_:(i+1)*n_, joint.dof_index*order:(joint.dof_index+joint.dof)*order] = joint_select_diag_mat(joint.select_mat, order)
+        joint_cmtm = state_dict_to_cmtm(state, joint.name, order)
+        mat[i*n_:(i+1)*n_, joint.dof_index*order:(joint.dof_index+joint.dof)*order] = \
+            joint_cmtm.tangent_mat() @ joint_select_diag_mat(joint.select_mat, order)
 
     return mat
 
-def coord_to_joint_mat_inv(r : RobotStruct, order : int = 3, dim : int = 6) -> np.ndarray:
+def coord_to_joint_mat_inv(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
     n_ = dim * order
     mat = np.zeros((r.joint_dof * order, r.joint_num * n_))
 
     for i, joint in enumerate(r.joints):
-        mat[joint.dof_index:joint.dof_index+joint.dof, i*n_:(i+1)*n_] = joint.select_mat.T
+        if joint.dof == 0:  # Joint with no degree of freedom
+            continue
+        joint_cmtm = state_dict_to_cmtm(state, joint.name, order)
+        mat[joint.dof_index:joint.dof_index+joint.dof, i*n_:(i+1)*n_] = \
+            joint.select_mat.T @ joint_cmtm.tangent_mat_inv()
 
     return mat
 
 def coord_to_link_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
-    return joint_to_link_mat(r, state, order, dim) @ coord_to_joint_mat(r, order, dim)
+    return joint_to_link_mat(r, state, order, dim) @ coord_to_joint_mat(r, state,order, dim)
 
 def coord_to_link_momentum_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
     return link_inertia_mat(r, order=order, dim=dim) @ coord_to_link_mat(r, state, order, dim)
