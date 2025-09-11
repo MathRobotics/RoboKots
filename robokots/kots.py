@@ -8,7 +8,7 @@ from typing import List, Dict, Any
 from .basic.motion import RobotMotions
 from .basic.state_df import RobotState
 from .basic.state import keys_order, filter_keys_kinematics, filter_keys_dynamics
-from .basic.state_dict import extract_dict_link_info, extract_dict_joint_info, dict_to_links_pos
+from .basic.state_dict import extract_dict_link_info, extract_dict_joint_info, dict_to_links_pos, print_state_dict
 from .basic.robot import RobotStruct
 from .basic.target import TargetList
 from .basic.robot_drow import *
@@ -101,6 +101,9 @@ class Kots():
 
   def print_structure(self):
     print_robot_structure(self.robot_)
+
+  def print_state_dict(self):
+    print_state_dict(self.state_dict_)
     
   def dof(self):
     return self.robot_.dof

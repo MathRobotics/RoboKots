@@ -356,3 +356,7 @@ def sub_state_dict_vec(data0 : dict, data1 : dict, type : str, name : str) -> di
         return CMTM.sub_tan_vec_var(data0[type], data1[type], "bframe")
     else:
         raise ValueError(f"Invalid type: {set(type)}")
+    
+def print_state_dict(state : dict):
+    for k in state.keys():
+        print(f"{k}: {state[k]}")
