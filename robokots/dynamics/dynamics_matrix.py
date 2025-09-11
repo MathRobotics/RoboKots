@@ -3,8 +3,11 @@
 # 2025. 6.20 Created by T.Ishigaki
 # dynamics computation module by matrix formulation
 
+import math
 import numpy as np
-from mathrobo import SO3, SE3, CMTM
+from mathrobo import SO3, SE3, SE3wrench, CMTM
+
+from .dynamics import diag_factorials, diag_inv_factorials
 
 def inertia_diag_mat(inertia : np.ndarray, order : int = 1) -> np.ndarray:
     if inertia.shape != (6, 6):
@@ -20,14 +23,27 @@ def  natural_num_diag_mat(order : int = 1, dim : int = 6) -> np.ndarray:
     v = np.repeat(np.arange(1, order+1), dim)
     return np.diag(v)
 
+def  natural_num_inv_diag_mat(order : int = 1, dim : int = 6) -> np.ndarray:
+    '''
+    return diagonal matrix with natural numbers from 1 to order repeated dim times
+    size is (dim * order, dim * order)
+    '''
+    v = np.repeat(np.arange(1, order + 1, dtype=float), dim)
+    return np.diag(1.0 / v)
+
 def momentum_to_force_mat(m : CMTM, force_order : int = 1, dim : int = 6) -> np.ndarray:
     momentum_dof = dim * (force_order+1)
     force_dof = dim * force_order
     mat = np.zeros((force_dof, momentum_dof))
 
-    mat[:, dim:] = natural_num_diag_mat(force_order, dim)
+    v = np.zeros_like(m.vecs(force_order+1))
+    vecs = m.vecs(force_order+1)
+    for i in range(momentum_dof//dim-1):
+        v[i] = vecs[i] / math.factorial(i)
+
+    mat[:, dim:] = np.diag(np.repeat(np.arange(1, force_order+1), dim))
     if dim == 6:
-      mat[:, :-dim] += -CMTM.hat_adj(SE3, m.vecs(force_order+1)).T
+      mat[:, :-dim] += CMTM.hat_adj(SE3wrench, v)
     elif dim == 3:
-      mat[:, :-dim] += -CMTM.hat_adj(SO3, m.vecs(force_order+1)).T
-    return mat
+      mat[:, :-dim] += CMTM.hat_adj(SO3, v)
+    return diag_factorials(force_order, dim) @ mat @ diag_inv_factorials(force_order+1, dim)
