@@ -166,7 +166,7 @@ def dynamics_cmtm(robot : RobotStruct, joint_motions, dynamics_order = 1) -> dic
     link_cmtm = state_dict_to_cmtm(state_data, child.name, dynamics_order + 2)
 
     link_momentums = link_momentum_cmtm(inertia, link_cmtm.vecs())
-    state = vecs_to_state_dict(link_momentums, child.name, "link_momentum", dynamics_order)
+    state = vecs_to_state_dict(link_momentums, child.name, "link_momentum", dynamics_order+1)
     state_data.update(state)
     
     link_forces = link_force_cmtm(link_cmtm.vecs(-1), link_momentums)
