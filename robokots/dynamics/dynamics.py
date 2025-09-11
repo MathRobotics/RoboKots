@@ -3,11 +3,21 @@
 # 2025.04.07 Created by T.Ishigaki
 # dynamics module
 
+import math
 import numpy as np
 
-from mathrobo import SE3, CMTM
+from mathrobo import SE3, SE3wrench, CMTM
 
 from ..basic.robot import JointStruct
+
+
+def diag_factorials(order : int, dim: int):
+    v = np.repeat([math.factorial(i) for i in range(order)], dim)
+    return np.diag(v)
+
+def diag_inv_factorials(order: int, dim: int):
+    v = np.repeat([1.0 / math.factorial(i) for i in range(order)], dim)
+    return np.diag(v)
 
 def link_momentum(inertia : np.ndarray, veloc : np.ndarray) -> np.ndarray:
     """
@@ -30,7 +40,7 @@ def link_dynamics(inertia : np.ndarray, veloc : np.ndarray, accel : np.ndarray) 
     Returns:
         numpy.ndarray: 6x1 spatial force vector acting on the link.
     """
-    force = link_momentum(inertia, accel) - SE3.hat_adj(veloc).T @ link_momentum(inertia, veloc)
+    force = link_momentum(inertia, accel) + SE3wrench.hat_adj(veloc) @ link_momentum(inertia, veloc)
     return force
 
 def joint_dynamics(joint_select : np.ndarray, rel_frame : SE3, p_joint_force : np.ndarray, link_force : np.ndarray) -> tuple:
@@ -68,9 +78,19 @@ def link_force_cmtm(vels : np.ndarray, momentums : np.ndarray, dim : int = 6) ->
         momentums (numpy.ndarray): dim x n+1 spatial momentum vectors of the link.
     Returns:
         numpy.ndarray: dim x n spatial force vectors of the link.
+    Note:    
+        o @ f = d/dt(o @ m) - hat_adj(o @ vel).T @ (o @ m)
+        f = o_inv @ d/dt(o @ m) - o_inv @ hat_adj(o @ vel).T @ (o @ m)
+          = d/dt(m) - o_inv @ hat_adj(o @ vel).T @ (o @ m)
     """
-    ## remain : implement frac
-    return momentums[dim:] - CMTM.hat_adj(SE3, vels).T @ momentums[:-dim]
+    o = diag_inv_factorials(momentums.shape[0]//dim -1, dim=dim)
+    o_inv = diag_factorials(momentums.shape[0]//dim -1, dim=dim)
+    v = np.zeros_like(vels)
+    
+    for i in range(momentums.shape[0]//dim-1):
+        v[i] = vels[i] / math.factorial(i)
+
+    return momentums[dim:] + o_inv @ CMTM.hat_adj(SE3wrench, v) @ o @ momentums[:-dim]
 
 def link_dynamics_cmtm(inertia : np.ndarray, vecs : np.ndarray) -> np.ndarray:
     """
@@ -87,7 +107,7 @@ def link_dynamics_cmtm(inertia : np.ndarray, vecs : np.ndarray) -> np.ndarray:
         frac[i] = frac[i-1] * i
 
     ## remain : implement frac
-    return link_momentum_cmtm(inertia, vecs[1:]) - CMTM.hat_adj(SE3, vecs[:-1]).T @ link_momentum_cmtm(inertia, vecs[:-1])
+    return link_momentum_cmtm(inertia, vecs[1:]) + CMTM.hat_adj(SE3, vecs[:-1]) @ link_momentum_cmtm(inertia, vecs[:-1])
 
 def joint_dynamics_cmtm(joint : JointStruct, rel_cmtm : CMTM, p_joint_force : np.ndarray, link_force : np.ndarray) -> tuple:
     joint_force = rel_cmtm.mat_inv_adj() @ p_joint_force - link_force
