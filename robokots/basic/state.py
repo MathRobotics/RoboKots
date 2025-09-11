@@ -65,8 +65,10 @@ keys_order_kinematics = {
 }
 
 keys_order_dynamics = {
-    "force": 1,
-    "torque": 2
+    "force": 2,
+    "force_diff1": 3,
+    "force_diff2": 4,
+    "force_diff3": 5,
 }
 
 keys_order = {**keys_order_kinematics, **keys_order_dynamics}

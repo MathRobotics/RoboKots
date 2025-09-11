@@ -7,7 +7,7 @@ from typing import List, Dict, Any
 
 from .basic.motion import RobotMotions
 from .basic.state_df import RobotState
-from .basic.state import keys_order, filter_keys_kinematics, filter_keys_dynamics
+from .basic.state import keys_order, keys_time_order, filter_keys_kinematics, filter_keys_dynamics
 from .basic.state_dict import extract_dict_link_info, extract_dict_joint_info, dict_to_links_pos, print_state_dict
 from .basic.robot import RobotStruct
 from .basic.target import TargetList
@@ -225,7 +225,7 @@ class Kots():
     if not isinstance(target_file, str):
       raise TypeError("target_file must be a string")
     self.target_ = load_target_json_file(target_file)
-    type_order = [keys_order[item] for sublist in self.target_.target_types for item in sublist]
+    type_order = [keys_time_order[item] for sublist in self.target_.target_types for item in sublist]
     max_order = max(type_order)
     self.set_order(max_order)
 
