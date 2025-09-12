@@ -50,7 +50,7 @@ def main():
     print(jac_vel)
 
     print("momentum")
-    jac_momentum = outward_matrix.link_jacobian_momentum(kots.robot_, kots.state_dict_, kots.target_.target_names, order=kots.order()-1)@kots.motion_diff(kots.order()-1)
+    jac_momentum = outward_matrix.link_jacobian_momentum(kots.robot_, kots.state_dict_, kots.target_.target_names, momentum_order=kots.order()-1)@kots.motion_diff(kots.order()-1)
 
     print(kots.state_target_link_info('momentum')[0])
     print(kots.state_target_link_info('momentum_diff1')[0])
@@ -59,9 +59,8 @@ def main():
     print(jac_momentum)
 
     print("force")
-    jac_force = outward_matrix.link_jacobian_force(kots.robot_, kots.state_dict_, kots.target_.target_names,kots.order()-2)@kots.motion_diff(order=kots.order()-1)
-
-    print(kots.state_target_link_info('force')[0])
+    jac_force = outward_matrix.link_jacobian_force(kots.robot_, kots.state_dict_, kots.target_.target_names,kots.order()-3)@kots.motion_diff(order=kots.order()-1)
+ 
     print(kots.state_target_link_info('force_diff1')[0])
     print(kots.state_target_link_info('force_diff2')[0])
     print(jac_force)

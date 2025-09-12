@@ -1,7 +1,7 @@
 {
   "targets":[
     {
-      "type": ["vel", "acc", "jerk","snap","force"],
+      "type": ["vel", "acc", "jerk", "snap", "force"],
       "link": "end"
     }
   ]
