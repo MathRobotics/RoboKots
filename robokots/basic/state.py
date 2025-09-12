@@ -4,10 +4,10 @@ keys_kinematics = \
     ("pos", "rot", "frame", "vel", "acc", "jerk", "snap", "crackle", "pop", "lock", "drop", "shot", "put")
 
 keys_momentum = \
-    ("momentum",)
+    ("momentum","momentum_diff1", "momentum_diff2", "momentum_diff3")
 
 keys_force = \
-    ("force",)
+    ("force","force_diff1", "force_diff2", "force_diff3")
 
 keys_torque = \
     ("torque",)
@@ -71,6 +71,8 @@ keys_time_order = {
     "shot": 10,
     "put": 11,
     "force": 3,
+    "force_diff1": 4,
+    "force_diff2": 5,
     "torque": 3,
     "momentum": 2,
 }
@@ -90,10 +92,10 @@ keys_order_kinematics = {
 }
 
 keys_order_force = {
-    "force": 2,
-    "force_diff1": 3,
-    "force_diff2": 4,
-    "force_diff3": 5,
+    "force": 1,
+    "force_diff1": 2,
+    "force_diff2": 3,
+    "force_diff3": 4,
 }
 
 keys_order_momentum = {
@@ -146,7 +148,8 @@ def data_type_dof(data_type : str, order = None, dim = 3):
     elif data_type == "vel" or data_type == "acc" or data_type == "jerk"  \
         or data_type == "snap" or data_type == "crackle" or data_type == "pop" \
         or data_type == "lock" or data_type == "drop" or data_type == "shot" or data_type == "put" \
-        or data_type == "force" or data_type == "momentum":
+        or data_type == "force" or data_type == "force_diff1" or data_type == "force_diff2" or data_type == "force_diff3" \
+        or data_type == "momentum" or data_type == "momentum_diff1" or data_type == "momentum_diff2" or data_type == "momentum_diff3":
         return dim * 2
     elif data_type == "frame":
         return dim * 2
