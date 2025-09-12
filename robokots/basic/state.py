@@ -3,10 +3,16 @@ from mathrobo import SO3, SE3, CMTM
 keys_kinematics = \
     ("pos", "rot", "frame", "vel", "acc", "jerk", "snap", "crackle", "pop", "lock", "drop", "shot", "put")
 
-keys_dynamics = \
-    ("force", "torque")
+keys_momentum = \
+    ("momentum",)
 
-keys = keys_kinematics + keys_dynamics
+keys_force = \
+    ("force",)
+
+keys_torque = \
+    ("torque",)
+
+keys = keys_kinematics + keys_momentum + keys_force + keys_torque
 
 def is_in_keys_kinematics(keys_list):
     for k in keys_list:
@@ -14,9 +20,21 @@ def is_in_keys_kinematics(keys_list):
             return False
     return True
 
-def is_in_keys_dynamics(keys_list):
+def is_in_keys_momentum(keys_list):
     for k in keys_list:
-        if k not in keys_dynamics:
+        if k not in keys_momentum:
+            return False
+    return True
+
+def is_in_keys_force(keys_list):
+    for k in keys_list:
+        if k not in keys_force:
+            return False
+    return True
+
+def is_in_keys_torque(keys_list):
+    for k in keys_list:
+        if k not in keys_torque:
             return False
     return True
 
@@ -29,8 +47,14 @@ def is_in_keys(keys_list):
 def filter_keys_kinematics(keys_list):
     return [k for k in keys_list if k in keys_kinematics]
 
-def filter_keys_dynamics(keys_list):
-    return [k for k in keys_list if k in keys_dynamics]
+def filter_keys_momentum(keys_list):
+    return [k for k in keys_list if k in keys_momentum]
+
+def filter_keys_force(keys_list):
+    return [k for k in keys_list if k in keys_force]
+
+def filter_keys_torque(keys_list):
+    return [k for k in keys_list if k in keys_torque]
 
 keys_time_order = {
     "pos": 1,
@@ -47,7 +71,8 @@ keys_time_order = {
     "shot": 10,
     "put": 11,
     "force": 3,
-    "torque": 3
+    "torque": 3,
+    "momentum": 2,
 }
 
 keys_order_kinematics = {
@@ -64,14 +89,22 @@ keys_order_kinematics = {
     "put": 11,
 }
 
-keys_order_dynamics = {
+keys_order_force = {
     "force": 2,
     "force_diff1": 3,
     "force_diff2": 4,
     "force_diff3": 5,
 }
 
-keys_order = {**keys_order_kinematics, **keys_order_dynamics}
+keys_order_momentum = {
+    "momentum": 2,
+    "momentum_diff1": 3,
+    "momentum_diff2": 4,
+    "momentum_diff3": 5,
+}
+
+
+keys_order = {**keys_order_kinematics, **keys_order_momentum, **keys_order_force}
 
 keys_name = {
     "pos" : "pos",
@@ -113,7 +146,7 @@ def data_type_dof(data_type : str, order = None, dim = 3):
     elif data_type == "vel" or data_type == "acc" or data_type == "jerk"  \
         or data_type == "snap" or data_type == "crackle" or data_type == "pop" \
         or data_type == "lock" or data_type == "drop" or data_type == "shot" or data_type == "put" \
-        or data_type == "force":
+        or data_type == "force" or data_type == "momentum":
         return dim * 2
     elif data_type == "frame":
         return dim * 2

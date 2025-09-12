@@ -7,7 +7,7 @@ from typing import List, Dict, Any
 
 from .basic.motion import RobotMotions
 from .basic.state_df import RobotState
-from .basic.state import keys_order, keys_time_order, filter_keys_kinematics, filter_keys_dynamics
+from .basic.state import keys_order, keys_time_order, filter_keys_kinematics, filter_keys_momentum, filter_keys_force, filter_keys_torque
 from .basic.state_dict import extract_dict_link_info, extract_dict_joint_info, dict_to_links_pos, print_state_dict
 from .basic.robot import RobotStruct
 from .basic.target import TargetList
@@ -252,27 +252,29 @@ class Kots():
     
     max_order = count_time_order(self.robot_, name_list, data_type_list)
     data_type_list_kinematics = [filter_keys_kinematics(data_type) for data_type in data_type_list]
-    data_type_list_dynamics = [filter_keys_dynamics(data_type) for data_type in data_type_list]
+    data_type_list_momentum = [filter_keys_momentum(data_type) for data_type in data_type_list]
+    data_type_list_force = [filter_keys_force(data_type) for data_type in data_type_list]
+    data_type_list_torque = [filter_keys_torque(data_type) for data_type in data_type_list]
 
     if numerical:
       total_jacobian_kinematics = link_jacobian_numerical(self.robot_, self.motions_, name_list, "cmtm", max_order)
-      total_jacobian_force = np.zeros((max_order*6*len(name_list), self.robot_.dof*max_order))
       total_jacobian_momentum = np.zeros((max_order*6*len(name_list), self.robot_.dof*max_order))
+      total_jacobian_force = np.zeros((max_order*6*len(name_list), self.robot_.dof*max_order))
     else:
       total_jacobian_kinematics = link_cmtm_jacobian(self.robot_, self.motions_, self.state_dict_, name_list, max_order)
   
-      if any(data_type_list_dynamics):
-        total_jacobian_force = link_jacobian_force(self.robot_, self.state_dict_, name_list, max_order-2)
-        total_jacobian_momentum = link_jacobian_momentum(self.robot_, self.state_dict_, name_list, max_order-2)
+      if any(data_type_list_momentum) or any(data_type_list_force) or any(data_type_list_torque):
+        total_jacobian_momentum = link_jacobian_momentum(self.robot_, self.state_dict_, name_list, max_order)
+        total_jacobian_force = link_jacobian_force(self.robot_, self.state_dict_, name_list, max_order-1)
       else:
-        total_jacobian_force = np.zeros(((max_order-2)*6*len(name_list), self.robot_.dof*max_order))
-        total_jacobian_momentum = np.zeros(((max_order-2)*6*len(name_list), self.robot_.dof*max_order))
+        total_jacobian_momentum = np.zeros(((max_order)*6*len(name_list), self.robot_.dof*max_order))
+        total_jacobian_force = np.zeros(((max_order-1)*6*len(name_list), self.robot_.dof*max_order))
 
     jacobian_kinematics = filter_cmtm_row_data_to_target(total_jacobian_kinematics, name_list, data_type_list_kinematics, dim=self.dim_)
-    jacobian_force = filter_cmtm_row_data_to_target(total_jacobian_force, name_list, data_type_list_dynamics, dim=self.dim_)
-    jacobian_momentum = filter_cmtm_row_data_to_target(total_jacobian_momentum, name_list, data_type_list_dynamics, dim=self.dim_)
+    jacobian_momentum = filter_cmtm_row_data_to_target(total_jacobian_momentum, name_list, data_type_list_momentum, dim=self.dim_)
+    jacobian_force = filter_cmtm_row_data_to_target(total_jacobian_force, name_list, data_type_list_force, dim=self.dim_)
 
-    jacobian = np.vstack((jacobian_kinematics, jacobian_force))
+    jacobian = np.vstack((jacobian_kinematics, jacobian_momentum, jacobian_force))
 
     return jacobian
 
