@@ -1,7 +1,7 @@
 {
   "targets":[
     {
-      "type": ["vel", "acc", "jerk", "snap", "force"],
+      "type": ["vel", "acc", "jerk","snap","momentum","force","force_diff1","force_diff2","force_diff3"],
       "link": "end"
     }
   ]

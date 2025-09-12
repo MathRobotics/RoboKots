@@ -59,10 +59,11 @@ def main():
     print(jac_momentum)
 
     print("force")
-    jac_force = outward_matrix.link_jacobian_force(kots.robot_, kots.state_dict_, kots.target_.target_names,kots.order()-3)@kots.motion_diff(order=kots.order()-1)
+    jac_force = outward_matrix.link_jacobian_force(kots.robot_, kots.state_dict_, kots.target_.target_names,kots.order()-2)@kots.motion_diff(order=kots.order())
  
     print(kots.state_target_link_info('force_diff1')[0])
     print(kots.state_target_link_info('force_diff2')[0])
+    print(kots.state_target_link_info('force_diff3')[0])
     print(jac_force)
 
 if __name__ == "__main__":
