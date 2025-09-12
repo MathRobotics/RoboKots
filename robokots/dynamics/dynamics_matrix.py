@@ -31,13 +31,13 @@ def  natural_num_inv_diag_mat(order : int = 1, dim : int = 6) -> np.ndarray:
     v = np.repeat(np.arange(1, order + 1, dtype=float), dim)
     return np.diag(1.0 / v)
 
-def momentum_to_force_mat(m : CMTM, force_order : int = 1, dim : int = 6) -> np.ndarray:
+def momentum_to_force_mat(link_cmtm : CMTM, force_order : int = 1, dim : int = 6) -> np.ndarray:
     momentum_dof = dim * (force_order+1)
     force_dof = dim * force_order
     mat = np.zeros((force_dof, momentum_dof))
 
-    v = np.zeros_like(m.vecs(force_order+1))
-    vecs = m.vecs(force_order+1)
+    v = np.zeros_like(link_cmtm.vecs(force_order+1))
+    vecs = link_cmtm.vecs(force_order+1)
     for i in range(momentum_dof//dim-1):
         v[i] = vecs[i] / math.factorial(i)
 
