@@ -47,3 +47,9 @@ def momentum_to_force_mat(m : CMTM, force_order : int = 1, dim : int = 6) -> np.
     elif dim == 3:
       mat[:, :-dim] += CMTM.hat_adj(SO3, v)
     return diag_factorials(force_order, dim) @ mat @ diag_inv_factorials(force_order+1, dim)
+    # mat[:, dim:] = np.eye(force_dof)
+    # if dim == 6:
+    #   mat[:, :-dim] += diag_factorials(force_order, dim) @ CMTM.hat_adj(SE3wrench, v) @ diag_inv_factorials(force_order, dim)
+    # elif dim == 3:
+    #   mat[:, :-dim] += diag_factorials(force_order, dim) @ CMTM.hat_adj(SO3, v) @ diag_inv_factorials(force_order, dim)
+    # return mat
