@@ -47,9 +47,25 @@ def momentum_to_force_mat(link_cmtm : CMTM, force_order : int = 1, dim : int = 6
     elif dim == 3:
       mat[:, :-dim] += CMTM.hat_adj(SO3, v)
     return diag_factorials(force_order, dim) @ mat @ diag_inv_factorials(force_order+1, dim)
-    # mat[:, dim:] = np.eye(force_dof)
-    # if dim == 6:
-    #   mat[:, :-dim] += diag_factorials(force_order, dim) @ CMTM.hat_adj(SE3wrench, v) @ diag_inv_factorials(force_order, dim)
-    # elif dim == 3:
-    #   mat[:, :-dim] += diag_factorials(force_order, dim) @ CMTM.hat_adj(SO3, v) @ diag_inv_factorials(force_order, dim)
-    # return mat
+
+def link_to_force_tan_map_mat(link_cmtm : CMTM, inertia : np.ndarray, force_order : int = 1, dim : int = 6) -> np.ndarray:
+    momentum_dof = dim * (force_order+2)
+    force_dof = dim * force_order
+    mat = np.zeros((force_dof, momentum_dof))
+    m1 = np.zeros((force_dof, momentum_dof - dim))
+
+    v = np.zeros_like(link_cmtm.vecs(force_order+1))
+    p = np.zeros_like(link_cmtm.vecs(force_order+1))
+    vecs = link_cmtm.vecs(force_order+1)
+
+    for i in range((momentum_dof-dim)//dim-1):
+        v[i] = vecs[i] / math.factorial(i)
+        p[i] = inertia @ vecs[i] / math.factorial(i)
+
+    m1[:, dim:] = np.diag(np.repeat(np.arange(1, force_order+1), dim)) @ inertia_diag_mat(inertia, force_order)
+    if dim == 6:
+      m1[:, :-dim] += diag_factorials(force_order, dim) @ (CMTM.hat_adj(SE3wrench, v) @ inertia_diag_mat(inertia, force_order) + CMTM.hat_commute_adj(SE3wrench, p)) 
+    elif dim == 3:
+      m1[:, :-dim] += diag_factorials(force_order, dim) @ (CMTM.hat_adj(SO3, v) @ inertia_diag_mat(inertia, force_order) + CMTM.hat_commute_adj(SO3, p))
+    mat[:, dim:] = m1 @ diag_inv_factorials(force_order+1, dim)
+    return mat
