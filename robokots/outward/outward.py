@@ -5,7 +5,7 @@
 
 import numpy as np
 
-from mathrobo import SO3, SE3, CMTM, numerical_difference, build_integrator
+from mathrobo import SO3, SE3, CMTM, SE3wrench, numerical_difference, build_integrator
 
 from ..basic.robot import RobotStruct
 from ..basic.motion import RobotMotions
@@ -195,7 +195,8 @@ def dynamics_cmtm(robot : RobotStruct, joint_motions, dynamics_order = 1) -> dic
     #   c_joint_forces += state_dict_to_vecs(state_data, robot.joints[id].name, "joint_force")
       
     joint_cmtm = joint_rel_cmtm(joint_data, joint_motion, dynamics_order + 1)
-    joint_momentums = joint_cmtm.mat_inv_adj().T @ c_link_momentums + p_link_momentums
+    joint_cmtm_force = CMTM.change_elemclass(joint_cmtm, SE3wrench)
+    joint_momentums = joint_cmtm_force.mat_adj() @ c_link_momentums + p_link_momentums
 
     # joint_cmtm = joint_rel_cmtm(joint_data, joint_motion, dynamics_order)
     # joint_torques, joint_forces = joint_dynamics_cmtm(joint, joint_cmtm, c_joint_forces, link_forces)
