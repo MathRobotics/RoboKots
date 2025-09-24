@@ -19,7 +19,7 @@ from ..kinematics.kinematics_matrix import joint_select_diag_mat
 
 from .outward import dynamics_cmtm as outward_dynamics
 
-def link_to_joint_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
+def link_to_joint_vel_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
     n_ = dim * order
     mat = np.zeros((r.joint_num * n_, r.link_num * n_))
 
@@ -31,7 +31,7 @@ def link_to_joint_mat(r : RobotStruct, state : dict, order : int = 1, dim : int 
         mat[i*n_:(i+1)*n_, c_id*n_:(c_id+1)*n_] = np.eye(n_)
     return mat
 
-def joint_to_link_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
+def joint_to_link_vel_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
     n_ = dim * order
     mat = np.zeros((r.link_num * n_, r.joint_num * n_))
 
@@ -102,13 +102,13 @@ def coord_to_joint_mat_inv(r : RobotStruct, state : dict, order : int = 3, dim :
     return mat
 
 def coord_to_link_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
-    return joint_to_link_mat(r, state, order, dim) @ coord_to_joint_mat(r, state,order, dim)
+    return joint_to_link_vel_mat(r, state, order, dim) @ coord_to_joint_mat(r, state,order, dim)
 
 def coord_to_link_momentum_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
     return link_inertia_mat(r, order=order, dim=dim) @ coord_to_link_mat(r, state, order, dim)
 
 def coord_to_joint_momentum_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
-    return link_to_joint_mat(r, state, order, dim) @ coord_to_link_momentum_mat(r, state, order, dim)
+    return link_to_joint_vel_mat(r, state, order, dim) @ coord_to_link_momentum_mat(r, state, order, dim)
 
 def coord_to_link_force_mat(r : RobotStruct, state : dict, force_order : int = 1, dim : int = 6) -> np.ndarray:
     # return total_momentum_to_force_mat(r, state, force_order, dim) @ coord_to_link_momentum_mat(r, state, force_order+1, dim)
