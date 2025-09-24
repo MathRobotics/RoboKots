@@ -261,7 +261,7 @@ def state_dict_to_rel_cmtm(state : dict, base_name : str, target_name : str, ord
 
     return rel_cmtm
 
-def state_dict_to_force_vecs(state : dict, name : str, type_name : str) -> np.ndarray:
+def state_dict_to_vecs(state : dict, name : str, type_name : str) -> np.ndarray:
     '''
     Convert state data to vector
     Args:
@@ -278,6 +278,8 @@ def state_dict_to_force_vecs(state : dict, name : str, type_name : str) -> np.nd
             vecs.append(np.array(state[k]))
         elif re.match(rf"{name}_{type_name}_diff\d+", k):
             vecs.append(np.array(state[k]))
+    if len(vecs) == 0:
+        raise ValueError(f"Invalid name: {name} or type_name: {type_name}.")
 
     return np.concatenate(vecs)
 
@@ -306,6 +308,12 @@ def extract_dict_joint_info(state : dict, data_type : str, joint_name : str, fra
         return state_dict_to_cmtm(state, joint_name)
     elif data_type == "force":
         return np.array(state[joint_name+"_joint_force"])
+    elif "force_diff" in data_type:
+        return np.array(state[joint_name+"_joint_"+data_type])
+    elif data_type == "momentum":
+        return np.array(state[joint_name+"_joint_momentum"])
+    elif "momentum_diff" in data_type:
+        return np.array(state[joint_name+"_joint_"+data_type])
     elif data_type == "torque":
         return np.array(state[joint_name+"_joint_torque"])
     else:
