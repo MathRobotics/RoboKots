@@ -147,63 +147,87 @@ def dynamics(robot : RobotStruct, joint_motions) -> dict:
   return state_dict
 
 def dynamics_cmtm(robot : RobotStruct, joint_motions, dynamics_order = 1) -> dict:
-  state_data = {}
-  
-  state_data = kinematics(robot, joint_motions, dynamics_order + 2)
+  state_dict = kinematics(robot, joint_motions, dynamics_order + 2)
+  momentum_dict = {}
 
   for joint in reversed(robot.joints):
-    child = robot.links[joint.child_link_id]
     joint_data = convert_joint_to_data(joint)
+
+    child = robot.links[joint.child_link_id]
+    child_joint_ids = child.child_joint_ids
 
     joint_motion = joint_motions[joint.dof_index*(dynamics_order+2):joint.dof_index*(dynamics_order+2) + joint.dof*(dynamics_order+2)]
     inertia = spatial_inertia(child.mass, child.inertia, child.cog)
 
-    link_cmtm = state_dict_to_cmtm(state_data, child.name, dynamics_order + 2)
+    link_cmtm = state_dict_to_cmtm(state_dict, child.name, dynamics_order + 2)
 
     link_momentums = link_momentum_cmtm(inertia, link_cmtm.vecs())
     state = vecs_to_state_dict(link_momentums, child.name, "link_momentum", dynamics_order+1)
-    state_data.update(state)
+    state_dict.update(state)
     
     link_forces = link_force_cmtm(link_cmtm.vecs(-1), link_momentums)
     state = vecs_to_state_dict(link_forces, child.name, "link_force", dynamics_order)
-    state_data.update(state)
+    state_dict.update(state)
+
+    joint_momentums = link_momentums
+    for c_id in child_joint_ids:
+      c_joint = robot.joints[c_id]
+      c_joint_data = convert_joint_to_data(c_joint)
+
+      c_joint_cmtm = joint_rel_cmtm(c_joint_data, joint_motion, dynamics_order + 1)
+      c_joint_cmtm_wrench = CMTM.change_elemclass(c_joint_cmtm, SE3wrench)
+
+      c_joint_momentums = state_dict_to_vecs(momentum_dict, c_joint.name, "joint_momentums")
+
+      joint_momentums += c_joint_cmtm_wrench.mat_adj() @ c_joint_momentums
+
+    momentum_dict.update([(joint.name+'_joint_momentums', joint_momentums)])
+
+    state = vecs_to_state_dict(joint_momentums, joint.name, "joint_momentum", dynamics_order+1)
+    state_dict.update(state)
+
+    joint_cmtm = joint_rel_cmtm(joint_data, joint_motion, dynamics_order+2)
+    joint_forces = link_force_cmtm(joint_cmtm.vecs(-1), joint_momentums)
+    state = vecs_to_state_dict(joint_forces, joint.name, "joint_force", dynamics_order)
+    state_dict.update(state)
 
   world_link = robot.links[robot.joints[0].parent_link_id]
   inertia = spatial_inertia(world_link.mass, world_link.inertia, world_link.cog)
-  link_cmtm = state_dict_to_cmtm(state_data, world_link.name, dynamics_order + 2)
+  link_cmtm = state_dict_to_cmtm(state_dict, world_link.name, dynamics_order + 2)
 
   link_momentums = link_momentum_cmtm(inertia, link_cmtm.vecs())
   state = vecs_to_state_dict(link_momentums, world_link.name, "link_momentum", dynamics_order+1)
-  state_data.update(state)
+  state_dict.update(state)
 
   link_forces = link_force_cmtm(link_cmtm.vecs(-1), link_momentums)
   state = vecs_to_state_dict(link_forces, world_link.name, "link_force", dynamics_order)
-  state_data.update(state)
+  state_dict.update(state)
 
-  for joint in robot.joints:
-    child = robot.links[joint.child_link_id]
-    parent = robot.links[joint.parent_link_id]
-    joint_data = convert_joint_to_data(joint)
+  # for joint in robot.joints:
+  #   child = robot.links[joint.child_link_id]
+  #   child_joint_ids = child.child_joint_ids
+  #   parent = robot.links[joint.parent_link_id]
+  #   joint_data = convert_joint_to_data(joint)
 
-    c_link_momentums = state_dict_to_vecs(state_data, child.name, "link_momentum")
-    p_link_momentums = state_dict_to_vecs(state_data, parent.name, "link_momentum")
+  #   c_link_momentums = state_dict_to_vecs(state_data, child.name, "link_momentum")
+  #   p_link_momentums = state_dict_to_vecs(state_data, parent.name, "link_momentum")
 
     # c_joint_forces = np.zeros(6*dynamics_order)
     # for id in child.child_joint_ids:
     #   c_joint_forces += state_dict_to_vecs(state_data, robot.joints[id].name, "joint_force")
       
-    joint_cmtm = joint_rel_cmtm(joint_data, joint_motion, dynamics_order + 1)
-    joint_cmtm_force = CMTM.change_elemclass(joint_cmtm, SE3wrench)
-    joint_momentums = joint_cmtm_force.mat_adj() @ c_link_momentums + p_link_momentums
+    # joint_cmtm = joint_rel_cmtm(joint_data, joint_motion, dynamics_order + 1)
+    # joint_cmtm_force = CMTM.change_elemclass(joint_cmtm, SE3wrench)
+    # joint_momentums = joint_cmtm_force.mat_adj() @ c_link_momentums + p_link_momentums
 
     # joint_cmtm = joint_rel_cmtm(joint_data, joint_motion, dynamics_order)
     # joint_torques, joint_forces = joint_dynamics_cmtm(joint, joint_cmtm, c_joint_forces, link_forces)
 
-    state = vecs_to_state_dict(joint_momentums, joint.name, "joint_momentum", dynamics_order+1)
+    # state = vecs_to_state_dict(joint_momentums, joint.name, "joint_momentum", dynamics_order+1)
     # state_data.update(state)
     # state = vecs_to_state_dict(joint_forces, joint.name, "joint_force", dynamics_order)
     # state_data.update(state)
     # state = vecs_to_state_dict(joint_torques, joint.name, "joint_torque", dynamics_order)
-    state_data.update(state)
+    # state_data.update(state)
     
-  return state_data
+  return state_dict
