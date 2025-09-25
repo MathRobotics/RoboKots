@@ -5,7 +5,7 @@
 
 import numpy as np
 
-from mathrobo import CMTM, numerical_grad
+from mathrobo import CMTM, SE3wrench, numerical_grad
 
 from ..basic.robot import RobotStruct
 from ..basic.state_dict import state_dict_to_rel_cmtm, state_dict_to_cmtm
@@ -45,6 +45,47 @@ def joint_to_link_vel_mat(r : RobotStruct, state : dict, order : int = 1, dim : 
             link_cmtm = state_dict_to_cmtm(state, link.name, order)
             mat[i*n_:(i+1)*n_, j*n_:(j+1)*n_] = link_cmtm.tangent_mat_inv() @ rel_cmtm.mat_adj()
     return mat
+
+def joint_to_link_momentum_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
+    n_ = dim * order
+    mat = np.zeros((r.joint_num * n_, r.link_num * n_))
+
+    for i, joint in enumerate(r.joints):
+        p_id = joint.parent_link_id
+        c_id = joint.child_link_id
+        rel_cmtm = state_dict_to_rel_cmtm(state, r.links[c_id].name, r.links[p_id].name, order)
+        rel_cmtm_force = CMTM.change_elemclass(rel_cmtm, SE3wrench)
+        mat[i*n_:(i+1)*n_, p_id*n_:(p_id+1)*n_] = np.eye(n_)
+        mat[i*n_:(i+1)*n_, c_id*n_:(c_id+1)*n_] = - rel_cmtm_force.mat_adj()
+    return mat
+
+def link_to_joint_momentum_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
+    n_ = dim * order
+    mat = np.zeros((r.link_num * n_, r.joint_num * n_))
+
+    for i, joint in enumerate(r.joints):
+        link_route = []
+        joint_route = []
+        r.route_target_joint(joint, link_route, joint_route)
+        for j in link_route:
+            link = r.links[j]
+            rel_cmtm = state_dict_to_rel_cmtm(state, link.name, r.links[joint.child_link_id].name, order)
+            rel_cmtm_force = CMTM.change_elemclass(rel_cmtm, SE3wrench)
+            link_cmtm = state_dict_to_cmtm(state, link.name, order)
+            mat[i*n_:(i+1)*n_, j*n_:(j+1)*n_] = link_cmtm.tangent_mat_inv() @ rel_cmtm_force.mat_adj()
+    return mat
+
+    # for i, link in enumerate(r.links):
+    #     link_route = []
+    #     joint_route = []
+    #     r.route_target_link(link, link_route, joint_route)
+    #     for j in joint_route:
+    #         joint = r.joints[j]
+    #         rel_cmtm = state_dict_to_rel_cmtm(state, link.name, r.links[joint.child_link_id].name, order)
+    #         rel_cmtm_force = CMTM.change_elemclass(rel_cmtm, SE3wrench)
+    #         link_cmtm = state_dict_to_cmtm(state, link.name, order)
+    #         mat[i*n_:(i+1)*n_, j*n_:(j+1)*n_] = link_cmtm.tangent_mat_inv() @ rel_cmtm_force.mat_adj()
+    # return mat
 
 def link_inertia_mat(r : RobotStruct, order : int = 3, dim : int = 6) -> np.ndarray:
     n_ = dim * order
