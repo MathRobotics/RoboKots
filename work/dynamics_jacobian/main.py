@@ -78,5 +78,11 @@ def main():
     # print(kots.state_target_link_info('joint_momentum_diff3')[0])
     # print(jac_joint_momentum)
 
+    print("joint_force")
+    print(kots.state_joint_info('force', 'joint4'))
+    print(kots.state_joint_info('force_diff1', 'joint4'))
+    print(kots.state_joint_info('force_diff2', 'joint4'))
+    print(kots.state_joint_info('force_diff3', 'joint4'))
+
 if __name__ == "__main__":
     main()
