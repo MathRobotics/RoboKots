@@ -29,17 +29,17 @@ def kinematics(robot : RobotStruct, motions, order = 3) -> dict:
     dict: state data
   '''
   
-  state_data = {}
-  state_cmtm = {}
+  state_dict = {}
+  cmtm_dict = {}
 
   # Initialize CMTM for the world link
   # The world link is the parent of the first joint
   world_name = robot.links[robot.joints[0].parent_link_id].name
-  state_cmtm.update([(world_name, CMTM.eye(SE3, order))])
- 
-  state = cmtm_to_state_list(state_cmtm[world_name], world_name)
-  state_data.update(state)
-  
+  cmtm_dict.update([(world_name, CMTM.eye(SE3, order))])
+
+  state = cmtm_to_state_list(cmtm_dict[world_name], world_name)
+  state_dict.update(state)
+
   for joint in robot.joints:
     parent = robot.links[joint.parent_link_id]
     child = robot.links[joint.child_link_id]
@@ -50,23 +50,23 @@ def kinematics(robot : RobotStruct, motions, order = 3) -> dict:
     joint_motions = motions[joint.dof_index*order:joint.dof_index*order+joint.dof*order]
     link_motions = motions[child.dof_index*order:child.dof_index*order+child.dof*order]
 
-    p_link_cmtm = state_cmtm[parent.name]
+    p_link_cmtm = cmtm_dict[parent.name]
     joint_cmtm = joint_rel_cmtm(joint_data, joint_motions, order)
     link_cmtm = soft_link_local_cmtm(link_data, link_motions, order)
 
     link_cmtm = p_link_cmtm @ joint_cmtm @ link_cmtm
     # Update CMTM for the child link
-    state_cmtm.update([(child.name, link_cmtm)])
+    cmtm_dict.update([(child.name, link_cmtm)])
 
     state = cmtm_to_state_list(link_cmtm, child.name)
-    state_data.update(state)
+    state_dict.update(state)
     
     #---for pre-computation
     joint_cmtm = joint_local_cmtm(joint_data, joint_motions, order)
     state = cmtm_to_state_list(joint_cmtm, joint.name)
-    state_data.update(state)
+    state_dict.update(state)
 
-  return state_data
+  return state_dict
 
 def calc_link_total_point_frame(robot : RobotStruct, motions : RobotMotions, state : dict, point : float) -> SE3:
   base = 0.0
