@@ -113,13 +113,11 @@ def link_diff_kinematics_numerical(robot : RobotStruct, motions, link_name_list 
   return diff
 
 # specific 3d space (magic number 6)
-def dynamics(robot : RobotStruct, joint_motions) -> dict:
-  state_data = {}
-  
-  state_data = kinematics(robot, joint_motions, 3)
+def dynamics(robot : RobotStruct, joint_motions) -> dict:  
+  state_dict = kinematics(robot, joint_motions, 3)
 
   world_name = robot.links[robot.joints[0].parent_link_id].name
-  state_data.update([(world_name + "_link_force" , [0.,0.,0.,0.,0.,0.])])
+  state_dict.update([(world_name + "_link_force" , [0.,0.,0.,0.,0.,0.])])
 
   for joint in reversed(robot.joints):
     child = robot.links[joint.child_link_id]
@@ -129,24 +127,24 @@ def dynamics(robot : RobotStruct, joint_motions) -> dict:
 
     inertia = spatial_inertia(child.mass, child.inertia, child.cog)
 
-    link_veloc = np.array(state_data[child.name + "_vel"])
-    link_accel = np.array(state_data[child.name + "_acc"])
+    link_veloc = np.array(state_dict[child.name + "_vel"])
+    link_accel = np.array(state_dict[child.name + "_acc"])
     
     link_force = link_dynamics(inertia, link_veloc, link_accel)  
-    state_data.update([(child.name + "_link_force" , link_force.tolist())])
+    state_dict.update([(child.name + "_link_force" , link_force.tolist())])
     
     joint_frame = joint_rel_frame(joint_data, joint_coord)
 
     p_joint_force = np.zeros(6)
     for id in child.child_joint_ids:
-      p_joint_force += state_data[robot.joints[id].name + "_joint_force"]
+      p_joint_force += state_dict[robot.joints[id].name + "_joint_force"]
 
     joint_torque, joint_force = joint_dynamics(joint.select_mat, joint_frame, p_joint_force, link_force)
     
-    state_data.update([(joint.name + "_joint_force" , joint_force.tolist())])
-    state_data.update([(joint.name + "_joint_torque" , joint_torque.tolist())])
+    state_dict.update([(joint.name + "_joint_force" , joint_force.tolist())])
+    state_dict.update([(joint.name + "_joint_torque" , joint_torque.tolist())])
     
-  return state_data
+  return state_dict
 
 def dynamics_cmtm(robot : RobotStruct, joint_motions, dynamics_order = 1) -> dict:
   state_data = {}
