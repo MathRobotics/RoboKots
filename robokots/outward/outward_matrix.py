@@ -163,13 +163,15 @@ def link_jacobian_momentum(robot : RobotStruct, state : dict, link_name_list : l
         jacobs[i*dim*momentum_order:(i+1)*dim*momentum_order, :] = mat[link.id*dim*momentum_order:(link.id+1)*dim*momentum_order, :]
     return jacobs
 
-def joint_jacobian_momentum(robot : RobotStruct, state : dict, joint_name_list : list[str], order : int = 1, dim : int = 6) -> np.ndarray:
+def joint_jacobian_momentum(robot : RobotStruct, state : dict, joint_name_list : list[str], momentum_order : int = 1, dim : int = 6) -> np.ndarray:
     joints = robot.joint_list(joint_name_list)
-    mat = coord_to_joint_momentum_mat(robot, state, order=order, dim=dim)
-    jacobs = np.zeros((dim * order * len(joints), robot.dof * order+1))
+    if joints == [None]:
+        raise ValueError("joint_name_list contains invalid joint name")
+    mat = coord_to_joint_momentum_mat(robot, state, order=momentum_order, dim=dim)
+    jacobs = np.zeros((dim * momentum_order * len(joints), robot.dof * momentum_order))
 
     for i, joint in enumerate(joints):
-        jacobs[i*dim*order:(i+1)*dim*order, :] = mat[joint.id*dim*order:(joint.id+1)*dim*order, :]
+        jacobs[i*dim*momentum_order:(i+1)*dim*momentum_order, :] = mat[joint.id*dim*momentum_order:(joint.id+1)*dim*momentum_order, :]
     return jacobs
 
 def link_jacobian_force(robot : RobotStruct, state : dict, link_name_list : list[str], force_order : int = 1, dim : int = 6) -> np.ndarray:
