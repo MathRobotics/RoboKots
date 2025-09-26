@@ -20,8 +20,8 @@ from .outward.outward import kinematics as outward_kinematics
 from .outward.outward import dynamics_cmtm as outward_dynamics
 from .outward.outward import link_diff_kinematics_numerical, calc_link_total_point_frame
 from .outward.outward_gradient import link_jacobian, link_cmtm_jacobian, link_jacobian_numerical 
-from .outward.outward_matrix import link_jacobian_force, link_jacobian_momentum, link_jacobian_force_numerical
-  
+from .outward.outward_matrix import link_jacobian_force, link_jacobian_momentum, link_jacobian_force_numerical, joint_jacobian_momentum
+
 default_order = 3 
 default_dim = 3
 class Kots():
