@@ -151,8 +151,6 @@ def dynamics_cmtm(robot : RobotStruct, joint_motions, dynamics_order = 1) -> dic
   momentum_dict = {}
 
   for joint in reversed(robot.joints):
-    joint_data = convert_joint_to_data(joint)
-
     child = robot.links[joint.child_link_id]
     child_joint_ids = child.child_joint_ids
 
@@ -186,8 +184,8 @@ def dynamics_cmtm(robot : RobotStruct, joint_motions, dynamics_order = 1) -> dic
     state = vecs_to_state_dict(joint_momentums, joint.name, "joint_momentum", dynamics_order+1)
     state_dict.update(state)
 
-    joint_cmtm = joint_rel_cmtm(joint_data, joint_motion, dynamics_order+2)
-    joint_forces = link_force_cmtm(joint_cmtm.vecs(-1), joint_momentums)
+    link_cmtm = state_dict_to_cmtm(state_dict, child.name, dynamics_order + 2)
+    joint_forces = link_force_cmtm(link_cmtm.vecs(-1), joint_momentums)
     state = vecs_to_state_dict(joint_forces, joint.name, "joint_force", dynamics_order)
     state_dict.update(state)
 
