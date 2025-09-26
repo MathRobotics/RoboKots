@@ -99,6 +99,15 @@ class RobotStruct:
   def route_target_joint(self, target_joint : "JointStruct", link_route : List, joint_route : List):
     joint_route.append(target_joint.id)
     self.route_target_link(self.links[target_joint.parent_link_id], link_route, joint_route)
+
+  def route_end_links(self, target_link: "LinkStruct", link_route: List, joint_route: List):
+    link_route.append(target_link.id)
+    for joint_id in target_link.child_joint_ids:
+      self.route_end_joints(self.joints[joint_id], link_route, joint_route)
+
+  def route_end_joints(self, target_joint: "JointStruct", link_route: List, joint_route: List):
+    joint_route.append(target_joint.id)
+    self.route_end_links(self.links[target_joint.child_link_id], link_route, joint_route)
     
   @staticmethod
   def from_dict(data: Dict, lib: str = "numpy") -> "RobotStruct":  
