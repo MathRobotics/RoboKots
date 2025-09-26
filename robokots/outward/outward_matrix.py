@@ -65,13 +65,14 @@ def link_to_joint_momentum_mat(r : RobotStruct, state : dict, order : int = 1, d
     for i, joint in enumerate(r.joints):
         link_route = []
         joint_route = []
-        r.route_target_joint(joint, link_route, joint_route)
+        r.route_end_joints(joint, link_route, joint_route)
         for j in link_route:
             link = r.links[j]
             rel_cmtm = state_dict_to_rel_cmtm(state, r.links[joint.child_link_id].name, link.name, order)
             rel_cmtm_force = CMTM.change_elemclass(rel_cmtm, SE3wrench)
+            joint_cmtm = state_dict_to_cmtm(state, joint.name, order)
             link_cmtm = state_dict_to_cmtm(state, link.name, order)
-            mat[i*n_:(i+1)*n_, j*n_:(j+1)*n_] = rel_cmtm_force.mat_adj() @ link_cmtm.tangent_mat_inv() 
+            mat[i*n_:(i+1)*n_, j*n_:(j+1)*n_] = joint_cmtm.tangent_mat() @ rel_cmtm_force.mat_adj() @ link_cmtm.tangent_mat_inv() 
     return mat
 
 def link_inertia_mat(r : RobotStruct, order : int = 3, dim : int = 6) -> np.ndarray:
