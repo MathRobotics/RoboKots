@@ -48,7 +48,7 @@ def joint_to_link_vel_mat(r : RobotStruct, state : dict, order : int = 1, dim : 
 
 def joint_to_link_momentum_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
     n_ = dim * order
-    mat = np.zeros((r.joint_num * n_, r.link_num * n_))
+    mat = np.zeros((r.link_num * n_, r.joint_num * n_))
 
     for i, joint in enumerate(r.joints):
         p_id = joint.parent_link_id
@@ -61,8 +61,7 @@ def joint_to_link_momentum_mat(r : RobotStruct, state : dict, order : int = 1, d
 
 def link_to_joint_momentum_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
     n_ = dim * order
-    mat = np.zeros((r.link_num * n_, r.joint_num * n_))
-
+    mat = np.zeros((r.joint_num * n_, r.link_num * n_))
     for i, joint in enumerate(r.joints):
         link_route = []
         joint_route = []
