@@ -3,11 +3,12 @@
 # 2024.12.11 Created by T.Ishigaki
 
 import numpy as np
+import jax.numpy as jnp
 
 import warnings
 from typing import List, Dict
 
-from mathrobo import SE3, CMTM
+from mathrobo import SE3
 
 warnings.simplefilter("always", UserWarning)
 
@@ -36,6 +37,12 @@ class RobotStruct:
     for name in name_list:
       link_list.append(self.link(name))
     return link_list
+  
+  def is_link(self, name : str) -> bool:
+    for l in self.links:
+      if name == l.name:
+        return True
+    return False
 
   def joint(self, name : str) -> "JointStruct":
     for l in self.joints:
@@ -49,6 +56,12 @@ class RobotStruct:
     for name in name_list:
       joint_list.append(self.joint(name))
     return joint_list
+  
+  def is_joint(self, name : str) -> bool:
+    for j in self.joints:
+      if name == j.name:
+        return True
+    return False
 
   def robot_init(self):
     self.joint_num = len(self.joints)  
@@ -86,32 +99,52 @@ class RobotStruct:
   def route_target_joint(self, target_joint : "JointStruct", link_route : List, joint_route : List):
     joint_route.append(target_joint.id)
     self.route_target_link(self.links[target_joint.parent_link_id], link_route, joint_route)
+
+  def route_end_links(self, target_link: "LinkStruct", link_route: List, joint_route: List):
+    link_route.append(target_link.id)
+    for joint_id in target_link.child_joint_ids:
+      self.route_end_joints(self.joints[joint_id], link_route, joint_route)
+
+  def route_end_joints(self, target_joint: "JointStruct", link_route: List, joint_route: List):
+    joint_route.append(target_joint.id)
+    self.route_end_links(self.links[target_joint.child_link_id], link_route, joint_route)
     
   @staticmethod
-  def from_dict(data: Dict):  
+  def from_dict(data: Dict, lib: str = "numpy") -> "RobotStruct":  
     joints = []
     links = []
+
+    if lib == "jax":
+      xp = jnp
+    elif lib == "numpy":
+      xp = np
+    else:
+        raise ValueError(f"Unsupported library: {lib}. Use 'jax' or 'numpy'.")
     
     links = [LinkStruct(
         id=link["id"],
         name=link["name"],
-        cog=np.array(link.get("cog", [0., 0., 0.])),
+        cog=xp.array(link.get("cog", [0., 0., 0.])),
         mass=float(link.get("mass", 0.)),
-        inertia=np.array(link.get("inertia", [1.0, 1.0, 1.0, 0.0, 0.0, 0.0])),
-        type=link.get("type", "rigid")
+        inertia=xp.array(link.get("inertia", [1.0, 1.0, 1.0, 0.0, 0.0, 0.0])),
+        type=link.get("type", "rigid"),
+        length=float(link.get("length", 0.0)),
+        lib=lib
     ) for link in data["links"]]
 
     joints = [JointStruct(
         id=joint["id"],
         name=joint["name"],
         type=joint["type"],
-        axis=np.array(joint.get("axis", [0., 0., 0.])),
+        axis=xp.array(joint.get("axis", [0., 0., 0.])),
         parent_link_id=joint["parent_link_id"],
         child_link_id=joint["child_link_id"],
         origin=SE3.set_pos_quaternion(
-          joint.get("origin", {}).get("position", [0., 0., 0.]),
-          joint.get("origin", {}).get("orientation", [1., 0., 0., 0.])
-        )
+          xp.array(joint.get("origin", {}).get("position", [0., 0., 0.])),
+          xp.array(joint.get("origin", {}).get("orientation", [1., 0., 0., 0.])),
+          LIB=lib
+        ),
+        lib=lib
     ) for joint in data["joints"]]
 
     return RobotStruct(links, joints)
@@ -132,6 +165,7 @@ class RobotStruct:
         else:
             inertia_list = [1,1,1,0,0,0]
         link_dict["inertia"] = inertia_list
+        link_dict["length"] = float(link.length) if link.length is not None else 0.0
 
         link_dict["geometry"] = None
 
@@ -172,7 +206,9 @@ class RobotStruct:
           print(f"    Inertia: {link.inertia}, DOF: {link.dof}")
           print(f"    Connect parent joint: {link.parent_joint_ids}")
           print(f"    Connect child joint: {link.child_joint_ids}")
+          print(f"    DOF:{link.dof}")
           print(f"    DOF index: {link.dof_index}")
+          print(f"    Length: {link.length}\n")
 
       print("\nJoints:")
       for joint in self.joints:
@@ -185,14 +221,19 @@ class RobotStruct:
 
 class LinkStruct:
   dof_index : int = 0
-  def __init__(self, id: int, name: str, cog: np.ndarray, mass: float, inertia: np.ndarray, type: str = "rigid"):
+  def __init__(self, id: int, name: str, cog: np.ndarray, mass: float, inertia: np.ndarray, type: str = "rigid", length: float = None, lib: str = "numpy"):
+    self.lib = lib
     self.id = id
     self.name = name
     self.type = type
     self.cog = cog
     self.mass = mass
     self.inertia = inertia
+    self.length = length if length is not None else 1.0  # Default length if not specified
     self.dof = self._link_dof(self.type)
+    self.select_mat = self._select_mat(self.type, lib)
+    self.select_indeces = np.argmax(self.select_mat, axis=0)
+    self.origin_coord = np.array([0., 0., 0., 0., 0., 1.])
     self.child_joint_ids = []
     self.parent_joint_ids = []
     
@@ -205,19 +246,48 @@ class LinkStruct:
   def _link_dof(type) -> int:
     if type == "rigid":
       return 0
+    elif type == "soft":
+      return 6
+    else:
+        warnings.warn(f"Unsupported link type: {type}", UserWarning)
+        return 0
+
+  #specific for rigid link or soft link
+  @staticmethod
+  def _select_mat(type: str, lib: str = "numpy") -> np.ndarray:
+      if lib == "jax":
+          xp = jnp
+      elif lib == "numpy":
+          xp = np
+      else:
+          raise ValueError(f"Unsupported library: {lib}. Use 'jax' or 'numpy'")
+      mat = xp.zeros((6, 1))
+      if type == "rigid":
+          return mat
+      elif type == "soft":
+          mat = xp.eye(6)
+          return mat
+      else:
+          warnings.warn(f"Unsupported link type: {type}", UserWarning)
 
 class JointStruct:
     dof_index : int = 0
-    def __init__(self, id: int, name: str, type: str, axis: np.ndarray, parent_link_id: int, child_link_id: int, origin: SE3):
+    def __init__(self, id: int, name: str, type: str, axis: np.ndarray, parent_link_id: int, child_link_id: int, origin: SE3, lib: str = "numpy"):
+        if lib == "jax":
+            xp = jnp
+        elif lib == "numpy":
+            xp = np
+        else:
+            raise ValueError(f"Unsupported library: {lib}. Use 'jax' or 'numpy'")
         self.id = id
         self.name = name
         self.type = type
-        self.axis = axis if np.linalg.norm(axis) > 0 else np.array([1, 0, 0])
+        self.axis = axis if xp.linalg.norm(axis) > 0 else xp.array([1, 0, 0])
         self.parent_link_id = parent_link_id
         self.child_link_id = child_link_id
         self.dof = self._joint_dof(self.type)
-        self.select_mat = self._select_mat(self.type, self.axis)
-        self.select_indeces = np.argmax(self.select_mat, axis=0)
+        self.select_mat = self._select_mat(self.type, self.axis, lib)
+        self.select_indeces = xp.argmax(self.select_mat, axis=0)
         self.origin = origin
         
     def set_dof_index(self, n : int):
@@ -237,12 +307,21 @@ class JointStruct:
 
     #specific for 1 DOF joint or fix joint
     @staticmethod
-    def _select_mat(type: str, axis: np.ndarray) -> np.ndarray:
-        mat = np.zeros((6, 1))
+    def _select_mat(type: str, axis: np.ndarray, lib: str = "numpy") -> np.ndarray:
+        if lib == "jax":
+            mat = jnp.zeros((6, 1))
+        elif lib == "numpy":
+            mat = np.zeros((6, 1))
+        else:
+            raise ValueError(f"Unsupported library: {lib}. Use 'jax' or 'numpy'")
+
         if type == "fix":
             return mat
         elif type == "revolute":
-            mat[0:3, 0] = axis
+            if lib == "jax":
+                mat = mat.at[0:3, 0].set(axis)
+            elif lib == "numpy":
+                mat[0:3, 0] = axis
             return mat
         else:
             raise warnings.warn(f"Unsupported joint type: {type}", UserWarning)

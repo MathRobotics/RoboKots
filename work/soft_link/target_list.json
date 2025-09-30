@@ -1,0 +1,9 @@
+{
+  "targets":[
+    {
+      "type": ["frame", "vel", "acc", "jerk", "snap"],
+      "link": "end",
+      "pos" : [0,0,0]
+    }
+  ]
+}

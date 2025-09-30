@@ -1,0 +1,9 @@
+{
+  "targets":[
+    {
+      "type": ["frame", "vel", "acc", "jerk", "snap"],
+      "link": "arm3",
+      "pos" : [0,0,0]
+    }
+  ]
+}

@@ -1,217 +1,179 @@
-#!/usr/bin/env python3.9
-# -*- coding: utf-8 -*-
-# 2024.12.13 Created by T.Ishigaki
+from mathrobo import SO3, SE3, CMTM
 
-import polars as pl
-import numpy as np
+keys_kinematics = \
+    ("pos", "rot", "frame", "vel", "acc", "jerk", "snap", "crackle", "pop", "lock", "drop", "shot", "put")
 
-from mathrobo import SE3, CMTM
+keys_momentum = \
+    ("momentum","momentum_diff1", "momentum_diff2", "momentum_diff3")
 
-class RobotDF:
-  df : pl.DataFrame
-  names : list
-  def __init__(self, names_ : list):
-    self.names = names_
+keys_force = \
+    ("force","force_diff1", "force_diff2", "force_diff3")
 
-    self.df = pl.DataFrame()
-    self.set_df()
-    
-  def add_row(self, data : dict):
-    new_row = pl.DataFrame([data], schema=self.df.schema)
-    self.df = self.df.vstack(new_row)
-    
-  def set_df(self):
-    for name in self.names:
-      self.df = self.df.with_columns([pl.Series(name=name, dtype=pl.List(pl.Float64))])
+keys_torque = \
+    ("torque",)
 
-class RobotState:
-  state_df : RobotDF
-  
-  def __init__(self, link_names : list, joint_names : list, l_aliases = ["pos", "rot", "vel", "acc"], j_aliases = [], separator = "_"):
-    names = []
-    self.l_aliases = l_aliases
-    self.j_aliases = j_aliases
-    self.separator = separator  
-    if len(l_aliases) != 0:
-      for l_name in link_names:
-        for al in l_aliases:
-          names.append(l_name + separator + al)
-    
-    if len(j_aliases) != 0:
-      for j_name in joint_names:
-        for al in j_aliases:
-          names.append(j_name + separator + al)
+keys = keys_kinematics + keys_momentum + keys_force + keys_torque
 
-    self.state_df = RobotDF(names)
-    
-  def df(self) -> pl.DataFrame:
-    if self.state_df.df.is_empty():
-      raise ValueError("DataFrame is empty. Please add data first.")
-    return self.state_df.df
-    
-  @staticmethod
-  def state_vec(df, name : str, type : str) -> np.ndarray:
-    return df[name+"_"+type][-1].to_numpy()
-  
-  @staticmethod
-  def state_mat(df, name : str, type : str) -> np.ndarray:
-    mat_vec = df[name+"_"+type][-1].to_numpy()
-    mat = mat_vec.reshape((3,3))
-    return mat
-  
-  def all_state_vec(self, links, type : str) -> np.ndarray:
-    labels = []
-    for l in links:
-      labels.append(l.name+"_"+type) 
-    mat = [self.df()[label][-1].to_list() for label in labels]
-    return np.array(mat)
-  
-  def link_pos(self, link_name : str) -> np.ndarray:
-    return RobotState.state_vec(self.df(), link_name, "pos")
-  
-  def all_link_pos(self, links) -> np.ndarray:
-    return self.all_state_vec(links, "pos")
-  
-  def link_rot(self, link_name : str) -> np.ndarray:
-    return RobotState.state_mat(self.df(), link_name, "rot")
+def is_in_keys_kinematics(keys_list):
+    for k in keys_list:
+        if k not in keys_kinematics:
+            return False
+    return True
 
-  def link_vel(self, link_name : str) -> np.ndarray:
-    return RobotState.state_vec(self.df(), link_name, "vel")
+def is_in_keys_momentum(keys_list):
+    for k in keys_list:
+        if k not in keys_momentum:
+            return False
+    return True
 
-  def link_acc(self, link_name : str) -> np.ndarray:
-    return RobotState.state_vec(self.df(), link_name, "acc")
-    
-  def link_frame(self, link_name : str) -> SE3:
-    h = SE3(self.link_rot(link_name), self.link_pos(link_name))
-    return h
-  
-  def link_values(self, link_name : str, order : int) -> dict:
-    if order < 1:
-      raise ValueError(f"Invalid order: {order}. Must be over 1.")
-    
-    d = []
-    d.append(self.link_frame(link_name))
-    if order > 1:
-      d.append(self.link_vel(link_name))
-    if order > 2:
-      d.append(self.link_acc(link_name))
-    if order > 3:
-      for i in range(order-3):
-        d.append(RobotState.state_vec(self.df(), link_name, "acc_diff"+str(i+1)))
-    return d
-  
-  def link_cmtm(self, link_name : str, order = 3) -> CMTM:
-    vec = np.zeros((order-1, 6))
-    state = self.link_values(link_name, order)
-    h = state[0]
-    for i in range(1, order):
-      vec[i-1] = state[i]
-    cmtm = CMTM[SE3](h, vec)
-    return cmtm
+def is_in_keys_force(keys_list):
+    for k in keys_list:
+        if k not in keys_force:
+            return False
+    return True
 
-  def link_rel_frame(self, base_link_name : str, target_link_name : str) -> SE3:
-    h = self.link_frame(base_link_name).inv() @ self.link_frame(target_link_name)
-    return h
-  
-  def link_rel_cmtm(self, base_link_name : str, target_link_name : str, order : int) -> CMTM:
-    x = self.link_cmtm(base_link_name, order).inv() @ self.link_cmtm(target_link_name, order)
-    return x
+def is_in_keys_torque(keys_list):
+    for k in keys_list:
+        if k not in keys_torque:
+            return False
+    return True
 
-  def joint_pos(self, joint_name : str) -> np.ndarray:
-    return RobotState.state_vec(self.df(), joint_name, "pos")
-  
-  def joint_rot(self, joint_name : str) -> np.ndarray:
-    return RobotState.state_mat(self.df(), joint_name, "rot")
+def is_in_keys(keys_list):
+    for k in keys_list:
+        if k not in keys:
+            return False
+    return True
 
-  def joint_vel(self, joint_name : str) -> np.ndarray:
-    return RobotState.state_vec(self.df(), joint_name, "vel")
+def filter_keys_kinematics(keys_list):
+    return [k for k in keys_list if k in keys_kinematics]
 
-  def joint_acc(self, joint_name : str) -> np.ndarray:
-    return RobotState.state_vec(self.df(), joint_name, "acc")
-    
-  def joint_frame(self, joint_name : str) -> SE3:
-    h = SE3(self.joint_rot(joint_name), self.joint_pos(joint_name))
-    return h
+def filter_keys_momentum(keys_list):
+    return [k for k in keys_list if k in keys_momentum]
 
-  def joint_values(self, joint_name : str, order : int) -> dict:
-    if order < 1:
-      raise ValueError(f"Invalid order: {order}. Must be over 1.")
-    
-    d = []
-    d.append(self.joint_frame(joint_name))
-    if order > 1:
-      d.append(self.joint_vel(joint_name))
-    if order > 2:
-      d.append(self.joint_acc(joint_name))
-    if order > 3:
-      for i in range(order-3):
-        d.append(RobotState.state_vec(self.df(), joint_name, "acc_diff"+str(i+1)))
-    return d
-  
-  def joint_cmtm(self, joint_name : str, order = 3) -> CMTM:
-    vec = np.zeros((order-1, 6))
-    state = self.joint_values(joint_name, order)
-    h = state[0]
-    for i in range(1, order):
-      vec[i-1] = state[i]
-    cmtm = CMTM[SE3](h, vec)
-    return cmtm
+def filter_keys_force(keys_list):
+    return [k for k in keys_list if k in keys_force]
 
-  #specific 3d-CMTM
-  def extract_link_info(self, type : str, link_name : str, frame = "dummy", rel_frame = 'dummy'):
-    if type == "pos":
-      return self.link_pos(link_name)
-    elif type == "rot":
-      return self.link_rot(link_name)
-    elif type == "vel":
-      return self.link_vel(link_name)
-    elif type == "acc":
-      return self.link_acc(link_name)
-    elif type == "frame":
-      return self.link_frame(link_name)
-    elif type == "cmtm":
-      return self.link_cmtm(link_name)
+def filter_keys_torque(keys_list):
+    return [k for k in keys_list if k in keys_torque]
+
+keys_time_order = {
+    "pos": 1,
+    "rot": 1,
+    "frame": 1,
+    "vel": 2,
+    "acc": 3,
+    "jerk": 4,
+    "snap": 5,
+    "crackle": 6,
+    "pop": 7,
+    "lock": 8,
+    "drop": 9,
+    "shot": 10,
+    "put": 11,
+    "force": 3,
+    "force_diff1": 4,
+    "force_diff2": 5,
+    "force_diff3": 6,
+    "torque": 3,
+    "momentum": 2,
+    "momentum_diff1": 3,
+    "momentum_diff2": 4,
+    "momentum_diff3": 5,
+}
+
+keys_order_kinematics = {
+    "frame": 1,
+    "vel": 2,
+    "acc": 3,
+    "jerk": 4,
+    "snap": 5,
+    "crackle": 6,
+    "pop": 7,
+    "lock": 8,
+    "drop": 9,
+    "shot": 10,
+    "put": 11,
+}
+
+keys_order_force = {
+    "force": 1,
+    "force_diff1": 2,
+    "force_diff2": 3,
+    "force_diff3": 4,
+}
+
+keys_order_momentum = {
+    "momentum": 2,
+    "momentum_diff1": 3,
+    "momentum_diff2": 4,
+    "momentum_diff3": 5,
+}
+
+
+keys_order = {**keys_order_kinematics, **keys_order_momentum, **keys_order_force}
+
+keys_name = {
+    "pos" : "pos",
+    "rot" : "rot",
+    "frame" : "frame",
+    "vel" : "vel",
+    "acc" : "acc",
+    "jerk" : "acc_diff1",
+    "snap" : "acc_diff2",
+    "crackle" : "acc_diff3",
+    "pop" : "acc_diff4",
+    "lock" : "acc_diff5",
+    "drop" : "acc_diff6",
+    "shot" : "acc_diff7",
+    "put" : "acc_diff8"
+}
+
+def data_type_to_sub_func(data_type : str):
+    if data_type == "pos":
+        return None
+    elif data_type == "rot":
+        return SO3.sub_tan_vec
+    elif data_type == "vel":
+        return None
+    elif data_type == "acc":
+        return None
+    elif data_type in ["jerk", "snap", "crackle", "pop", "lock", "drop", "shot", "put"]:
+        return None
+    elif data_type == "frame":
+        return SE3.sub_tan_vec
+    elif data_type == "cmtm":
+        return CMTM.sub_vec
     else:
-      raise ValueError(f"Invalid type: {set(type)}")
-    
-  def extract_joint_info(self, type : str, joint_name : str, frame = "dummy", rel_frame = 'dummy'):
-    if type == "coord":
-      return self.joint_coord(joint_name)
-    elif type == "veloc":
-      return self.joint_veloc(joint_name)
-    elif type == "accel":
-      return self.joint_accel(joint_name)
-    elif type == "cmtm":
-      return self.joint_cmtm(joint_name)
-    else:
-      raise ValueError(f"Invalid type: {set(type)}")
-    
-  def extract_total_info(self, type : str, name : str, frame = "dummy", rel_frame = 'dummy'):
-    'dummy'
-  
-  def extract_info(self, group : str, type : str, name : str, frame = "dummy", rel_frame = 'dummy'):
-    '''
-    group : str
-      link
-      joint
-      total
-    type : str
-      pos
-      rot
-      vel
-      acc
-      frame
-    name : str
-      link name or joint name
-    '''
-    if group == "link":
-      return self.extract_link_info(type, name, frame, rel_frame)
-    elif group == "joint":
-      return self.extract_joint_info(type, name, frame, rel_frame)
-    elif group == "total":
-      return self.extract_total_info(type, name, frame, rel_frame)
-    else:
-      raise ValueError(f"Invalid group: {set(group)}")
+        raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'jerk', 'frame' or 'cmtm'.")
 
-  def import_state(self, data : dict):
-    self.state_df.add_row(data)
+def data_type_dof(data_type : str, order = None, dim = 3):
+    if data_type == "pos" or data_type == "rot":
+        return dim
+    elif data_type == "vel" or data_type == "acc" or data_type == "jerk"  \
+        or data_type == "snap" or data_type == "crackle" or data_type == "pop" \
+        or data_type == "lock" or data_type == "drop" or data_type == "shot" or data_type == "put" \
+        or data_type == "force" or data_type == "force_diff1" or data_type == "force_diff2" or data_type == "force_diff3" \
+        or data_type == "momentum" or data_type == "momentum_diff1" or data_type == "momentum_diff2" or data_type == "momentum_diff3":
+        return dim * 2
+    elif data_type == "frame":
+        return dim * 2
+    elif data_type == "cmtm":
+        if order is None:
+            return dim * 2
+        else:
+            return dim * 2 * order
+    elif data_type == "cmtm_so3":
+        if order is None:
+            return dim * 2
+        else:
+            return dim * order
+    else:
+        raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'frame' or 'cmtm'.")
+
+def dim_to_dof(dim : int):
+    if dim == 1:
+        return 2
+    elif dim == 2:
+        return 3
+    elif dim == 3:
+        return 6

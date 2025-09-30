@@ -1,7 +1,7 @@
 import numpy as np
 
 from mathrobo import SE3, CMTM
-from robokots.outward import *
+from robokots.basic.state_dict import *
 
 def test_extract_state_keys():
     state = {
@@ -20,30 +20,30 @@ def test_extract_state_keys():
     
     assert keys == ["pos", "rot", "vel", "acc", "acc_diff1", "acc_diff2", "jerk", "snap"]
 
-def test_count_dict_order():
+def test_count_dict_time_order():
     state = {"link_rot": []}
-    assert count_dict_order(state) == 1
+    assert count_dict_time_order(state) == 1
 
     state.update({"link_pos": []})
-    assert count_dict_order(state) == 1
+    assert count_dict_time_order(state) == 1
 
     state.update({"link_vel": []})
-    assert count_dict_order(state) == 2
+    assert count_dict_time_order(state) == 2
 
     state.update({"link_acc": []})
-    assert count_dict_order(state) == 3
+    assert count_dict_time_order(state) == 3
 
     state.update({"link_acc_diff1": []})
-    assert count_dict_order(state) == 4
+    assert count_dict_time_order(state) == 4
 
     state.update({"link_acc_diff2": []})
-    assert count_dict_order(state) == 5
+    assert count_dict_time_order(state) == 5
 
-def test_cmtm_to_state_dict():
+def test_cmtm_to_state_list():
     cmtm = CMTM.rand(SE3)
     name = "link"
     
-    state_data = cmtm_to_state_dict(cmtm, name)
+    state_data = cmtm_to_state_list(cmtm, name)
 
     state_dict = {}
     state_dict.update(state_data)

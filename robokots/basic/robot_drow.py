@@ -16,12 +16,14 @@ def d_set_equall_aspect_3d(ax, data, margin):
     box_length[i] = ax_max[i] - ax_min[i]
     
   box_length_max = max((box_length[0], box_length[1], box_length[2]))
-  box_ratio = box_length_max / box_length    
+  box_ratio = box_length_max / box_length
+
+  ax_ave = (ax_max + ax_min) / 2
 
   ax.set_box_aspect((box_length_max,box_length_max,box_length_max))
-  ax.set_xlim3d(ax_min[0]*box_ratio[0], ax_max[0]*box_ratio[0])
-  ax.set_ylim3d(ax_min[1]*box_ratio[1], ax_max[1]*box_ratio[1])
-  ax.set_zlim3d(ax_min[2]*box_ratio[2], ax_max[2]*box_ratio[2])
+  ax.set_xlim3d(ax_ave[0] - box_length[0]*box_ratio[0]*0.5, ax_ave[0] + box_length[0]*box_ratio[0]*0.5)
+  ax.set_ylim3d(ax_ave[1] - box_length[1]*box_ratio[1]*0.5, ax_ave[1] + box_length[1]*box_ratio[1]*0.5)
+  ax.set_zlim3d(ax_ave[2] - box_length[2]*box_ratio[2]*0.5, ax_ave[2] + box_length[2]*box_ratio[2]*0.5)
   
 def d_show_robot(joint_conectivity, marker_pos, save = False):
   fig = plt.figure()
@@ -49,3 +51,17 @@ def d_show_robot(joint_conectivity, marker_pos, save = False):
   plt.show()
   if save:  
     plt.savefig('simple_draw.png')
+
+def d_show_link_points(link_pos):
+  fig = plt.figure()
+  ax = fig.add_subplot(111, projection='3d')
+
+  ax.scatter(link_pos[:,0], link_pos[:,1], link_pos[:,2], c='r', marker='o')
+
+  ax.set_xlabel('X')
+  ax.set_ylabel('Y')
+  ax.set_zlabel('Z')
+
+  d_set_equall_aspect_3d(ax, link_pos, 0.1)
+
+  plt.show()
