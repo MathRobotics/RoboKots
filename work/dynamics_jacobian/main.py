@@ -41,7 +41,7 @@ def main():
     print(kots.jacobian_target('force_diff2')@kots.motion_diff(5))
 
     print("joint_momentum")
-    jac_joint_momentum = outward_matrix.joint_jacobian_momentum(kots.robot_, kots.state_dict_, ['joint4'],kots.order()-1)@kots.motion_diff(order=kots.order()-1)
+    jac_joint_momentum = outward_matrix_gradient.joint_momentum_jacobian(kots.robot_, kots.state_dict_, ['joint4'],kots.order()-1)@kots.motion_diff(order=kots.order()-1)
     print(kots.state_joint_info('momentum', 'joint4'))
     print(kots.state_joint_info('momentum_diff1', 'joint4'))
     print(kots.state_joint_info('momentum_diff2', 'joint4'))
