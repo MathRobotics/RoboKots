@@ -63,7 +63,7 @@ class RobotMotions:
   def gen_value(self, dof : int, dof_index : int, name : str):
     order = len(self.aliases)
     m_index = self.motion_index(name)
-    offset = dof_index * order * dof + m_index * dof
+    offset = dof_index * order + m_index * dof
     return self.motions[offset : offset + dof]
   
   def joint_coord(self, dof : int, dof_index : int):
