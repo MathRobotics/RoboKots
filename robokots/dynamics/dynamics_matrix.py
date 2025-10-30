@@ -6,7 +6,7 @@
 import math
 import numpy as np
 from mathrobo import Factorial
-from mathrobo import SO3, SE3wrench, CMTM
+from mathrobo import SO3wrench, SE3wrench, CMTM
 
 def inertia_diag_mat(inertia : np.ndarray, order : int = 1) -> np.ndarray:
     if inertia.shape != (6, 6):
@@ -44,7 +44,7 @@ def momentum_to_force_mat(link_cmtm : CMTM, force_order : int = 1, dim : int = 6
     if dim == 6:
       mat[:, :-dim] += CMTM.hat_adj(SE3wrench, v)
     elif dim == 3:
-      mat[:, :-dim] += CMTM.hat_adj(SO3, v)
+      mat[:, :-dim] += CMTM.hat_adj(SO3wrench, v)
     return Factorial.mat(force_order, dim) @ mat @ Factorial.inverse_mat(force_order+1, dim)
 
 def link_to_force_tan_map_mat(link_cmtm : CMTM, inertia : np.ndarray, force_order : int = 1, dim : int = 6) -> np.ndarray:
@@ -65,6 +65,6 @@ def link_to_force_tan_map_mat(link_cmtm : CMTM, inertia : np.ndarray, force_orde
     if dim == 6:
       m[:, :-dim] += (CMTM.hat_adj(SE3wrench, v) @ inertia_diag_mat(inertia, force_order) + CMTM.hat_commute_adj(SE3wrench, p)) 
     elif dim == 3:
-      m[:, :-dim] += (CMTM.hat_adj(SO3, v) @ inertia_diag_mat(inertia, force_order) + CMTM.hat_commute_adj(SO3, p))
+      m[:, :-dim] += (CMTM.hat_adj(SO3wrench, v) @ inertia_diag_mat(inertia, force_order) + CMTM.hat_commute_adj(SO3, p))
     mat[:, dim:] = Factorial.mat(force_order, dim) @ m @ Factorial.inverse_mat(force_order+1, dim)
     return mat
