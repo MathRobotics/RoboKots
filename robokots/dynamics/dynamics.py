@@ -6,10 +6,10 @@
 import math
 import numpy as np
 
+from mathrobo import FactorialVector, Factorial
 from mathrobo import SE3, SE3wrench, CMTM
 
 from ..basic.robot import JointStruct
-
 
 def diag_factorials(order : int, dim: int):
     v = np.repeat([math.factorial(i) for i in range(order)], dim)
@@ -59,18 +59,19 @@ def joint_dynamics(joint_select : np.ndarray, rel_frame : SE3, p_joint_force : n
     joint_torque = joint_select.T @ joint_force
     return joint_torque, joint_torque
 
-def link_momentum_cmtm(inertia : np.ndarray, vecs : np.ndarray) -> np.ndarray:
+def link_momentum_cmtm(inertia : np.ndarray, vel : FactorialVector) -> FactorialVector:
     """
     Calculate the link momentum and centripetal momentum.
     Args:
         inertia (numpy.ndarray): 6x6 spatial inertia matrix of the link.
-        vecs (numpy.ndarray): nx6 spatial vectors of the link.
+        vel (FactorialVector): nx6 spatial vectors of the link.
     Returns:
         numpy.ndarray: 6n spatial momentum vectors of the link.
     """
-    return (vecs @ inertia.T).reshape(-1)
+    vecs = (vel.vecs() @ inertia.T).reshape(-1, inertia.shape[0])
+    return FactorialVector(vecs)
 
-def link_force_cmtm(vels : np.ndarray, momentums : np.ndarray, dim : int = 6) -> np.ndarray:
+def link_force_cmtm(vel : FactorialVector, momentum : FactorialVector, dim : int = 6) -> np.ndarray:
     """
     Calculate the link force and centripetal momentum.
     Args:
@@ -79,18 +80,19 @@ def link_force_cmtm(vels : np.ndarray, momentums : np.ndarray, dim : int = 6) ->
     Returns:
         numpy.ndarray: dim x n spatial force vectors of the link.
     Note:    
-        o @ f = d/dt(o @ m) - hat_adj(o @ vel).T @ (o @ m)
-        f = o_inv @ d/dt(o @ m) - o_inv @ hat_adj(o @ vel).T @ (o @ m)
-          = d/dt(m) - o_inv @ hat_adj(o @ vel).T @ (o @ m)
+        o : inv_factorials(n, dim)
+        v : spatial velocity vectors 
+        f : spatial force vectors
+        m : spatial momentum vectors
+    Then,
+        o @ f = d/dt(o @ m) + hat_cadj(o @ v) @ (o @ m)
+        f = o_inv @ d/dt(o @ m) + o_inv @ hat_cadj(o @ v) @ (o @ m)
+          = d/dt(m) + o_inv @ hat_cadj(o @ v) @ (o @ m)
+          = mom_diff + v_x_mom
     """
-    o = diag_inv_factorials(momentums.shape[0]//dim -1, dim=dim)
-    o_inv = diag_factorials(momentums.shape[0]//dim -1, dim=dim)
-    v = np.zeros_like(vels)
-    
-    for i in range(momentums.shape[0]//dim-1):
-        v[i] = vels[i] / math.factorial(i)
-
-    return momentums[dim:] + o_inv @ CMTM.hat_adj(SE3wrench, v) @ o @ momentums[:-dim]
+    mom_diff = momentum.vecs()[1:].flatten()
+    v_x_mom = Factorial.mat(momentum._n-1, dim) @ CMTM.hat_adj(SE3wrench, vel.ifac_vecs()[:vel._n-1]) @ momentum.ifac_vecs()[:momentum._n-1].flatten()
+    return FactorialVector(mom_diff + v_x_mom)
 
 def link_dynamics_cmtm(inertia : np.ndarray, vecs : np.ndarray) -> np.ndarray:
     """
