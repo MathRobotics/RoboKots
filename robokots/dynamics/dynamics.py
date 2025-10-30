@@ -11,14 +11,6 @@ from mathrobo import SE3, SE3wrench, CMTM
 
 from ..basic.robot import JointStruct
 
-def diag_factorials(order : int, dim: int):
-    v = np.repeat([math.factorial(i) for i in range(order)], dim)
-    return np.diag(v)
-
-def diag_inv_factorials(order: int, dim: int):
-    v = np.repeat([1.0 / math.factorial(i) for i in range(order)], dim)
-    return np.diag(v)
-
 def link_momentum(inertia : np.ndarray, veloc : np.ndarray) -> np.ndarray:
     """
     Calculate the momentum of a link.
