@@ -3,7 +3,6 @@
 # 2025. 6.20 Created by T.Ishigaki
 # dynamics computation module by matrix formulation
 
-import math
 import numpy as np
 from mathrobo import Factorial
 from mathrobo import SO3wrench, SE3wrench, CMTM
