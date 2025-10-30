@@ -16,22 +16,6 @@ def inertia_diag_mat(inertia : np.ndarray, order : int = 1) -> np.ndarray:
     
     return np.kron(np.eye(order), inertia)
 
-def  natural_num_diag_mat(order : int = 1, dim : int = 6) -> np.ndarray:
-    '''
-    return diagonal matrix with natural numbers from 1 to order repeated dim times
-    size is (dim * order, dim * order)
-    '''
-    v = np.repeat(np.arange(1, order+1), dim)
-    return np.diag(v)
-
-def  natural_num_inv_diag_mat(order : int = 1, dim : int = 6) -> np.ndarray:
-    '''
-    return diagonal matrix with natural numbers from 1 to order repeated dim times
-    size is (dim * order, dim * order)
-    '''
-    v = np.repeat(np.arange(1, order + 1, dtype=float), dim)
-    return np.diag(1.0 / v)
-
 def momentum_to_force_mat(link_cmtm : CMTM, force_order : int = 1, dim : int = 6) -> np.ndarray:
     momentum_dof = dim * (force_order+1)
     force_dof = dim * force_order
