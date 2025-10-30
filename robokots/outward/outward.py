@@ -15,6 +15,7 @@ from ..basic.state import data_type_to_sub_func, data_type_dof
 
 from ..kinematics.base import convert_joint_to_data, convert_link_to_data
 from ..kinematics.kinematics import joint_local_cmtm, joint_rel_cmtm, joint_rel_frame
+from ..kinematics.kinematics_matrix import joint_select_diag_mat
 from ..kinematics.kinematics_soft_link import soft_link_local_cmtm, calc_link_local_point_frame
 
 from ..dynamics.base import spatial_inertia
@@ -189,6 +190,12 @@ def dynamics_cmtm(robot : RobotStruct, joint_motions, dynamics_order = 1) -> dic
     joint_momentum = CMVector(joint_momentums.reshape(-1,6))
     joint_force = link_force_cmtm(link_cmtm.cmvecs(), joint_momentum)
     state = vecs_to_state_dict(joint_force.vecs(), joint.name, "joint_force", dynamics_order)
+    state_dict.update(state)
+
+    if joint.dof == 0:
+      continue
+    joint_torque = joint_select_diag_mat(joint.select_mat, dynamics_order).T @ link_force.vec()
+    state = vecs_to_state_dict(joint_torque.reshape(-1, joint.dof), joint.name, "joint_torque", dynamics_order)
     state_dict.update(state)
 
   # Compute for the world link
