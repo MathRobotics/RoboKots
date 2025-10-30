@@ -6,7 +6,7 @@
 import math
 import numpy as np
 
-from mathrobo import FactorialVector, Factorial
+from mathrobo import CMVector, Factorial
 from mathrobo import SE3, SE3wrench, CMTM
 
 from ..basic.robot import JointStruct
@@ -51,19 +51,19 @@ def joint_dynamics(joint_select : np.ndarray, rel_frame : SE3, p_joint_force : n
     joint_torque = joint_select.T @ joint_force
     return joint_torque, joint_torque
 
-def link_momentum_cmtm(inertia : np.ndarray, vel : FactorialVector) -> FactorialVector:
+def link_momentum_cmtm(inertia : np.ndarray, vel : CMVector) -> CMVector:
     """
     Calculate the link momentum and centripetal momentum.
     Args:
         inertia (numpy.ndarray): 6x6 spatial inertia matrix of the link.
-        vel (FactorialVector): nx6 spatial vectors of the link.
+        vel (CMVector): nx6 spatial vectors of the link.
     Returns:
         numpy.ndarray: 6n spatial momentum vectors of the link.
     """
     vecs = (vel.vecs() @ inertia.T).reshape(-1, inertia.shape[0])
-    return FactorialVector(vecs)
+    return CMVector(vecs)
 
-def link_force_cmtm(vel : FactorialVector, momentum : FactorialVector, dim : int = 6) -> np.ndarray:
+def link_force_cmtm(vel : CMVector, momentum : CMVector, dim : int = 6) -> np.ndarray:
     """
     Calculate the link force and centripetal momentum.
     Args:
@@ -83,8 +83,8 @@ def link_force_cmtm(vel : FactorialVector, momentum : FactorialVector, dim : int
           = mom_diff + v_x_mom
     """
     mom_diff = momentum.vecs()[1:].flatten()
-    v_x_mom = Factorial.mat(momentum._n-1, dim) @ CMTM.hat_adj(SE3wrench, vel.ifac_vecs()[:vel._n-1]) @ momentum.ifac_vecs()[:momentum._n-1].flatten()
-    return FactorialVector(mom_diff + v_x_mom)
+    v_x_mom = Factorial.mat(momentum._n-1, dim) @ CMTM.hat_adj(SE3wrench, vel.cm_vecs()[:vel._n-1]) @ momentum.cm_vecs()[:momentum._n-1].flatten()
+    return CMVector(mom_diff + v_x_mom)
 
 def link_dynamics_cmtm(inertia : np.ndarray, vecs : np.ndarray) -> np.ndarray:
     """

@@ -5,7 +5,7 @@
 
 import numpy as np
 
-from mathrobo import FactorialVector
+from mathrobo import CMVector
 from mathrobo import SO3, SE3, CMTM, SE3wrench, numerical_difference, build_integrator
 
 from ..basic.robot import RobotStruct
@@ -160,7 +160,7 @@ def dynamics_cmtm(robot : RobotStruct, joint_motions, dynamics_order = 1) -> dic
 
     link_cmtm = state_dict_to_cmtm(state_dict, child.name, dynamics_order + 2)
 
-    link_vel = FactorialVector(link_cmtm.vecs())
+    link_vel = CMVector(link_cmtm.vecs())
     link_momentum = link_momentum_cmtm(inertia, link_vel)
     state = vecs_to_state_dict(link_momentum.vecs(), child.name, "link_momentum", dynamics_order+1)
     state_dict.update(state)
@@ -187,8 +187,8 @@ def dynamics_cmtm(robot : RobotStruct, joint_motions, dynamics_order = 1) -> dic
     state_dict.update(state)
 
     link_cmtm = state_dict_to_cmtm(state_dict, child.name, dynamics_order + 2)
-    link_vel = FactorialVector(link_cmtm.vecs())
-    joint_momentum = FactorialVector(joint_momentums.reshape(-1,6))
+    link_vel = CMVector(link_cmtm.vecs())
+    joint_momentum = CMVector(joint_momentums.reshape(-1,6))
     joint_force = link_force_cmtm(link_vel, joint_momentum)
     state = vecs_to_state_dict(joint_force.vecs(), joint.name, "joint_force", dynamics_order)
     state_dict.update(state)
@@ -198,7 +198,7 @@ def dynamics_cmtm(robot : RobotStruct, joint_motions, dynamics_order = 1) -> dic
   inertia = spatial_inertia(world_link.mass, world_link.inertia, world_link.cog)
   link_cmtm = state_dict_to_cmtm(state_dict, world_link.name, dynamics_order + 2)
 
-  link_vel = FactorialVector(link_cmtm.vecs())
+  link_vel = CMVector(link_cmtm.vecs())
   link_momentum = link_momentum_cmtm(inertia, link_vel)
   state = vecs_to_state_dict(link_momentum.vecs(), world_link.name, "link_momentum", dynamics_order+1)
   state_dict.update(state)
