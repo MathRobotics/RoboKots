@@ -316,6 +316,8 @@ def extract_dict_joint_info(state : dict, data_type : str, joint_name : str, fra
         return np.array(state[joint_name+"_joint_"+data_type])
     elif data_type == "torque":
         return np.array(state[joint_name+"_joint_torque"])
+    elif "torque_diff" in data_type:
+        return np.array(state[joint_name+"_joint_"+data_type])
     else:
         return np.array(state[joint_name+"_"+data_type])
 
