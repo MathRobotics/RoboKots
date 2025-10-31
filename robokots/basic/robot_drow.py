@@ -5,7 +5,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-def d_set_equall_aspect_3d(ax, data, margin):
+def set_equall_aspect_3d(ax, data, margin):
   margin = 0.1
   ax_min = np.zeros(3)
   ax_max = np.zeros(3)
@@ -25,7 +25,7 @@ def d_set_equall_aspect_3d(ax, data, margin):
   ax.set_ylim3d(ax_ave[1] - box_length[1]*box_ratio[1]*0.5, ax_ave[1] + box_length[1]*box_ratio[1]*0.5)
   ax.set_zlim3d(ax_ave[2] - box_length[2]*box_ratio[2]*0.5, ax_ave[2] + box_length[2]*box_ratio[2]*0.5)
   
-def d_show_robot(joint_conectivity, marker_pos, save = False):
+def show_robot(joint_conectivity, marker_pos, save = False):
   fig = plt.figure()
   ax = fig.add_subplot(111, projection='3d')
 
@@ -46,22 +46,27 @@ def d_show_robot(joint_conectivity, marker_pos, save = False):
   ax.set_ylabel('Y')
   ax.set_zlabel('Z')
   
-  d_set_equall_aspect_3d(ax, marker_pos, 0.1)
+  set_equall_aspect_3d(ax, marker_pos, 0.1)
 
   plt.show()
   if save:  
     plt.savefig('simple_draw.png')
 
-def d_show_link_points(link_pos):
-  fig = plt.figure()
-  ax = fig.add_subplot(111, projection='3d')
-
-  ax.scatter(link_pos[:,0], link_pos[:,1], link_pos[:,2], c='r', marker='o')
-
-  ax.set_xlabel('X')
-  ax.set_ylabel('Y')
-  ax.set_zlabel('Z')
-
-  d_set_equall_aspect_3d(ax, link_pos, 0.1)
-
+def show_link_points(link_pos, ax = None, dimension=3):
+  if ax is None:
+    plot = plt.figure()
+    if dimension == 2:
+      ax = plot.add_subplot(111)
+      ax.axis('equal')
+      ax.set_xlabel('X')
+      ax.set_ylabel('Y')
+      ax.grid()
+    elif dimension == 3:
+      ax = plot.add_subplot(111, projection='3d')
+      set_equall_aspect_3d(ax, link_pos, 0.1)
+      ax.set_xlabel('X')
+      ax.set_ylabel('Y')
+      ax.set_zlabel('Z')
+      
+  ax.scatter(link_pos[:,0], link_pos[:,1], c='r', marker='o')  
   plt.show()

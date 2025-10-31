@@ -324,23 +324,21 @@ class Kots():
       conectivity[i, 0] = joint.child_link_id
       conectivity[i, 1] = joint.parent_link_id
 
-    d_show_robot(conectivity, dict_to_links_pos(self.state_dict_, self.robot_.link_names), save)
+    show_robot(conectivity, dict_to_links_pos(self.state_dict_, self.robot_.link_names), save)
 
   def show_link_points(self):
     print(dict_to_links_pos(self.state_dict_, self.robot_.link_names))
-    d_show_link_points(dict_to_links_pos(self.state_dict_, self.robot_.link_names))
+    show_link_points(dict_to_links_pos(self.state_dict_, self.robot_.link_names))
 
-  def show_target_link_points(self):
+  def show_target_link_points(self, plt = None, dimension=3):
     if not self.target_:
       raise ValueError("target_ is not set")
-    d_show_link_points(dict_to_links_pos(self.state_dict_, self.target_.target_names))
+    show_link_points(dict_to_links_pos(self.state_dict_, self.target_.target_names), plt, dimension)
 
   def target_link_pos_traj(self):
     if not self.target_:
       raise ValueError("target_ is not set")
     return self.state_.extract_links_info_traj("pos", self.target_.target_names)
 
-  def show_points(self, points):
-    d_show_link_points(points)
-
-  
+  def show_points(self, points, ax = None, dimension=3):
+    show_link_points(points, ax, dimension)
