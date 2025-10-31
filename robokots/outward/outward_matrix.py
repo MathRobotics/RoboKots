@@ -72,6 +72,46 @@ def total_link_to_joint_momentum_mat(r : RobotStruct, state : dict, order : int 
             mat[i*n_:(i+1)*n_, j*n_:(j+1)*n_] = rel_cmtm_force.mat_adj()
     return mat
 
+def total_world_link_cmtm(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
+    n_ = dim * order
+    mat = np.zeros((r.link_num * n_, r.link_num * n_))
+
+    for i, link in enumerate(r.links):
+        cmtm = state_dict_to_cmtm(state, link.name, order)
+        mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = cmtm.mat_adj()
+    return mat
+
+def total_world_link_cmtm_inv(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
+    n_ = dim * order
+    mat = np.zeros((r.link_num * n_, r.link_num * n_))
+
+    for i, link in enumerate(r.links):
+        cmtm = state_dict_to_cmtm(state, link.name, order)
+        mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = cmtm.mat_adj_inv()
+    return mat
+
+def total_world_joint_to_link_momentum_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
+    n_ = dim * order
+    mat = np.zeros((r.link_num * n_, r.joint_num * n_))
+
+    for i, joint in enumerate(r.joints):
+        p_id = joint.parent_link_id
+        c_id = joint.child_link_id
+        mat[i*n_:(i+1)*n_, p_id*n_:(p_id+1)*n_] = np.eye(n_)
+        mat[i*n_:(i+1)*n_, c_id*n_:(c_id+1)*n_] = - np.eye(n_)
+    return mat
+
+def total_world_link_to_joint_momentum_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
+    n_ = dim * order
+    mat = np.zeros((r.joint_num * n_, r.link_num * n_))
+    for i, joint in enumerate(r.joints):
+        link_route = []
+        joint_route = []
+        r.route_end_joints(joint, link_route, joint_route)
+        for j in link_route:
+            mat[i*n_:(i+1)*n_, j*n_:(j+1)*n_] = np.eye(n_)
+    return mat
+
 def total_link_inertia_mat(r : RobotStruct, order : int = 3, dim : int = 6) -> np.ndarray:
     n_ = dim * order
     mat = np.zeros((r.link_num * n_, r.link_num * n_))
