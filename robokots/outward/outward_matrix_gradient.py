@@ -18,8 +18,9 @@ from ..dynamics.base import spatial_inertia
 from ..dynamics.dynamics_matrix import inertia_diag_mat, momentum_to_force_mat, link_to_force_tan_map_mat
 from ..kinematics.kinematics_matrix import joint_select_diag_mat
 
+from ..total import total_link_inertia_mat
+
 from .outward import dynamics_cmtm as outward_dynamics
-from .outward_matrix import total_link_inertia_mat
 
 def total_joint_to_link_vel_grad_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
     n_ = dim * order
@@ -78,16 +79,16 @@ def total_coord_to_link_grad_mat(r : RobotStruct, state : dict, order : int = 3,
 def total_coord_to_link_momentum_grad_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
     return total_link_inertia_mat(r, order=order, dim=dim) @ total_coord_to_link_grad_mat(r, state, order, dim)
 
-from .outward_matrix import total_link_to_joint_momentum_mat, total_world_link_to_joint_momentum_mat
-from .outward_matrix import total_world_joint_cmtm_wrench_inv, total_world_link_cmtm_wrench
+from ..total import total_link_to_joint_wrench_mat, total_world_link_to_joint_wrench_mat
+from ..total import total_world_joint_cmtm_wrench_inv, total_world_link_cmtm_wrench
 def total_coord_to_joint_momentum_grad_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
     link_momentum = extract_dict_total_link_cmvec(state, r.link_names, "link_momentum")
-    t_l2j_moment = total_world_link_to_joint_momentum_mat(r, state, order)
+    t_l2j_moment = total_world_link_to_joint_wrench_mat(r, state, order)
     world_joint_momentum = t_l2j_moment @ total_world_link_cmtm_wrench(r, state, order, dim) @ link_momentum
     a1 = - total_world_joint_cmtm_wrench_inv(r, state, order, dim) @ CMTM.hat_adj
     a2 = total_world_link_cmtm_wrench(r, state, order, dim) @ t_l2j_moment
     j1 = (a1 + a2) @ total_joint_to_link_vel_grad_mat(r, state, order, dim)
-    j2 = total_link_to_joint_momentum_mat(r, state, order, dim) @ total_coord_to_link_momentum_grad_mat(r, state, order, dim)
+    j2 = total_link_to_joint_wrench_mat(r, state, order, dim) @ total_coord_to_link_momentum_grad_mat(r, state, order, dim)
     return j2
 
 def total_coord_to_link_force_grad_mat(r : RobotStruct, state : dict, force_order : int = 1, dim : int = 6) -> np.ndarray:
