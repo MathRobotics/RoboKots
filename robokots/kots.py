@@ -8,7 +8,7 @@ from typing import List, Dict, Any
 from .basic.motion import RobotMotions
 from .basic.state_df import RobotState
 from .basic.state import keys_order, keys_time_order, filter_keys_kinematics, filter_keys_momentum, filter_keys_force, filter_keys_torque
-from .basic.state_dict import extract_dict_link_info, extract_dict_joint_info, dict_to_links_pos, print_state_dict
+from .basic.state_dict import extract_dict_link_info, extract_dict_joint_info, state_dict_to_links_pos, print_state_dict
 from .basic.robot import RobotStruct
 from .basic.target import TargetList
 from .basic.robot_drow import *
@@ -324,16 +324,16 @@ class Kots():
       conectivity[i, 0] = joint.child_link_id
       conectivity[i, 1] = joint.parent_link_id
 
-    show_robot(conectivity, dict_to_links_pos(self.state_dict_, self.robot_.link_names), save)
+    show_robot(conectivity, state_dict_to_links_pos(self.state_dict_, self.robot_.link_names), save)
 
   def show_link_points(self):
-    print(dict_to_links_pos(self.state_dict_, self.robot_.link_names))
-    show_link_points(dict_to_links_pos(self.state_dict_, self.robot_.link_names))
+    print(state_dict_to_links_pos(self.state_dict_, self.robot_.link_names))
+    show_link_points(state_dict_to_links_pos(self.state_dict_, self.robot_.link_names))
 
   def show_target_link_points(self, plt = None, dimension=3):
     if not self.target_:
       raise ValueError("target_ is not set")
-    show_link_points(dict_to_links_pos(self.state_dict_, self.target_.target_names), plt, dimension)
+    show_link_points(state_dict_to_links_pos(self.state_dict_, self.target_.target_names), plt, dimension)
 
   def target_link_pos_traj(self):
     if not self.target_:

@@ -140,7 +140,7 @@ def vecs_to_state_dict(vec : np.ndarray, name : str, type_name : str, order : in
 
     return state
 
-def dict_to_link_pos(state : dict, name : str) -> np.ndarray:
+def state_dict_to_link_pos(state : dict, name : str) -> np.ndarray:
     '''
     Convert state data to link position
     Args:
@@ -153,7 +153,7 @@ def dict_to_link_pos(state : dict, name : str) -> np.ndarray:
 
     return pos
 
-def dict_to_links_pos(state : dict, link_names : list) -> np.ndarray:
+def state_dict_to_links_pos(state : dict, link_names : list) -> np.ndarray:
     '''
     Convert state data to link positions
     Args:
@@ -164,7 +164,7 @@ def dict_to_links_pos(state : dict, link_names : list) -> np.ndarray:
     '''
     pos_list = []
     for name in link_names:
-        pos = dict_to_link_pos(state, name)
+        pos = state_dict_to_link_pos(state, name)
         pos_list.append(pos)
     
     return np.array(pos_list)
