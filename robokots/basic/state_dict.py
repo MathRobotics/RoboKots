@@ -2,7 +2,8 @@
 
 import re
 import numpy as np
-from mathrobo import SE3, CMTM, SO3
+from mathrobo import CMVector
+from mathrobo import SE3, SE3wrench, CMTM, CMTM, SO3
 
 from .state import keys, keys_order, keys_time_order, keys_name
 
@@ -198,14 +199,14 @@ def state_dict_to_frame(state : dict, name : str) -> SE3:
 
     return mat
 
-def state_dict_to_cmtm(state : dict, name : str, order = None) -> CMTM:
+def __state_dict_to_cmtm_values(state : dict, name : str, order = None) -> tuple[SE3, np.ndarray]:
     '''
-    Convert state data to CMTM
+    Convert state data to CMTM values
     Args:
         state (dict): state data
         name (str): name of the link
     Returns:
-        CMTM: CMTM object
+        tuple: (SE3, np.ndarray)
     '''
     if order is None:
         order = count_dict_time_order(state)
@@ -225,9 +226,38 @@ def state_dict_to_cmtm(state : dict, name : str, order = None) -> CMTM:
         for i in range(order-keys_order["acc"]):
             vec[i+2] = np.array(state[name+"_acc_diff"+str(i+1)])
     
+    return mat, vec
+
+def state_dict_to_cmtm(state : dict, name : str, order = None) -> CMTM:
+    '''
+    Convert state data to CMTM
+    Args:
+        state (dict): state data
+        name (str): name of the link
+    Returns:
+        CMTM: CMTM object
+    '''
+    mat, vec = __state_dict_to_cmtm_values(state, name, order)
+
     cmtm = CMTM[SE3](mat, vec)
 
     return cmtm
+
+def state_dict_to_cmtm_wrench(state : dict, name : str, order = None) -> CMTM:
+    '''
+    Convert state data to CMTM
+    Args:
+        state (dict): state data
+        name (str): name of the link
+    Returns:
+        CMTM: CMTM object
+    '''
+    mat, vec = __state_dict_to_cmtm_values(state, name, order)
+
+    cmtm = CMTM[SE3wrench](mat, vec)
+
+    return cmtm
+
 
 def state_dict_to_rel_frame(state : dict, base_name : str, target_name : str) -> SE3:
     '''
@@ -261,6 +291,22 @@ def state_dict_to_rel_cmtm(state : dict, base_name : str, target_name : str, ord
 
     return rel_cmtm
 
+def state_dict_to_rel_cmtm_wrench(state : dict, base_name : str, target_name : str, order = None) -> CMTM:
+    '''
+    Convert state data to relative CMTM
+    Args:
+        state (dict): state data
+        base_name (str): name of the base link
+        target_name (str): name of the target link
+    Returns:
+        CMTM: CMTM object
+    '''
+    base_cmtm = state_dict_to_cmtm_wrench(state, base_name, order)
+    target_cmtm = state_dict_to_cmtm_wrench(state, target_name, order)
+    rel_cmtm = base_cmtm.inv() @ target_cmtm
+
+    return rel_cmtm
+
 def state_dict_to_vecs(state : dict, name : str, type_name : str) -> np.ndarray:
     '''
     Convert state data to vector
@@ -282,6 +328,28 @@ def state_dict_to_vecs(state : dict, name : str, type_name : str) -> np.ndarray:
         raise ValueError(f"Invalid name: {name} or type_name: {type_name}.")
 
     return np.concatenate(vecs)
+
+def state_dict_to_cmvec(state : dict, name : str, type_name : str) -> CMVector:
+    '''
+    Convert state data to vector
+    Args:
+        state (dict): state data
+        name (str): name of the link or joint
+        type_name (str): type of the vector (e.g., "link", "joint")
+    Returns:
+        CMVector: vector
+    '''
+    vecs = []
+    
+    for k in state.keys():
+        if k.startswith(name + "_") and k.endswith("_" + type_name):
+            vecs.append(np.array(state[k]))
+        elif re.match(rf"{name}_{type_name}_diff\d+", k):
+            vecs.append(np.array(state[k]))
+    if len(vecs) == 0:
+        raise ValueError(f"Invalid name: {name} or type_name: {type_name}.")
+
+    return CMVector(np.stack(vecs))
 
 def extract_dict_link_info(state : dict, data_type : str, link_name : str, frame = "dummy", rel_frame = 'dummy'):
     if data_type == "rot":
@@ -321,8 +389,15 @@ def extract_dict_joint_info(state : dict, data_type : str, joint_name : str, fra
     else:
         return np.array(state[joint_name+"_"+data_type])
 
+def extract_dict_total_link_cmvec(state : dict, link_name_list : str, data_type : str) -> CMVector:
+    total_vec = CMVector.zeros((len(link_name_list), vec.size))
+    for i, link_name in enumerate(link_name_list):
+        vec = state_dict_to_cmvec(state, link_name, data_type)   
+        total_vec[i] = vec.cm_vec()
+    return total_vec.flatten()
+
 def extract_dict_total_info(data : dict, data_type : str, name : str, frame = "dummy", rel_frame = 'dummy'):
-    'dummy'
+    pass
 
 def extract_dict_info(data : dict, data_type : str, group : str, name : str, frame = "dummy", rel_frame = 'dummy'):
 

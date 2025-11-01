@@ -8,7 +8,8 @@ import numpy as np
 from mathrobo import CMTM, SE3wrench, numerical_grad
 
 from ..basic.robot import RobotStruct
-from ..basic.state_dict import state_dict_to_rel_cmtm, state_dict_to_cmtm
+from ..basic.state_dict import state_dict_to_cmtm, state_dict_to_rel_cmtm
+from ..basic.state_dict import state_dict_to_cmtm_wrench, state_dict_to_rel_cmtm_wrench
 from ..basic.state import keys_order, data_type_dof
 from ..basic.state_dict import extract_dict_link_info
 from ..basic.motion import RobotMotions
