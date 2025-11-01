@@ -1,9 +1,46 @@
 import numpy as np
+from mathrobo import SE3, SE3wrench, CMTM
 
 from ..basic.robot import RobotStruct
 from ..basic.state_dict import state_dict_to_cmtm, state_dict_to_rel_cmtm
 
 from ..kinematics.kinematics_matrix import joint_select_diag_mat
+
+def total_cmtm_hat(vec : np.ndarray, mat_type, num : int, order : int, dim : int = 6) -> np.ndarray:
+    '''
+     Create a block diagonal matrix where each block is the hat matrix of the given vector.
+     Args:
+        vec (np.ndarray): Input vector of shape (num * dim * order, ).
+        mat_type: Type of the matrix to be created using CMTM.hat.
+        num (int): Number of blocks.
+        order (int): Order of the CMTM.
+        dim (int, optional): Dimension of the space. Defaults to 6.
+    '''
+    n_ = dim * order
+    mat = np.zeros((num * n_, num * n_))
+
+    for i in range(num):
+        start = i * n_
+        mat[start:start+n_, start:start+n_] = CMTM.hat_adj(mat_type, vec[start:start+n_])
+    return mat
+
+def total_cmtm_hat_commute(vec : np.ndarray, mat_type, num : int, order : int, dim : int = 6) -> np.ndarray:
+    '''
+    Create a block diagonal matrix where each block is the commute matrix of the given type.
+    Args:
+        vec (np.ndarray): Input vector of shape (num * dim * order, ).  
+        mat_type: Type of the matrix to be created using CMTM.commute.
+        num (int): Number of blocks.
+        order (int): Order of the CMTM.
+        dim (int, optional): Dimension of the space. Defaults to 6.
+    '''
+    n_ = dim * order
+    mat = np.zeros((num * n_, num * n_))
+
+    for i in range(num):
+        start = i * n_
+        mat[start:start+n_, start:start+n_] = CMTM.hat_commute_adj(mat_type, vec[start:start+n_])
+    return mat
 
 def total_world_link_cmtm(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
     n_ = dim * order
