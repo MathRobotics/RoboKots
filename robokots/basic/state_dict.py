@@ -329,7 +329,7 @@ def state_dict_to_vecs(state : dict, name : str, type_name : str) -> np.ndarray:
 
     return np.concatenate(vecs)
 
-def state_dict_to_cmvec(state : dict, name : str, type_name : str) -> CMVector:
+def state_dict_to_cmvec(state : dict, name : str, type_name : str, order : int) -> CMVector:
     '''
     Convert state data to vector
     Args:
@@ -340,12 +340,17 @@ def state_dict_to_cmvec(state : dict, name : str, type_name : str) -> CMVector:
         CMVector: vector
     '''
     vecs = []
-    
+
+    l = 0
     for k in state.keys():
         if k.startswith(name + "_") and k.endswith("_" + type_name):
             vecs.append(np.array(state[k]))
+            l += 1
         elif re.match(rf"{name}_{type_name}_diff\d+", k):
             vecs.append(np.array(state[k]))
+            l += 1
+        if l >= order:
+            break
     if len(vecs) == 0:
         raise ValueError(f"Invalid name: {name} or type_name: {type_name}.")
 
@@ -389,9 +394,9 @@ def extract_dict_joint_info(state : dict, data_type : str, joint_name : str, fra
     else:
         return np.array(state[joint_name+"_"+data_type])
 
-def extract_dict_total_link_cmvec(state : dict, link_name_list : str, data_type : str) -> CMVector:
+def extract_dict_total_link_cmvec(state : dict, link_name_list : str, data_type : str, order : int) -> CMVector:
     for i, link_name in enumerate(link_name_list):
-        vec = state_dict_to_cmvec(state, link_name, data_type)  
+        vec = state_dict_to_cmvec(state, link_name, data_type, order)  
         if i == 0:
             total_vec = np.zeros((len(link_name_list), vec._len)) 
         total_vec[i] = vec.cm_vec()
