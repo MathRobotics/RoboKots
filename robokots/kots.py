@@ -20,7 +20,7 @@ from .outward.outward import kinematics as outward_kinematics
 from .outward.outward import dynamics_cmtm as outward_dynamics
 from .outward.outward import link_diff_kinematics_numerical, calc_link_total_point_frame
 from .outward.outward_gradient import link_jacobian, link_cmtm_jacobian, link_jacobian_numerical 
-from .outward.outward_matrix_gradient import link_momentum_jacobian, link_force_jacobian, link_force_jacobian_numerical, joint_momentum_jacobian   
+from .outward.outward_total_gradient import link_momentum_jacobian, link_force_jacobian, link_force_jacobian_numerical, joint_momentum_jacobian   
 
 default_order = 3 
 default_dim = 3

@@ -79,17 +79,22 @@ def total_coord_to_link_grad_mat(r : RobotStruct, state : dict, order : int = 3,
 def total_coord_to_link_momentum_grad_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
     return total_link_inertia_mat(r, order=order, dim=dim) @ total_coord_to_link_grad_mat(r, state, order, dim)
 
+from ..total import total_cmtm_hat_commute
 from ..total import total_link_to_joint_wrench_mat, total_world_link_to_joint_wrench_mat
 from ..total import total_world_joint_cmtm_wrench_inv, total_world_link_cmtm_wrench
 def total_coord_to_joint_momentum_grad_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
-    link_momentum = extract_dict_total_link_cmvec(state, r.link_names, "link_momentum")
+    link_momentum = extract_dict_total_link_cmvec(state, r.link_names, "link_momentum", order)
+    print("link_momentum:", link_momentum.shape)
     t_l2j_moment = total_world_link_to_joint_wrench_mat(r, order, dim)
     world_joint_momentum = t_l2j_moment @ total_world_link_cmtm_wrench(r, state, order, dim) @ link_momentum
-    a1 = - total_world_joint_cmtm_wrench_inv(r, state, order, dim) 
-    a2 = total_world_joint_cmtm_wrench_inv(r, state, order, dim) @ t_l2j_moment
-    # j1 = (a1 + a2) @ total_joint_to_link_vel_grad_mat(r, state, order, dim)
+    print("world_joint_momentum:", world_joint_momentum.shape)
+    a1 = - total_world_joint_cmtm_wrench_inv(r, state, order, dim) \
+         @ total_cmtm_hat_commute(world_joint_momentum, SE3wrench, order, dim)
+    a2 = total_world_joint_cmtm_wrench_inv(r, state, order, dim) @ t_l2j_moment \
+         @ total_cmtm_hat_commute(link_momentum, SE3wrench, order, dim)
+    j1 = (a1 + a2) @ total_joint_to_link_vel_grad_mat(r, state, order, dim)
     j2 = total_link_to_joint_wrench_mat(r, state, order, dim) @ total_coord_to_link_momentum_grad_mat(r, state, order, dim)
-    return j2
+    return j1 + j2
 
 def total_coord_to_link_force_grad_mat(r : RobotStruct, state : dict, force_order : int = 1, dim : int = 6) -> np.ndarray:
     return total_link_to_force_grad_mat(r, state, force_order=force_order, dim=dim) @ total_coord_to_link_grad_mat(r, state, force_order+2, dim)
