@@ -36,10 +36,9 @@ def total_cmtm_hat_commute(vec : np.ndarray, mat_type, num : int, order : int, d
     '''
     n_ = dim * order
     mat = np.zeros((num * n_, num * n_))
-
     for i in range(num):
         start = i * n_
-        mat[start:start+n_, start:start+n_] = CMTM.hat_commute_adj(mat_type, vec[start:start+n_])
+        mat[start:start+n_, start:start+n_] = CMTM.hat_commute_adj(mat_type, vec[start:start+n_].reshape(order, dim))
     return mat
 
 def total_world_link_cmtm(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
