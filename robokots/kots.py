@@ -11,7 +11,7 @@ from .basic.state import keys_order, keys_time_order, filter_keys_kinematics, fi
 from .basic.state_dict import extract_dict_link_info, extract_dict_joint_info, state_dict_to_links_pos, print_state_dict
 from .basic.robot import RobotStruct
 from .basic.target import TargetList
-from .basic.robot_drow import *
+from .basic.robot_drow import show_robot, show_robot_traj, RobotColor, show_link_points
 
 from .robot_io import *
 from .misc import check_valid_str_list, check_valid_data_type_list, count_time_order, filter_cmtm_row_data_to_target
@@ -326,8 +326,20 @@ class Kots():
 
     show_robot(conectivity, state_dict_to_links_pos(self.state_dict_, self.robot_.link_names), save)
 
+  def show_robot_traj(self, traj = None, save = False, ax = None, color : RobotColor = None):
+    conectivity = np.zeros((self.robot_.joint_num, 2), dtype='int64')
+    for i in range(self.robot_.joint_num):
+      joint = self.robot_.joints[i]
+      conectivity[i, 0] = joint.child_link_id
+      conectivity[i, 1] = joint.parent_link_id
+
+    if traj is None:
+      link_pos_traj = self.state_.extract_links_info_traj("pos", self.robot_.link_names)
+    else:
+      link_pos_traj = traj
+    show_robot_traj(conectivity, link_pos_traj, save, ax, color)
+
   def show_link_points(self):
-    print(state_dict_to_links_pos(self.state_dict_, self.robot_.link_names))
     show_link_points(state_dict_to_links_pos(self.state_dict_, self.robot_.link_names))
 
   def show_target_link_points(self, plt = None, dimension=3):

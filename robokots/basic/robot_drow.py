@@ -5,6 +5,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+class RobotColor:
+  def __init__(self, link_color = 'blue', joint_color = 'red'):
+    self.link_color = link_color
+    self.joint_color = joint_color
+
+
 def set_equall_aspect_3d(ax, data, margin):
   margin = 0.1
   ax_min = np.zeros(3)
@@ -49,6 +55,43 @@ def show_robot(joint_conectivity, marker_pos, save = False):
   set_equall_aspect_3d(ax, marker_pos, 0.1)
 
   plt.show()
+  if save:  
+    plt.savefig('simple_draw.png')
+
+def show_robot_traj(joint_conectivity, marker_pos_list, save = False, ax = None, color : RobotColor = None):
+  if ax is None:
+    fig = plt.figure()
+    ax_ = fig.add_subplot(111, projection='3d')
+  else:
+    ax_ = ax
+
+  if color is None:
+    color = RobotColor()
+
+  arr_swapped = marker_pos_list.transpose(1, 0, 2)
+
+  for marker_pos in arr_swapped:
+    ax_.scatter(marker_pos[:,0], marker_pos[:,1], marker_pos[:,2], c=color.joint_color, marker='o', alpha=0.1)
+    for c in joint_conectivity:
+      c_id = c[0]
+      p_id = c[1]
+      if 0 <= c_id < marker_pos.shape[0] and 0 <= p_id < marker_pos.shape[0]:
+        ax_.plot(
+          [marker_pos[c_id,0], marker_pos[p_id,0]], 
+          [marker_pos[c_id,1], marker_pos[p_id,1]], 
+          [marker_pos[c_id,2], marker_pos[p_id,2]], color.link_color, alpha=0.1)
+      else:
+        print(f"Invalid indices: c_id={c_id}, p_id={p_id}")
+    
+  ax_.set_xlabel('X')
+  ax_.set_ylabel('Y')
+  ax_.set_zlabel('Z')
+  
+  set_equall_aspect_3d(ax_, marker_pos, 0.1)
+
+  if ax is None:
+    plt.show()
+
   if save:  
     plt.savefig('simple_draw.png')
 
