@@ -88,14 +88,14 @@ def total_coord_to_joint_momentum_grad_mat(r : RobotStruct, state : dict, order 
     t_w_l_wrench_inv = total_world_joint_cmtm_wrench_inv(r, state, order, dim)
     t_w_j_wrench = total_world_link_cmtm_wrench(r, state, order, dim)
     world_joint_momentum = t_l2j_moment @ t_w_j_wrench @ link_momentum
-    print("world_joint_momentum:", world_joint_momentum.shape)
-    j1 = total_link_to_joint_wrench_mat(r, state, order, dim) @ total_coord_to_link_momentum_grad_mat(r, state, order, dim)
-    j2 = t_w_l_wrench_inv @ t_l2j_moment @ t_w_j_wrench \
-         @ total_cmtm_hat_commute(link_momentum, SE3wrench, num=r.link_num, order=order, dim=dim) \
-         @ total_joint_to_link_vel_grad_mat(r, state, order, dim)
-    j3 = -t_w_l_wrench_inv @ total_cmtm_hat_commute(world_joint_momentum, SE3wrench, num=r.joint_num, order=order, dim=dim)
 
-    return j1 + j2
+    j1 = total_link_to_joint_wrench_mat(r, state, order, dim) @ total_coord_to_link_momentum_grad_mat(r, state, order, dim)
+    j2 = t_w_l_wrench_inv @ t_l2j_moment @ t_w_j_wrench @ total_cmtm_hat_commute(link_momentum, SE3wrench, num=r.link_num, order=order, dim=dim) \
+         @ total_coord_to_link_grad_mat(r, state, order, dim)
+    j3 = -t_w_l_wrench_inv @ total_cmtm_hat_commute(world_joint_momentum, SE3wrench, num=r.joint_num, order=order, dim=dim) \
+         @ total_coord_to_joint_grad_mat(r, state, order, dim)
+
+    return j1 + j2 + j3
 
 def total_coord_to_link_force_grad_mat(r : RobotStruct, state : dict, force_order : int = 1, dim : int = 6) -> np.ndarray:
     return total_link_to_force_grad_mat(r, state, force_order=force_order, dim=dim) @ total_coord_to_link_grad_mat(r, state, force_order+2, dim)

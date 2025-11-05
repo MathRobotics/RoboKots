@@ -21,7 +21,7 @@ def total_cmtm_hat(vec : np.ndarray, mat_type, num : int, order : int, dim : int
 
     for i in range(num):
         start = i * n_
-        mat[start:start+n_, start:start+n_] = CMTM.hat_adj(mat_type, vec[start:start+n_])
+        mat[start:start+n_, start:start+n_] = CMTM.hat_adj(mat_type, vec[start:start+n_].reshape(order, dim))
     return mat
 
 def total_cmtm_hat_commute(vec : np.ndarray, mat_type, num : int, order : int, dim : int = 6) -> np.ndarray:
