@@ -212,3 +212,6 @@ class RobotState:
 
   def import_state(self, data : dict):
     self.state_df.add_row(data)
+
+  def clear_state(self) -> dict:
+    return self.state_df.df.clear()
