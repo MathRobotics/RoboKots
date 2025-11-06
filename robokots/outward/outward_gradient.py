@@ -14,6 +14,8 @@ from ..kinematics.kinematics_soft_link import part_soft_link_jacob, part_soft_li
 
 
 from .outward import kinematics as outward_kinematics
+from .outward import dynamics as outward_dynamics
+from robokots.basic import state
 
 def __target_link_part_joint_jacob(target_link : LinkStruct, joint : JointStruct, rel_frame : SE3) -> np.ndarray:
   if target_link.id == joint.child_link_id:
@@ -180,3 +182,31 @@ def link_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_na
     jacobs[dof*i:dof*(i+1)] = numerical_grad(motion, kinematics_func, sub_func = data_type_to_sub_func(data_type))
 
   return jacobs
+
+def link_dynamics_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str], data_type : str, order_ : int = 3) -> np.ndarray:
+    if order_ is None:
+      order = 3
+    else:
+      order = order_ + 2
+    dof = data_type_dof(data_type, dim = 3) * order_
+
+    jacobs = np.zeros((dof*len(link_name_list),robot.dof*order))
+    motion = np.zeros(robot.dof * order)
+
+    for joint in robot.joints:
+        m = motions.joint_motions(joint.dof, joint.dof_index, order)
+        motion[joint.dof_index*order:joint.dof_index*order+joint.dof*order] = m.flatten()
+    
+    for link in robot.links:
+        m = motions.link_motions(link.dof, link.dof_index, order)
+        motion[link.dof_index*order:link.dof_index*order+link.dof*order] = m.flatten()
+
+    for i in range(len(link_name_list)):
+        def dynamics_func(x):
+          state = outward_kinematics(robot, x, order)
+          y = extract_dict_link_info(state, data_type, link_name_list[i])
+          return y
+
+        jacobs[dof*i:dof*(i+1)] = numerical_grad(motion, dynamics_func)
+
+    return jacobs
