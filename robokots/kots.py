@@ -147,11 +147,12 @@ class Kots():
     for joint in self.robot_.joints:
       m = self.motions_.joint_motions(joint.dof, joint.dof_index, self.order_)
       m = np.append(m, last_diff[joint.dof_index:joint.dof_index+joint.dof])
-      motion_diff[joint.dof_index*order:joint.dof_index*order+joint.dof*order] = m.flatten()[1:order+1]
+      motion_diff[joint.dof_index*order:joint.dof_index*order+joint.dof*order] = m.flatten()[joint.dof:order+joint.dof]
     for link in self.robot_.links:
       m = self.motions_.link_motions(link.dof, link.dof_index, self.order_)
       m = np.append(m, last_diff[link.dof_index:link.dof_index+link.dof])
-      motion_diff[link.dof_index*order:link.dof_index*order+link.dof*order] = m.flatten()[1:order+1]
+      motion_diff[link.dof_index*order:link.dof_index*order+link.dof*order] = m.flatten()[link.dof:order+link.dof]
+    return motion_diff
     return motion_diff
 
   def state_df(self):
