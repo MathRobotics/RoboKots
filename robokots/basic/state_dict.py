@@ -393,6 +393,13 @@ def extract_dict_joint_info(state : dict, data_type : str, joint_name : str, fra
         return np.array(state[joint_name+"_joint_"+data_type])
     else:
         return np.array(state[joint_name+"_"+data_type])
+    
+def extract_dict_total_link(state : dict, link_name_list : str, data_type : str, order : int) -> CMVector:
+    for i, link_name in enumerate(link_name_list):
+        vec = extract_dict_link_info(state, link_name, data_type, order)  
+        if i == 0:
+            total_vec = np.zeros((len(link_name_list), vec._len)) 
+    return total_vec.flatten()
 
 def extract_dict_total_link_cmvec(state : dict, link_name_list : str, data_type : str, order : int) -> CMVector:
     for i, link_name in enumerate(link_name_list):
