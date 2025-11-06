@@ -4,6 +4,7 @@
 
 import numpy as np
 import re
+import math
 
 class RobotMotions:
   motions : np.ndarray = np.array([])
@@ -92,6 +93,15 @@ class RobotMotions:
       values += (self.gen_value(joint_dof, joint_dof_index, self.aliases[i]),)
 
     return np.array(values)
+  
+  def joint_motions_cm(self, joint_dof : int, joint_dof_index : int, order = None):
+    if order is None:
+      order = self.motion_num
+    values = ()
+    for i in range(order):
+      values += (self.gen_value(joint_dof, joint_dof_index, self.aliases[i])/math.factorial(i),)
+
+    return np.array(values).flatten()
 
   def link_motions(self, link_dof : int, link_dof_index : int, order = None):
     if order is None:
@@ -99,5 +109,14 @@ class RobotMotions:
     values = ()
     for i in range(order):
       values += (self.gen_value(link_dof, link_dof_index, self.aliases[i]),)
+
+    return np.array(values)
+  
+  def link_motions(self, link_dof : int, link_dof_index : int, order = None):
+    if order is None:
+      order = self.motion_num
+    values = ()
+    for i in range(order):
+      values += (self.gen_value(link_dof, link_dof_index, self.aliases[i])/math.factorial(i),)
 
     return np.array(values)

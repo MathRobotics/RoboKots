@@ -153,6 +153,33 @@ class Kots():
       m = np.append(m, last_diff[link.dof_index:link.dof_index+link.dof])
       motion_diff[link.dof_index*order:link.dof_index*order+link.dof*order] = m.flatten()[link.dof:order+link.dof]
     return motion_diff
+  
+  def motion_cm(self, order : int = None):
+    if order is None:
+      order = self.order_
+    motion = np.zeros(self.robot_.dof * order)
+    for joint in self.robot_.joints:
+      m = self.motions_.joint_motions_cm(joint.dof, joint.dof_index, order)
+      motion[joint.dof_index*order:joint.dof_index*order+joint.dof*order] = m.flatten()
+    for link in self.robot_.links:
+      m = self.motions_.link_motions_cm(link.dof, link.dof_index, order)
+      motion[link.dof_index*order:link.dof_index*order+link.dof*order] = m.flatten()
+    return motion
+  
+  def motion_diff_cm(self, order : int = None, last_diff = None):
+    if order is None:
+      order = self.order_
+    if last_diff is None:
+      last_diff = np.zeros(self.robot_.dof)
+    motion_diff = np.zeros(self.robot_.dof * order)
+    for joint in self.robot_.joints:
+      m = self.motions_.joint_motions_cm(joint.dof, joint.dof_index, self.order_)
+      m = np.append(m, last_diff[joint.dof_index:joint.dof_index+joint.dof])
+      motion_diff[joint.dof_index*order:joint.dof_index*order+joint.dof*order] = m.flatten()[joint.dof:order+joint.dof]
+    for link in self.robot_.links:
+      m = self.motions_.link_motions_cm(link.dof, link.dof_index, self.order_)
+      m = np.append(m, last_diff[link.dof_index:link.dof_index+link.dof])
+      motion_diff[link.dof_index*order:link.dof_index*order+link.dof*order] = m.flatten()[link.dof:order+link.dof]
     return motion_diff
 
   def state_df(self):

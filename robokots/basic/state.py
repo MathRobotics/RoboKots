@@ -103,10 +103,10 @@ keys_order_force = {
 }
 
 keys_order_momentum = {
-    "momentum": 2,
-    "momentum_diff1": 3,
-    "momentum_diff2": 4,
-    "momentum_diff3": 5,
+    "momentum": 1,
+    "momentum_diff1": 2,
+    "momentum_diff2": 3,
+    "momentum_diff3": 4,
 }
 
 
