@@ -141,9 +141,9 @@ def link_force_jacobian(robot : RobotStruct, state : dict, link_name_list : list
 def joint_force_jacobian(robot : RobotStruct, state : dict, joint_name_list : list[str], force_order : int = 1, dim : int = 6) -> np.ndarray:
     pass
 
-def link_force_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str], force_order_ : int = 1) -> np.ndarray:
+def link_dynamics_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str], data_type, force_order_ : int = 1) -> np.ndarray:
     order = force_order_ + 2
-    dof = data_type_dof("force", dim = 3) * force_order_
+    dof = data_type_dof(data_type, dim = 3) * force_order_
 
     jacobs = np.zeros((dof*len(link_name_list),robot.dof*order))
     motion = np.zeros(robot.dof * order)
@@ -162,9 +162,9 @@ def link_force_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, l
             y = np.zeros(dof)
             for j in range(force_order_):
                 if j == 0:
-                    y[6*j:6*(j+1)] = extract_dict_link_info(state, "force", link_name_list[i])
+                    y[6*j:6*(j+1)] = extract_dict_link_info(state, data_type, link_name_list[i])
                 else:
-                    y[6*j:6*(j+1)] = extract_dict_link_info(state, "force_diff"+str(j), link_name_list[i])
+                    y[6*j:6*(j+1)] = extract_dict_link_info(state, data_type+"_diff"+str(j), link_name_list[i])
             return y
 
         jacobs[dof*i:dof*(i+1)] = numerical_grad(motion, dynamics_func)
