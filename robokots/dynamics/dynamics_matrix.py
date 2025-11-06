@@ -25,7 +25,7 @@ def momentum_to_force_mat(link_cmtm : CMTM, force_order : int = 1, dim : int = 6
       mat[:, :-dim] += CMTM.hat_adj(SE3wrench, link_cmtm.cmvecs().vecs()[:force_order+1])
     elif dim == 3:
       mat[:, :-dim] += CMTM.hat_adj(SO3wrench, link_cmtm.cmvecs().vecs()[:force_order+1])
-    return Factorial.mat(force_order, dim) @ mat @ Factorial.inverse_mat(force_order+1, dim)
+    return Factorial.mat(force_order, dim) @ mat @ Factorial.mat_inv(force_order+1, dim)
 
 def link_to_force_tan_map_mat(link_cmtm : CMTM, inertia : np.ndarray, force_order : int = 1, dim : int = 6) -> np.ndarray:
     momentum_dof = dim * (force_order+2)
@@ -42,5 +42,5 @@ def link_to_force_tan_map_mat(link_cmtm : CMTM, inertia : np.ndarray, force_orde
     elif dim == 3:
       m[:, :-dim] += (CMTM.hat_adj(SO3wrench, link_cmtm.cmvecs().cm_vecs()[:force_order+1]) @ inertia_diag_mat(inertia, force_order) 
                       + CMTM.hat_commute_adj(SO3wrench, momentum.cm_vecs()[:force_order+1]))
-    mat[:, dim:] = Factorial.mat(force_order, dim) @ m @ Factorial.inverse_mat(force_order+1, dim)
+    mat[:, dim:] = Factorial.mat(force_order, dim) @ m @ Factorial.mat_inv(force_order+1, dim)
     return mat
