@@ -148,15 +148,15 @@ def dynamics(robot : RobotStruct, joint_motions) -> dict:
     
   return state_dict
 
-def dynamics_cmtm(robot : RobotStruct, joint_motions, dynamics_order = 1) -> dict:
-  state_dict = kinematics(robot, joint_motions, dynamics_order + 2)
+def dynamics_cmtm(robot : RobotStruct, motions, dynamics_order = 1) -> dict:
+  state_dict = kinematics(robot, motions, dynamics_order + 2)
   momentum_dict = {}
 
   for joint in reversed(robot.joints):
     child = robot.links[joint.child_link_id]
     child_joint_ids = child.child_joint_ids
 
-    joint_motion = joint_motions[joint.dof_index*(dynamics_order+2):joint.dof_index*(dynamics_order+2) + joint.dof*(dynamics_order+2)]
+    motion = motions[joint.dof_index*(dynamics_order+2):joint.dof_index*(dynamics_order+2) + joint.dof*(dynamics_order+2)]
     inertia = spatial_inertia(child.mass, child.inertia, child.cog)
 
     link_cmtm = state_dict_to_cmtm(state_dict, child.name, dynamics_order + 2)
@@ -174,7 +174,7 @@ def dynamics_cmtm(robot : RobotStruct, joint_motions, dynamics_order = 1) -> dic
       c_joint = robot.joints[c_id]
       c_joint_data = convert_joint_to_data(c_joint)
 
-      c_joint_cmtm = joint_rel_cmtm(c_joint_data, joint_motion, dynamics_order + 1)
+      c_joint_cmtm = joint_rel_cmtm(c_joint_data, motion, dynamics_order + 1)
       c_joint_cmtm_wrench = CMTM.change_elemclass(c_joint_cmtm, SE3wrench)
 
       c_joint_momentums = state_dict_to_vecs(momentum_dict, c_joint.name, "joint_momentums")
