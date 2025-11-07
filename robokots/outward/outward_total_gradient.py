@@ -9,7 +9,7 @@ from mathrobo import CMTM, SE3wrench, numerical_grad, Factorial
 
 from ..basic.robot import RobotStruct
 from ..basic.state_dict import state_dict_to_rel_cmtm, state_dict_to_cmtm
-from ..basic.state import keys_order, data_type_dof
+from ..basic.state import keys_order, data_type_dof, keys_time_order
 from ..basic.state_dict import extract_dict_link_info
 from ..basic.state_dict import extract_dict_total_link_cmvec, extract_dict_total_link
 from ..basic.motion import RobotMotions
@@ -175,10 +175,13 @@ def link_force_jacobian(robot : RobotStruct, state : dict, link_name_list : list
 def joint_force_jacobian(robot : RobotStruct, state : dict, joint_name_list : list[str], force_order : int = 1, dim : int = 6) -> np.ndarray:
     pass
 
-def link_dynamics_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str], data_type, force_order_ : int = 1) -> np.ndarray:
-    order = force_order_ + 2
-    dof = data_type_dof(data_type, dim = 3) * force_order_
-
+def link_dynamics_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str], data_type, output_order_ : int = 1) -> np.ndarray:
+    order = keys_time_order[data_type] + output_order_ - 1
+    dynamics_order = keys_order[data_type]
+    if dynamics_order < 1:
+        dynamics_order = 1
+    dof = data_type_dof(data_type, dim = 3) * output_order_
+    
     jacobs = np.zeros((dof*len(link_name_list),robot.dof*order))
     motion = np.zeros(robot.dof * order)
 
@@ -192,9 +195,9 @@ def link_dynamics_jacobian_numerical(robot : RobotStruct, motions : RobotMotions
 
     for i in range(len(link_name_list)):
         def dynamics_func(x):
-            state = outward_dynamics(robot, x, force_order_)
+            state = outward_dynamics(robot, x, dynamics_order)
             y = np.zeros(dof)
-            for j in range(force_order_):
+            for j in range(output_order_):
                 if j == 0:
                     y[6*j:6*(j+1)] = extract_dict_link_info(state, data_type, link_name_list[i])
                 else:

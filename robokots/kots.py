@@ -290,7 +290,7 @@ class Kots():
     if numerical:
       total_jacobian_kinematics = link_jacobian_numerical(self.robot_, self.motions_, name_list, "cmtm", max_order)
       if any(data_type_list_momentum):
-        total_jacobian_momentum = link_dynamics_jacobian_numerical(self.robot_, self.motions_, name_list, "momentum", max_order-2)
+        total_jacobian_momentum = link_dynamics_jacobian_numerical(self.robot_, self.motions_, name_list, "momentum", max_order-1)
       if any(data_type_list_force):
         total_jacobian_force = link_dynamics_jacobian_numerical(self.robot_, self.motions_, name_list, "force", max_order-2)
     else:
