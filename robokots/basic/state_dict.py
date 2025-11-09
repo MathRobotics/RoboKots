@@ -199,6 +199,21 @@ def state_dict_to_frame(state : dict, name : str) -> SE3:
 
     return mat
 
+def state_dict_to_frame_wrench(state : dict, name : str) -> SE3wrench:
+    '''
+    Convert state data to SE3wrench
+    Args:
+        state (dict): state data
+        name (str): name of the link
+    Returns:
+        SE3wrench: SE3wrench object
+    '''
+    pos = np.array(state[name+"_pos"])
+    rot = state_dict_to_rot(state, name)
+    mat = SE3wrench(rot, pos)
+
+    return mat
+
 def __state_dict_to_cmtm_values(state : dict, name : str, order = None) -> tuple[SE3, np.ndarray]:
     '''
     Convert state data to CMTM values
