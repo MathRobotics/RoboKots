@@ -371,39 +371,61 @@ def state_dict_to_cmvec(state : dict, name : str, type_name : str, order : int) 
     return CMVector(np.stack(vecs))
 
 def extract_dict_link_info(state : dict, data_type : str, link_name : str, frame = "dummy", rel_frame = 'dummy'):
+    if frame != 'dummy':
+        if frame == 'world':
+            cmtm = state_dict_to_cmtm(state, link_name)
+            cmtm_wrench = CMTM.change_elemclass(cmtm, SE3wrench)
+            order = keys_order[data_type]
+
     if data_type == "rot":
       return state_dict_to_rot(state, link_name)
     elif data_type == "frame":
         return state_dict_to_frame(state, link_name)
     elif data_type == "cmtm":
         return state_dict_to_cmtm(state, link_name)
-    elif data_type == "force":
-        return np.array(state[link_name+"_link_force"])    
-    elif "force_diff" in data_type:
-        return np.array(state[link_name+"_link_"+data_type])
-    elif data_type == "momentum":
-        return np.array(state[link_name+"_link_momentum"])
-    elif "momentum_diff" in data_type:
-        return np.array(state[link_name+"_link_"+data_type])
+    elif "momentum" in data_type:
+        if frame == 'world':
+            local_momentum = state_dict_to_cmvec(state, link_name, data_type, order).cm_vec()
+            world_momentum = cmtm_wrench.mat_adj() @ local_momentum
+            return world_momentum.reshapep(order, 6)[-1]
+        else:
+            return np.array(state[link_name+"_link_"+data_type])
+    elif "force" in data_type:
+        if frame == 'world':
+            local_force = state_dict_to_cmvec(state, link_name, data_type, order).cm_vec()
+            world_force = cmtm_wrench.mat_adj() @ local_force
+            return world_force.reshapep(order, 6)[-1]
+        else:
+            return np.array(state[link_name+"_link_"+data_type])
     else:
         return np.array(state[link_name+"_"+keys_name[data_type]])
     
 def extract_dict_joint_info(state : dict, data_type : str, joint_name : str, frame = "dummy", rel_frame = 'dummy'):
+    if frame != 'dummy':
+        if frame == 'world':
+            cmtm = state_dict_to_cmtm(state, joint_name)
+            cmtm_wrench = CMTM.change_elemclass(cmtm, SE3wrench)
+            order = keys_order[data_type]
+            
     if data_type == "frame":
         return state_dict_to_frame(state, joint_name)
     elif data_type == "cmtm":
         return state_dict_to_cmtm(state, joint_name)
-    elif data_type == "force":
-        return np.array(state[joint_name+"_joint_force"])
-    elif "force_diff" in data_type:
-        return np.array(state[joint_name+"_joint_"+data_type])
-    elif data_type == "momentum":
-        return np.array(state[joint_name+"_joint_momentum"])
-    elif "momentum_diff" in data_type:
-        return np.array(state[joint_name+"_joint_"+data_type])
-    elif data_type == "torque":
-        return np.array(state[joint_name+"_joint_torque"])
-    elif "torque_diff" in data_type:
+    elif "force" in data_type:
+        if frame == 'world':
+            local_force = state_dict_to_cmvec(state, joint_name, data_type, order).cm_vec()
+            world_force = cmtm_wrench.mat_adj() @ local_force
+            return world_force.reshapep(order, 6)[-1]
+        else:
+            return np.array(state[joint_name+"_joint_"+data_type])
+    elif "momentum" in data_type:
+        if frame == 'world':
+            local_momentum = state_dict_to_cmvec(state, joint_name, data_type, order).cm_vec()
+            world_momentum = cmtm_wrench.mat_adj() @ local_momentum
+            return world_momentum.reshapep(order, 6)[-1]
+        else:
+            return np.array(state[joint_name+"_joint_"+data_type])
+    elif "torque" in data_type:
         return np.array(state[joint_name+"_joint_"+data_type])
     else:
         return np.array(state[joint_name+"_"+data_type])
