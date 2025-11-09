@@ -273,7 +273,6 @@ def state_dict_to_cmtm_wrench(state : dict, name : str, order = None) -> CMTM:
 
     return cmtm
 
-
 def state_dict_to_rel_frame(state : dict, base_name : str, target_name : str) -> SE3:
     '''
     Convert state data to relative SE3
