@@ -15,9 +15,9 @@ kots.set_target_from_file("target_list.json")
 kots.kinematics()
 
 def test_kinematics():
-    h_list = kots.state_link_info_list("frame", kots.link_name_list())
-    v_list = kots.state_link_info_list("vel", kots.link_name_list())
-    a_list = kots.state_link_info_list("acc", kots.link_name_list())    
+    h_list = kots.state_info(StateType(data_type="frame", owner_type = "total_link"))
+    v_list = kots.state_info(StateType(data_type="vel", owner_type = "total_link"))
+    a_list = kots.state_info(StateType(data_type="acc", owner_type = "total_link"))
 
     h_list2 = forward_kinematics(kots.robot_.joints, kots.motion(order=1))
     v_list2 = forward_kinematics_vel(kots.robot_.joints, kots.motion(order=2))

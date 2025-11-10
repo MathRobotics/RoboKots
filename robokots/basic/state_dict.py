@@ -445,16 +445,21 @@ def extract_dict_total_link_cmvec(state : dict, link_name_list : str, data_type 
         total_vec[i] = vec.cm_vec()
     return total_vec.flatten()
 
-def extract_dict_total_info(data : dict, data_type : str, name : str, frame = "dummy", rel_frame = 'dummy'):
-    pass
+def extract_dict_total_link_info(data : dict, data_type : str, frame = "dummy", rel_frame = 'dummy'):
+    return {k: v for k, v in data.items() if "link_" + data_type in k}
+
+def extract_dict_total_joint_info(data : dict, data_type : str, frame = "dummy", rel_frame = 'dummy'):
+    return {k: v for k, v in data.items() if "joint_" + data_type in k}
 
 def extract_dict_info(data : dict, data_type : str, owner_type : str, name : str, frame = "dummy", rel_frame = 'dummy'):
     if owner_type == "link":
       return extract_dict_link_info(data, data_type, name, frame, rel_frame)
     elif owner_type == "joint":
       return extract_dict_joint_info(data, data_type, name, frame, rel_frame)
-    elif owner_type == "total":
-      return extract_dict_total_info(data, data_type, name, frame, rel_frame)
+    elif owner_type == "total_link":
+      return extract_dict_total_link_info(data, data_type, frame, rel_frame)
+    elif owner_type == "total_joint":
+      return extract_dict_total_joint_info(data, data_type, frame, rel_frame)
     else:
       raise ValueError(f"Invalid owner_type: {set(owner_type)}")
 

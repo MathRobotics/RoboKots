@@ -7,8 +7,8 @@ from typing import List, Dict, Any
 
 from .basic.motion import RobotMotions
 from .basic.state_df import RobotState
-from .basic.state import keys_order, keys_time_order, filter_keys_kinematics, filter_keys_momentum, filter_keys_force, filter_keys_torque
-from .basic.state_dict import extract_dict_link_info, extract_dict_joint_info, state_dict_to_links_pos, print_state_dict
+from .basic.state import StateType, keys_order, keys_time_order, filter_keys_kinematics, filter_keys_momentum, filter_keys_force, filter_keys_torque
+from .basic.state_dict import extract_dict_info, extract_dict_link_info, extract_dict_joint_info, state_dict_to_links_pos, print_state_dict
 from .basic.robot import RobotStruct
 from .basic.target import TargetList
 from .basic.robot_drow import show_robot, show_robot_traj, RobotColor, show_link_points
@@ -184,37 +184,21 @@ class Kots():
 
   def state_df(self):
     return self.state_.df()
-  
-  def state_link_info(self, data_type : str, link_name : str, frame : str = "dummy"):
-    return extract_dict_link_info(self.state_dict_, data_type, link_name, frame)
 
-  def state_link_info_list(self, data_type : str, name_list : list[str], frame : str = "dummy"):
-    return [extract_dict_link_info(self.state_dict_, data_type, name, frame) for name in name_list]
+  def state_info(self, state_type : StateType):
+    return extract_dict_info(self.state_dict_, state_type.data_type, state_type.owner_type, state_type.owner_name, state_type.frame_name)
 
-  def state_target_link_info(self, data_type : str, frame : str = "dummy"):
-    return self.state_link_info_list(data_type, self.target_.target_owner_names, frame)
-
-  def state_joint_info(self, data_type : str, joint_name : str, frame : str = "dummy"):
-    return extract_dict_joint_info(self.state_dict_, data_type, joint_name, frame)
-
-  def state_joint_info_list(self, data_type : str, name_list : list[str], frame : str = "dummy"):
-    return [extract_dict_joint_info(self.state_dict_, data_type, name, frame) for name in name_list]
-
-  def state_joint_vecs(self, data_type : str, frame : str = "dummy") -> np.ndarray:
-    values = ()
-    for name in self.robot_.joint_names:
-      values += (extract_dict_joint_info(self.state_dict_, data_type, name, frame),)
-    vecs = [v for v in values if v.size]
-    return np.array(vecs)
+  def state_info_list(self, state_type_list : List[StateType]) -> List[np.ndarray]:
+    return [extract_dict_info(self.state_dict_, st.data_type, st.owner_type, st.owner_name, st.frame_name) for st in state_type_list]
   
   def target_info(self) -> Dict[str, Dict[str, Any]]:
       if self.target_ is None:
           raise ValueError("target is not set")
 
       names = self.target_.target_owner_names
-      types_list = self.target_.target_types
+      types_list = self.target_.target_data_types
       if len(names) != len(types_list):
-          raise ValueError(f"length mismatch: target_owner_names={len(names)} vs target_types={len(types_list)}")
+          raise ValueError(f"length mismatch: target_owner_names={len(names)} vs target_data_types={len(types_list)}")
 
       out: Dict[str, Dict[str, Any]] = {}
       for name, t_list in zip(names, types_list):
