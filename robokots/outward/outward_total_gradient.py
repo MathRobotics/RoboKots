@@ -66,18 +66,18 @@ def total_coord_to_joint_tan_vel_grad_mat(r : RobotStruct, state : dict, order :
 
     return mat
 
-def total_coord_to_joint_tan_vel_grad_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
-    n_ = dim * (order-1)
-    mat = np.zeros((r.joint_num * n_, r.joint_dof * order))
+# def total_coord_to_joint_tan_vel_grad_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
+#     n_ = dim * (order-1)
+#     mat = np.zeros((r.joint_num * n_, r.joint_dof * order))
 
-    for i, joint in enumerate(r.joints):
-        if joint.dof == 0:  # Joint with no degree of freedom
-            continue
-        joint_cmtm = state_dict_to_cmtm(state, joint.name, order)
-        mat[i*n_:(i+1)*n_, joint.dof_index*order:(joint.dof_index+joint.dof)*order] = \
-            joint_cmtm.tangent_mat()[dim:] @ joint_select_diag_mat(joint.select_mat, order)
+#     for i, joint in enumerate(r.joints):
+#         if joint.dof == 0:  # Joint with no degree of freedom
+#             continue
+#         joint_cmtm = state_dict_to_cmtm(state, joint.name, order)
+#         mat[i*n_:(i+1)*n_, joint.dof_index*order:(joint.dof_index+joint.dof)*order] = \
+#             joint_cmtm.tangent_mat()[dim:] @ joint_select_diag_mat(joint.select_mat, order)
 
-    return mat
+#     return mat
 
 def total_joint_wrench_to_force_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
     n_ = dim * order
@@ -126,10 +126,10 @@ def total_coord_to_joint_momentum_grad_mat(r : RobotStruct, state : dict, order 
     j2 = tf_j_m @ t_w_l_wrench_inv @ t_l2j_moment @ t_w_j_wrench @ total_cmtm_hat_commute(link_momentum, SE3wrench, num=r.link_num, order=order, dim=dim) \
          @ total_joint_tan_vel_to_link_sp_vel_grad_mat(r, state, order+1, dim) @ tf_j_m_inv @ total_coord_to_joint_tan_vel_grad_mat(r, state, order+1, dim)
     tf_j_m_inv = total_factorial_mat_inv(r.joint_num, order, dim)
-    j3 = tf_j_m @ -t_w_l_wrench_inv @ total_cmtm_hat_commute(world_joint_momentum, SE3wrench, num=r.joint_num, order=order, dim=dim) \
-         @ tf_j_m_inv @ total_coord_to_joint_tan_vel_grad_mat(r, state, order+1, dim)
+    # j3 = tf_j_m @ -t_w_l_wrench_inv @ total_cmtm_hat_commute(world_joint_momentum, SE3wrench, num=r.joint_num, order=order, dim=dim) \
+    #      @ tf_j_m_inv @ total_coord_to_joint_tan_vel_grad_mat(r, state, order+1, dim)
 
-    return j1 + j2 + j3
+    return j1 + j2
 
 def total_coord_to_link_force_grad_mat(r : RobotStruct, state : dict, force_order : int = 1, dim : int = 6) -> np.ndarray:
     return total_link_sp_vel_to_link_force_grad_mat(r, state, force_order=force_order, dim=dim) @ total_coord_to_link_vel_grad_mat(r, state, force_order+2, dim)
