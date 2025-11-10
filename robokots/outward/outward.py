@@ -30,7 +30,9 @@ def kinematics(robot : RobotStruct, motions, order = 3) -> dict:
   Returns:
     dict: state data
   '''
-  
+  if robot.dof * order > len(motions):
+    raise ValueError(f"Invalid motion length: {len(motions)}. Must be {robot.dof * order}.")
+
   state_dict = {}
   cmtm_dict = {}
 
