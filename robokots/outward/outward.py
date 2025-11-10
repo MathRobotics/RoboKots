@@ -166,10 +166,11 @@ def dynamics_cmtm(robot : RobotStruct, motions, dynamics_order = 1) -> dict:
     link_momentum = link_momentum_cmtm(inertia, link_cmtm.cmvecs())
     state = vecs_to_state_dict(link_momentum.vecs(), child.name, "link_momentum", dynamics_order+1)
     state_dict.update(state)
-    
-    link_force = link_force_cmtm(link_cmtm.cmvecs(), link_momentum)
-    state = vecs_to_state_dict(link_force.vecs(), child.name, "link_force", dynamics_order)
-    state_dict.update(state)
+
+    if dynamics_order > 0:
+      link_force = link_force_cmtm(link_cmtm.cmvecs(), link_momentum)
+      state = vecs_to_state_dict(link_force.vecs(), child.name, "link_force", dynamics_order)
+      state_dict.update(state)
 
     joint_momentums = link_momentum.vec()
     for c_id in child_joint_ids:
@@ -190,15 +191,16 @@ def dynamics_cmtm(robot : RobotStruct, motions, dynamics_order = 1) -> dict:
 
     link_cmtm = state_dict_to_cmtm(state_dict, child.name, dynamics_order + 2)
     joint_momentum = CMVector(joint_momentums.reshape(-1,6))
-    joint_force = link_force_cmtm(link_cmtm.cmvecs(), joint_momentum)
-    state = vecs_to_state_dict(joint_force.vecs(), joint.name, "joint_force", dynamics_order)
-    state_dict.update(state)
+    if dynamics_order > 0:
+      joint_force = link_force_cmtm(link_cmtm.cmvecs(), joint_momentum)
+      state = vecs_to_state_dict(joint_force.vecs(), joint.name, "joint_force", dynamics_order)
+      state_dict.update(state)
 
-    if joint.dof == 0:
-      continue
-    joint_torque = joint_select_diag_mat(joint.select_mat, dynamics_order).T @ link_force.vec()
-    state = vecs_to_state_dict(joint_torque.reshape(-1, joint.dof), joint.name, "joint_torque", dynamics_order)
-    state_dict.update(state)
+      if joint.dof == 0:
+        continue
+      joint_torque = joint_select_diag_mat(joint.select_mat, dynamics_order).T @ link_force.vec()
+      state = vecs_to_state_dict(joint_torque.reshape(-1, joint.dof), joint.name, "joint_torque", dynamics_order)
+      state_dict.update(state)
 
   # Compute for the world link
   world_link = robot.links[robot.joints[0].parent_link_id]
@@ -210,8 +212,9 @@ def dynamics_cmtm(robot : RobotStruct, motions, dynamics_order = 1) -> dict:
   state = vecs_to_state_dict(link_momentum.vecs(), world_link.name, "link_momentum", dynamics_order+1)
   state_dict.update(state)
 
-  link_force = link_force_cmtm(link_vel, link_momentum)
-  state = vecs_to_state_dict(link_force.vecs(), world_link.name, "link_force", dynamics_order)
-  state_dict.update(state)
+  if dynamics_order > 0:
+    link_force = link_force_cmtm(link_vel, link_momentum)
+    state = vecs_to_state_dict(link_force.vecs(), world_link.name, "link_force", dynamics_order)
+    state_dict.update(state)
     
   return state_dict
