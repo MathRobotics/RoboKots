@@ -22,7 +22,7 @@ from ..total import total_link_inertia_mat, total_factorial_mat, total_factorial
 
 from .outward import dynamics_cmtm as outward_dynamics
 
-def total_joint_to_link_grad_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
+def total_joint_tan_vel_to_link_vel_grad_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
     n_ = dim * order
     mat = np.zeros((r.link_num * n_, r.joint_num * n_))
 
@@ -37,7 +37,7 @@ def total_joint_to_link_grad_mat(r : RobotStruct, state : dict, order : int = 1,
             mat[i*n_:(i+1)*n_, j*n_:(j+1)*n_] = link_cmtm.tangent_mat_inv() @ rel_cmtm.mat_adj()
     return mat
 
-def total_joint_to_link_vel_grad_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
+def total_joint_tan_vel_to_link_sp_vel_grad_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
     n_j = dim * order
     n_l = dim * (order-1)
     mat = np.zeros((r.link_num * n_l, r.joint_num * n_j))
@@ -53,7 +53,7 @@ def total_joint_to_link_vel_grad_mat(r : RobotStruct, state : dict, order : int 
             mat[i*n_l:(i+1)*n_l, j*n_j:(j+1)*n_j] = link_cmtm.tangent_mat_inv()[dim:] @ rel_cmtm.mat_adj()
     return mat
 
-def total_coord_to_joint_grad_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
+def total_coord_to_joint_tan_vel_grad_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
     n_ = dim * order
     mat = np.zeros((r.joint_num * n_, r.joint_dof * order))
 
@@ -66,7 +66,7 @@ def total_coord_to_joint_grad_mat(r : RobotStruct, state : dict, order : int = 3
 
     return mat
 
-def total_coord_to_joint_vel_grad_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
+def total_coord_to_joint_tan_vel_grad_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
     n_ = dim * (order-1)
     mat = np.zeros((r.joint_num * n_, r.joint_dof * order))
 
@@ -79,7 +79,7 @@ def total_coord_to_joint_vel_grad_mat(r : RobotStruct, state : dict, order : int
 
     return mat
 
-def total_coord_to_joint_grad_mat_inv(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
+def total_joint_wrench_to_force_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
     n_ = dim * order
     mat = np.zeros((r.joint_dof * order, r.joint_num * n_))
 
@@ -92,7 +92,7 @@ def total_coord_to_joint_grad_mat_inv(r : RobotStruct, state : dict, order : int
 
     return mat
 
-def total_link_to_force_grad_mat(r : RobotStruct, state : dict, force_order : int = 1, dim : int = 6) -> np.ndarray:
+def total_link_sp_vel_to_link_force_grad_mat(r : RobotStruct, state : dict, force_order : int = 1, dim : int = 6) -> np.ndarray:
     n_ = dim * force_order
     m_ = dim * (force_order+2)
     mat = np.zeros((r.link_num * n_, r.link_num * m_))
@@ -102,11 +102,11 @@ def total_link_to_force_grad_mat(r : RobotStruct, state : dict, force_order : in
         mat[i*n_:(i+1)*n_, i*m_:(i+1)*m_] = link_to_force_tan_map_mat(cmtm, spatial_inertia(link.mass, link.inertia, link.cog), force_order=force_order, dim=dim)
     return mat
 
-def total_coord_to_link_grad_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
-    return total_joint_to_link_grad_mat(r, state, order, dim) @ total_coord_to_joint_grad_mat(r, state, order, dim)
+def total_coord_to_link_vel_grad_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
+    return total_joint_tan_vel_to_link_vel_grad_mat(r, state, order, dim) @ total_coord_to_joint_tan_vel_grad_mat(r, state, order, dim)
 
 def total_coord_to_link_momentum_grad_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
-    return total_link_inertia_mat(r, order=order-1, dim=dim) @ total_joint_to_link_vel_grad_mat(r, state, order, dim) @ total_coord_to_joint_grad_mat(r, state, order, dim)
+    return total_link_inertia_mat(r, order=order-1, dim=dim) @ total_joint_tan_vel_to_link_sp_vel_grad_mat(r, state, order, dim) @ total_coord_to_joint_tan_vel_grad_mat(r, state, order, dim)
 
 from ..total import total_cmtm_hat_commute
 from ..total import total_link_to_joint_wrench_mat, total_world_link_to_joint_wrench_mat
@@ -124,19 +124,19 @@ def total_coord_to_joint_momentum_grad_mat(r : RobotStruct, state : dict, order 
     j1 = tf_j_m @ total_link_to_joint_wrench_mat(r, state, order, dim) @ tf_l_m_inv \
          @ total_coord_to_link_momentum_grad_mat(r, state, order+1, dim)
     j2 = tf_j_m @ t_w_l_wrench_inv @ t_l2j_moment @ t_w_j_wrench @ total_cmtm_hat_commute(link_momentum, SE3wrench, num=r.link_num, order=order, dim=dim) \
-         @ total_joint_to_link_vel_grad_mat(r, state, order+1, dim) @ tf_j_m_inv @ total_coord_to_joint_grad_mat(r, state, order+1, dim)
+         @ total_joint_tan_vel_to_link_sp_vel_grad_mat(r, state, order+1, dim) @ tf_j_m_inv @ total_coord_to_joint_tan_vel_grad_mat(r, state, order+1, dim)
     tf_j_m_inv = total_factorial_mat_inv(r.joint_num, order, dim)
     j3 = tf_j_m @ -t_w_l_wrench_inv @ total_cmtm_hat_commute(world_joint_momentum, SE3wrench, num=r.joint_num, order=order, dim=dim) \
-         @ tf_j_m_inv @ total_coord_to_joint_vel_grad_mat(r, state, order+1, dim)
+         @ tf_j_m_inv @ total_coord_to_joint_tan_vel_grad_mat(r, state, order+1, dim)
 
     return j1 + j2 + j3
 
 def total_coord_to_link_force_grad_mat(r : RobotStruct, state : dict, force_order : int = 1, dim : int = 6) -> np.ndarray:
-    return total_link_to_force_grad_mat(r, state, force_order=force_order, dim=dim) @ total_coord_to_link_grad_mat(r, state, force_order+2, dim)
+    return total_link_sp_vel_to_link_force_grad_mat(r, state, force_order=force_order, dim=dim) @ total_coord_to_link_vel_grad_mat(r, state, force_order+2, dim)
 
 def link_jacobian(robot : RobotStruct, state : dict, link_name_list : list[str], order : int = 3, dim : int = 6) -> np.ndarray:
     links = robot.link_list(link_name_list)
-    mat = total_coord_to_link_grad_mat(robot, state, order=order, dim=dim)
+    mat = total_coord_to_link_vel_grad_mat(robot, state, order=order, dim=dim)
     jacobs = np.zeros((dim * order * len(links), robot.dof * order))
     
     for i, link in enumerate(links):
