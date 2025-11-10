@@ -1,5 +1,21 @@
 from mathrobo import SO3, SE3, CMTM
 
+frame_names = ("world","local")
+
+data_owner_types = ("joint","link","total_link","total_joint","total")
+
+class StateType:
+    owner_type : str
+    owner_name : str
+    data_type : str
+    frame_name : str
+
+    def __init__(self, owner_type : str = None, owner_name : str = None, data_type : str = None, frame_name : str = None):
+        self.owner_type = owner_type
+        self.owner_name = owner_name
+        self.data_type = data_type
+        self.frame_name = frame_name
+
 keys_kinematics = \
     ("pos", "rot", "frame", "vel", "acc", "jerk", "snap", "crackle", "pop", "lock", "drop", "shot", "put")
 
@@ -110,7 +126,6 @@ keys_order_momentum = {
     "momentum_diff3": 4,
     "momentum_diff4": 5,
 }
-
 
 keys_order = {**keys_order_kinematics, **keys_order_momentum, **keys_order_force}
 
