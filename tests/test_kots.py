@@ -33,13 +33,13 @@ def test_kinematics_numerical():
     motion_diff = kots.motion_diff(kots.order(), dv)
 
     jacob = kots.jacobian_target()
-    vec = kots.link_diff_kinematics_numerical(kots.target_.target_names, "cmtm", kots.order(), update_direction=dv)
+    vec = kots.link_diff_kinematics_numerical(kots.target_.target_owner_names, "cmtm", kots.order(), update_direction=dv)
 
     alias = ["frame", "vel", "acc", "jerk", "snap"]
 
     for i in range(kots.order()-1):
         ana_vec = kots.state_target_link_info(alias[i+1])[-1]
-        num_vec = kots.link_diff_kinematics_numerical(kots.target_.target_names, alias[i], order = kots.order(), update_direction=dv)
+        num_vec = kots.link_diff_kinematics_numerical(kots.target_.target_owner_names, alias[i], order = kots.order(), update_direction=dv)
 
         num_vec2 = vec[:,6*i:6*(i+1)]
 

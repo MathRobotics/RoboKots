@@ -192,7 +192,7 @@ class Kots():
     return [extract_dict_link_info(self.state_dict_, data_type, name, frame) for name in name_list]
 
   def state_target_link_info(self, data_type : str, frame : str = "dummy"):
-    return self.state_link_info_list(data_type, self.target_.target_names, frame)
+    return self.state_link_info_list(data_type, self.target_.target_owner_names, frame)
 
   def state_joint_info(self, data_type : str, joint_name : str, frame : str = "dummy"):
     return extract_dict_joint_info(self.state_dict_, data_type, joint_name, frame)
@@ -211,10 +211,10 @@ class Kots():
       if self.target_ is None:
           raise ValueError("target is not set")
 
-      names = self.target_.target_names
+      names = self.target_.target_owner_names
       types_list = self.target_.target_types
       if len(names) != len(types_list):
-          raise ValueError(f"length mismatch: target_names={len(names)} vs target_types={len(types_list)}")
+          raise ValueError(f"length mismatch: target_owner_names={len(names)} vs target_types={len(types_list)}")
 
       out: Dict[str, Dict[str, Any]] = {}
       for name, t_list in zip(names, types_list):
@@ -318,7 +318,7 @@ class Kots():
     if not self.target_:
       raise ValueError("target_ is not set")
     
-    name_list = self.target_.target_names
+    name_list = self.target_.target_owner_names
     if data_type_list is None:
       data_type_list = self.target_.target_types
     return name_list, data_type_list
@@ -374,12 +374,12 @@ class Kots():
   def show_target_link_points(self, plt = None, dimension=3):
     if not self.target_:
       raise ValueError("target_ is not set")
-    show_link_points(state_dict_to_links_pos(self.state_dict_, self.target_.target_names), plt, dimension)
+    show_link_points(state_dict_to_links_pos(self.state_dict_, self.target_.target_owner_names), plt, dimension)
 
   def target_link_pos_traj(self):
     if not self.target_:
       raise ValueError("target_ is not set")
-    return self.state_.extract_links_info_traj("pos", self.target_.target_names)
+    return self.state_.extract_links_info_traj("pos", self.target_.target_owner_names)
 
   def show_points(self, points, ax = None, dimension=3):
     show_link_points(points, ax, dimension)
