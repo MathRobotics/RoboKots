@@ -253,7 +253,7 @@ class Kots():
     if not isinstance(target_file, str):
       raise TypeError("target_file must be a string")
     self.target_ = load_target_json_file(target_file)
-    type_order = [keys_time_order[item] for sublist in self.target_.target_types for item in sublist]
+    type_order = [keys_time_order[item] for sublist in self.target_.target_data_types for item in sublist]
     max_order = max(type_order)
     self.set_order(max_order)
 
@@ -320,7 +320,7 @@ class Kots():
     
     name_list = self.target_.target_owner_names
     if data_type_list is None:
-      data_type_list = self.target_.target_types
+      data_type_list = self.target_.target_data_types
     return name_list, data_type_list
 
   def jacobian_target(self, data_type_list : List[str] = None):

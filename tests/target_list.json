@@ -1,10 +1,11 @@
 {
   "targets":[
     {
-      "type": ["frame", "vel", "acc", "jerk", "snap"],
+      "data_type": ["frame", "vel", "acc", "jerk", "snap"],
       "owner_type": "link",
       "owner_name": "arm3",
-      "pos" : [0,0,0]
+      "frame_name": "world",
+      "frame" : [0,0,0]
     }
   ]
 }

@@ -1,1 +1,1 @@
-{"targets": [{"type": "pos", "owner_type": "link", "owner_name": "link1", "pos": [0.0, 0.0, 0.0]}, {"type": "pos", "owner_type": "link", "owner_name": "link2", "pos": [1.0, 1.0, 1.0]}]}
+{"targets": [{"data_type": "pos", "owner_type": "link", "owner_name": "link1", "frame_name": "world", "frame": [0.0, 0.0, 0.0]}, {"data_type": "pos", "owner_type": "link", "owner_name": "link2", "frame_name": "world", "frame": [1.0, 1.0, 1.0]}]}

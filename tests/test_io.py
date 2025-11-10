@@ -15,8 +15,8 @@ test_data = {
 # Test loading a valid target JSON file
 target_data = {
     "targets": [
-        {"type": "pos", "owner_type": "link", "owner_name": "link1", "pos": [0.0, 0.0, 0.0]},
-        {"type": "pos", "owner_type": "link", "owner_name": "link2", "pos": [1.0, 1.0, 1.0]},
+        {"data_type": "pos", "owner_type": "link", "owner_name": "link1", "frame_name": "world", "frame": [0.0, 0.0, 0.0]},
+        {"data_type": "pos", "owner_type": "link", "owner_name": "link2", "frame_name": "world", "frame": [1.0, 1.0, 1.0]},
     ]
 }
 
@@ -87,7 +87,7 @@ def test_load_target_json_file():
         json.dump(target_data, f)
     target_list = load_target_json_file("./file/test_target.json")
     assert isinstance(target_list, TargetList)
-    assert target_list.targets[0].type == ["pos"]
+    assert target_list.targets[0].data_type == ["pos"]
     assert target_list.targets[1].owner_name == "link2"
     
     # Test loading a non-existent target JSON file
