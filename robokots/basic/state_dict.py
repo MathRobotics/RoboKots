@@ -448,16 +448,15 @@ def extract_dict_total_link_cmvec(state : dict, link_name_list : str, data_type 
 def extract_dict_total_info(data : dict, data_type : str, name : str, frame = "dummy", rel_frame = 'dummy'):
     pass
 
-def extract_dict_info(data : dict, data_type : str, group : str, name : str, frame = "dummy", rel_frame = 'dummy'):
-
-    if group == "link":
+def extract_dict_info(data : dict, data_type : str, owner_type : str, name : str, frame = "dummy", rel_frame = 'dummy'):
+    if owner_type == "link":
       return extract_dict_link_info(data, data_type, name, frame, rel_frame)
-    elif group == "joint":
+    elif owner_type == "joint":
       return extract_dict_joint_info(data, data_type, name, frame, rel_frame)
-    elif group == "total":
+    elif owner_type == "total":
       return extract_dict_total_info(data, data_type, name, frame, rel_frame)
     else:
-      raise ValueError(f"Invalid group: {set(group)}")
+      raise ValueError(f"Invalid owner_type: {set(owner_type)}")
 
 def sub_state_dict_vec(data0 : dict, data1 : dict, type : str, name : str) -> dict:
     '''
