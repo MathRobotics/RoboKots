@@ -7,9 +7,10 @@ from typing import List, Dict
 import numpy as np
 
 class Target:
-  def __init__(self, type: str, link_name: str, pos: np.ndarray):
+  def __init__(self, type: str, owner_type, owner_name: str, pos: np.ndarray):
     self.type = type
-    self.link_name = link_name
+    self.owner_type = owner_type
+    self.owner_name = owner_name
     self.pos = pos
     
   def set_index(self, i : int):
@@ -19,7 +20,8 @@ class TargetList:
   def __init__(self, targets_: List["Target"]):
     self.targets = targets_
     self.target_num = len(self.targets)  
-    self.target_names = [t.link_name for t in self.targets]
+    self.target_owner_types = [t.owner_type for t in self.targets]
+    self.target_owner_names = [t.owner_name for t in self.targets]
     self.target_types = [t.type for t in self.targets]
     self.target_positions = [t.pos for t in self.targets]
     
@@ -37,7 +39,8 @@ class TargetList:
     
     targets = [Target(
         type=normalize_types(target["type"]),
-        link_name=target["link"],
+        owner_type=target["owner_type"],
+        owner_name=target["owner_name"],
         pos=np.array(target.get("pos", [0., 0., 0.]))
     ) for target in data["targets"]]
 
@@ -48,5 +51,7 @@ class TargetList:
       print("\nTargets:")
       for t in self.targets:
           print(f"  Type: {t.type}")
-          print(f"  Link: {t.link_name}, Index: {t.index}")
+          print(f"  Owner Type: {t.owner_type}")
+          print(f"  Owner Name: {t.owner_name}")
+          print(f"  Index: {t.index}")
           print(f"  Pos: {t.pos}\n")
