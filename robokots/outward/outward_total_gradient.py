@@ -60,9 +60,9 @@ def joint_force_jacobian(robot : RobotStruct, state : dict, joint_name_list : li
 
 def link_dynamics_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str], data_type, output_order_ : int = 1) -> np.ndarray:
     order = keys_time_order[data_type] + output_order_ - 1
-    dynamics_order = keys_order[data_type]
-    if dynamics_order < 1:
-        dynamics_order = 1
+    dynamics_time_order = keys_time_order[data_type] + order - keys_time_order["force"] - 1
+    if dynamics_time_order < 1:
+        dynamics_time_order = 0
     dof = data_type_dof(data_type, dim = 3) * output_order_
     
     jacobs = np.zeros((dof*len(link_name_list),robot.dof*order))
@@ -78,7 +78,7 @@ def link_dynamics_jacobian_numerical(robot : RobotStruct, motions : RobotMotions
 
     for i in range(len(link_name_list)):
         def dynamics_func(x):
-            state = outward_dynamics(robot, x, dynamics_order)
+            state = outward_dynamics(robot, x, dynamics_order=dynamics_time_order)
             y = np.zeros(dof)
             for j in range(output_order_):
                 if j == 0:
