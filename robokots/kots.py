@@ -185,25 +185,25 @@ class Kots():
   def state_df(self):
     return self.state_.df()
   
-  def state_link_info(self, data_type : str, link_name : str):
-    return extract_dict_link_info(self.state_dict_, data_type, link_name)
+  def state_link_info(self, data_type : str, link_name : str, frame : str = "dummy"):
+    return extract_dict_link_info(self.state_dict_, data_type, link_name, frame)
 
-  def state_link_info_list(self, data_type : str, name_list : list[str]):
-    return [extract_dict_link_info(self.state_dict_, data_type, name) for name in name_list]
-  
-  def state_target_link_info(self, data_type : str):
-    return self.state_link_info_list(data_type, self.target_.target_names)
-  
-  def state_joint_info(self, data_type : str, joint_name : str):
-    return extract_dict_joint_info(self.state_dict_, data_type, joint_name)
+  def state_link_info_list(self, data_type : str, name_list : list[str], frame : str = "dummy"):
+    return [extract_dict_link_info(self.state_dict_, data_type, name, frame) for name in name_list]
 
-  def state_joint_info_list(self, data_type : str, name_list : list[str]):
-    return [extract_dict_joint_info(self.state_dict_, data_type, name) for name in name_list]
-  
-  def state_joint_vecs(self, data_type : str):
+  def state_target_link_info(self, data_type : str, frame : str = "dummy"):
+    return self.state_link_info_list(data_type, self.target_.target_names, frame)
+
+  def state_joint_info(self, data_type : str, joint_name : str, frame : str = "dummy"):
+    return extract_dict_joint_info(self.state_dict_, data_type, joint_name, frame)
+
+  def state_joint_info_list(self, data_type : str, name_list : list[str], frame : str = "dummy"):
+    return [extract_dict_joint_info(self.state_dict_, data_type, name, frame) for name in name_list]
+
+  def state_joint_vecs(self, data_type : str, frame : str = "dummy") -> np.ndarray:
     values = ()
     for name in self.robot_.joint_names:
-      values += (extract_dict_joint_info(self.state_dict_, data_type, name),)
+      values += (extract_dict_joint_info(self.state_dict_, data_type, name, frame),)
     vecs = [v for v in values if v.size]
     return np.array(vecs)
   
