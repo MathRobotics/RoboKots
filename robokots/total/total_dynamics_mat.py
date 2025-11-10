@@ -7,7 +7,19 @@ from ..basic.state_dict import state_dict_to_cmtm_wrench, state_dict_to_rel_cmtm
 from ..dynamics.base import spatial_inertia
 from ..dynamics.dynamics_matrix import inertia_diag_mat, momentum_to_force_mat
 
-from .total_kinematics_mat import total_coord_to_link_mat
+from .total_kinematics_mat import total_coord_to_link_vel_mat
+
+def total_joint_wrench_to_joint_torque_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
+    n_ = dim * order
+    mat = np.zeros((r.joint_dof * order, r.joint_num * n_))
+
+    for i, joint in enumerate(r.joints):
+        if joint.dof == 0:  # Joint with no degree of freedom
+            continue
+        mat[joint.dof_index:joint.dof_index+joint.dof, i*n_:(i+1)*n_] = \
+            joint.select_mat.T
+
+    return mat
 
 def total_world_link_cmtm_wrench(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
     n_ = dim * order
@@ -45,7 +57,7 @@ def total_world_joint_cmtm_wrench_inv(r : RobotStruct, state : dict, order : int
         mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = cmtm_wrench.mat_inv_adj()
     return mat
 
-def total_joint_to_link_wrench_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
+def total_joint_wrench_to_link_wrench_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
     n_ = dim * order
     mat = np.zeros((r.link_num * n_, r.joint_num * n_))
 
@@ -57,7 +69,7 @@ def total_joint_to_link_wrench_mat(r : RobotStruct, state : dict, order : int = 
         mat[i*n_:(i+1)*n_, c_id*n_:(c_id+1)*n_] = - rel_cmtm_wrench.mat_adj()
     return mat
 
-def total_link_to_joint_wrench_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
+def total_link_wrench_to_joint_wrench_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
     n_ = dim * order
     mat = np.zeros((r.joint_num * n_, r.link_num * n_))
     for i, joint in enumerate(r.joints):
@@ -70,7 +82,7 @@ def total_link_to_joint_wrench_mat(r : RobotStruct, state : dict, order : int = 
             mat[i*n_:(i+1)*n_, j*n_:(j+1)*n_] = rel_cmtm_wrench.mat_adj()
     return mat
 
-def total_world_joint_to_link_wrench_mat(r : RobotStruct, order : int = 1, dim : int = 6) -> np.ndarray:
+def total_world_joint_wrench_to_world_link_wrench_mat(r : RobotStruct, order : int = 1, dim : int = 6) -> np.ndarray:
     n_ = dim * order
     mat = np.zeros((r.link_num * n_, r.joint_num * n_))
 
@@ -81,7 +93,7 @@ def total_world_joint_to_link_wrench_mat(r : RobotStruct, order : int = 1, dim :
         mat[i*n_:(i+1)*n_, c_id*n_:(c_id+1)*n_] = - np.eye(n_)
     return mat
 
-def total_world_link_to_joint_wrench_mat(r : RobotStruct, order : int = 1, dim : int = 6) -> np.ndarray:
+def total_world_link_wrench_to_world_joint_wrench_mat(r : RobotStruct, order : int = 1, dim : int = 6) -> np.ndarray:
     n_ = dim * order
     mat = np.zeros((r.joint_num * n_, r.link_num * n_))
     for i, joint in enumerate(r.joints):
@@ -112,10 +124,10 @@ def total_momentum_to_force_mat(r : RobotStruct, state : dict, force_order : int
     return mat
 
 def total_coord_to_link_momentum_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
-    return total_link_inertia_mat(r, order=order, dim=dim) @ total_coord_to_link_mat(r, state, order, dim)
+    return total_link_inertia_mat(r, order=order, dim=dim) @ total_coord_to_link_vel_mat(r, state, order, dim)
 
 def total_coord_to_joint_momentum_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
-    return total_link_to_joint_wrench_mat(r, state, order, dim) @ total_coord_to_link_momentum_mat(r, state, order, dim)
+    return total_link_wrench_to_joint_wrench_mat(r, state, order, dim) @ total_coord_to_link_momentum_mat(r, state, order, dim)
 
 def total_coord_to_link_force_mat(r : RobotStruct, state : dict, force_order : int = 1, dim : int = 6) -> np.ndarray:
     return total_momentum_to_force_mat(r, state, force_order, dim) @ total_coord_to_link_momentum_mat(r, state, force_order+1, dim)

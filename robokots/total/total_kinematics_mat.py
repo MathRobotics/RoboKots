@@ -1,40 +1,10 @@
 import numpy as np
-from mathrobo import SE3, SE3wrench, CMTM, Factorial
+from mathrobo import CMTM
 
 from ..basic.robot import RobotStruct
 from ..basic.state_dict import state_dict_to_cmtm, state_dict_to_rel_cmtm
 
 from ..kinematics.kinematics_matrix import joint_select_diag_mat
-
-def total_factorial_mat(num : int, order : int, dim : int = 6) -> np.ndarray:
-    '''
-    Create a block diagonal matrix where each block is the factorial matrix.
-    Args:
-        order (int): Order of the CMTM.
-        dim (int, optional): Dimension of the space. Defaults to 6.
-    '''
-    n = dim * order
-    mat = np.zeros((num * n, num * n))
-
-    for i in range(num):
-        start = i * n
-        mat[start:start+n, start:start+n] = Factorial.mat(order, dim)
-    return mat
-
-def total_factorial_mat_inv(num : int, order : int, dim : int = 6) -> np.ndarray:
-    '''
-    Create a block diagonal matrix where each block is the factorial matrix.
-    Args:
-        order (int): Order of the CMTM.
-        dim (int, optional): Dimension of the space. Defaults to 6.
-    '''
-    n = dim * order
-    mat = np.zeros((num * n, num * n))
-
-    for i in range(num):
-        start = i * n
-        mat[start:start+n, start:start+n] = Factorial.mat_inv(order, dim)
-    return mat
 
 def total_cmtm_hat(vec : np.ndarray, mat_type, num : int, order : int, dim : int = 6) -> np.ndarray:
     '''
@@ -107,7 +77,7 @@ def total_world_joint_cmtm_inv(r : RobotStruct, state : dict, order : int = 1, d
         mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = cmtm.mat_inv_adj()
     return mat
 
-def total_link_to_joint_vel_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
+def total_link_vel_to_joint_vel_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
     n_ = dim * order
     mat = np.zeros((r.joint_num * n_, r.link_num * n_))
 
@@ -119,7 +89,7 @@ def total_link_to_joint_vel_mat(r : RobotStruct, state : dict, order : int = 1, 
         mat[i*n_:(i+1)*n_, c_id*n_:(c_id+1)*n_] = np.eye(n_)
     return mat
 
-def total_joint_to_link_vel_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
+def total_joint_vel_to_link_vel_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
     n_ = dim * order
     mat = np.zeros((r.link_num * n_, r.joint_num * n_))
 
@@ -133,7 +103,7 @@ def total_joint_to_link_vel_mat(r : RobotStruct, state : dict, order : int = 1, 
             mat[i*n_:(i+1)*n_, j*n_:(j+1)*n_] = rel_cmtm.mat_adj()
     return mat
 
-def total_coord_to_joint_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
+def total_coord_to_joint_vel_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
     n_ = dim * order
     mat = np.zeros((r.joint_num * n_, r.joint_dof * order))
 
@@ -145,17 +115,5 @@ def total_coord_to_joint_mat(r : RobotStruct, state : dict, order : int = 3, dim
 
     return mat
 
-def total_coord_to_joint_mat_inv(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
-    n_ = dim * order
-    mat = np.zeros((r.joint_dof * order, r.joint_num * n_))
-
-    for i, joint in enumerate(r.joints):
-        if joint.dof == 0:  # Joint with no degree of freedom
-            continue
-        mat[joint.dof_index:joint.dof_index+joint.dof, i*n_:(i+1)*n_] = \
-            joint.select_mat.T
-
-    return mat
-
-def total_coord_to_link_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
-    return total_joint_to_link_vel_mat(r, state, order, dim) @ total_coord_to_joint_mat(r, state,order, dim)
+def total_coord_to_link_vel_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
+    return total_joint_vel_to_link_vel_mat(r, state, order, dim) @ total_coord_to_joint_vel_mat(r, state,order, dim)
