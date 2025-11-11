@@ -5,7 +5,7 @@ from mathrobo import SO3, SE3, CMTM, numerical_grad
 
 from ..basic.robot import RobotStruct, LinkStruct, JointStruct
 from ..basic.motion import RobotMotions
-from ..basic.state import keys_order, data_type_dof, data_type_to_sub_func
+from ..basic.state import keys_order, keys_time_order, data_type_dof, data_type_to_sub_func
 
 from ..basic.state_dict import state_dict_to_rel_frame, state_dict_to_rel_cmtm, state_dict_to_cmtm, extract_dict_link_info
 from ..kinematics.base import convert_joint_to_data, convert_link_to_data
@@ -147,7 +147,7 @@ def link_cmtm_jacobian(robot : RobotStruct, motions : RobotMotions, state : dict
 
   return jacobs
 
-def link_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str], data_type : str, order_ = None) -> np.ndarray:
+def link_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str], data_type : str, frame_name : str = None, order_ = None) -> np.ndarray:
   if data_type not in ["pos", "rot", "vel", "acc", "jerk", "snap", "frame", "cmtm"]:
     raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'jerk', 'snap', 'frame' or 'cmtm'.")
 
@@ -176,19 +176,19 @@ def link_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_na
   for i in range(len(link_name_list)):
     def kinematics_func(x):
       state = outward_kinematics(robot, x, order)
-      y = extract_dict_link_info(state, data_type, link_name_list[i])
+      y = extract_dict_link_info(state, data_type, link_name_list[i], frame = frame_name)
       return y
 
     jacobs[dof*i:dof*(i+1)] = numerical_grad(motion, kinematics_func, sub_func = data_type_to_sub_func(data_type))
 
   return jacobs
 
-def link_dynamics_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str], data_type : str, order_ : int = 3) -> np.ndarray:
-    if order_ is None:
-      order = 3
-    else:
-      order = order_ + 2
-    dof = data_type_dof(data_type, dim = 3) * order_
+def link_dynamics_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str], data_type : str, frame_name : str = None, output_order_ : int = 1) -> np.ndarray:
+    order = keys_time_order[data_type] + output_order_ - 1
+    dynamics_time_order = keys_time_order[data_type] + order - keys_time_order["force"] - 1
+    if dynamics_time_order < 1:
+        dynamics_time_order = 0
+    dof = data_type_dof(data_type, dim = 3) * output_order_
 
     jacobs = np.zeros((dof*len(link_name_list),robot.dof*order))
     motion = np.zeros(robot.dof * order)
@@ -203,8 +203,8 @@ def link_dynamics_jacobian_numerical(robot : RobotStruct, motions : RobotMotions
 
     for i in range(len(link_name_list)):
         def dynamics_func(x):
-          state = outward_kinematics(robot, x, order)
-          y = extract_dict_link_info(state, data_type, link_name_list[i])
+          state = outward_kinematics(robot, x, dynamics_time_order)
+          y = extract_dict_link_info(state, data_type, link_name_list[i], frame = frame_name)
           return y
 
         jacobs[dof*i:dof*(i+1)] = numerical_grad(motion, dynamics_func)
