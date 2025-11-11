@@ -13,7 +13,8 @@ from ..basic.state_dict import extract_dict_link_info
 from ..basic.motion import RobotMotions
 
 from ..total.total_kinematics_grad_mat import total_coord_to_link_vel_grad_mat
-from ..total.total_dynamics_grad_mat import total_coord_to_link_momentum_grad_mat, total_coord_to_joint_momentum_grad_mat, total_coord_to_link_force_grad_mat
+from ..total.total_dynamics_grad_mat import total_coord_to_link_momentum_grad_mat, total_coord_to_joint_momentum_grad_mat
+from ..total.total_dynamics_grad_mat import total_coord_to_link_force_grad_mat, total_coord_to_world_link_momentum_grad_mat
 
 from .outward import dynamics_cmtm as outward_dynamics
 
@@ -28,8 +29,17 @@ def link_jacobian(robot : RobotStruct, state : dict, link_name_list : list[str],
 
 def link_momentum_jacobian(robot : RobotStruct, state : dict, link_name_list : list[str], momentum_order : int = 1, dim : int = 6) -> np.ndarray:
     links = robot.link_list(link_name_list)
-    mat = total_coord_to_link_momentum_grad_mat(robot, state, order=momentum_order, dim=dim)
-    jacobs = np.zeros((dim * (momentum_order-1) * len(links), robot.dof * (momentum_order)))
+    mat = total_coord_to_link_momentum_grad_mat(robot, state, order=momentum_order+1, dim=dim)
+    jacobs = np.zeros((dim * momentum_order * len(links), robot.dof * (momentum_order+1)))
+
+    for i, link in enumerate(links):
+        jacobs[i*dim*(momentum_order-1):(i+1)*dim*(momentum_order-1), :] = mat[link.id*dim*(momentum_order-1):(link.id+1)*dim*(momentum_order-1), :]
+    return jacobs
+
+def link_world_momentum_jacobian(robot : RobotStruct, state : dict, link_name_list : list[str], momentum_order : int = 1, dim : int = 6) -> np.ndarray:
+    links = robot.link_list(link_name_list)
+    mat = total_coord_to_world_link_momentum_grad_mat(robot, state, order=momentum_order+1, dim=dim)
+    jacobs = np.zeros((dim * (momentum_order) * len(links), robot.dof * (momentum_order+1)))
 
     for i, link in enumerate(links):
         jacobs[i*dim*(momentum_order-1):(i+1)*dim*(momentum_order-1), :] = mat[link.id*dim*(momentum_order-1):(link.id+1)*dim*(momentum_order-1), :]
@@ -58,9 +68,10 @@ def link_force_jacobian(robot : RobotStruct, state : dict, link_name_list : list
 def joint_force_jacobian(robot : RobotStruct, state : dict, joint_name_list : list[str], force_order : int = 1, dim : int = 6) -> np.ndarray:
     pass
 
-def link_dynamics_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str], data_type, output_order_ : int = 1) -> np.ndarray:
+def link_dynamics_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str], data_type, frame_name : str = None, output_order_ : int = 1) -> np.ndarray:
     order = keys_time_order[data_type] + output_order_ - 1
-    dynamics_time_order = keys_time_order[data_type] + order - keys_time_order["force"] - 1
+    dynamics_time_order = keys_time_order[data_type] + output_order_ - keys_time_order["force"]
+
     if dynamics_time_order < 1:
         dynamics_time_order = 0
     dof = data_type_dof(data_type, dim = 3) * output_order_
@@ -82,9 +93,9 @@ def link_dynamics_jacobian_numerical(robot : RobotStruct, motions : RobotMotions
             y = np.zeros(dof)
             for j in range(output_order_):
                 if j == 0:
-                    y[6*j:6*(j+1)] = extract_dict_link_info(state, data_type, link_name_list[i])
+                    y[6*j:6*(j+1)] = extract_dict_link_info(state, data_type, link_name_list[i], frame=frame_name)
                 else:
-                    y[6*j:6*(j+1)] = extract_dict_link_info(state, data_type+"_diff"+str(j), link_name_list[i])
+                    y[6*j:6*(j+1)] = extract_dict_link_info(state, data_type+"_diff"+str(j), link_name_list[i], frame=frame_name)
             return y
 
         jacobs[dof*i:dof*(i+1)] = numerical_grad(motion, dynamics_func)
