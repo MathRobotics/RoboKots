@@ -451,17 +451,20 @@ def extract_dict_total_link_info(data : dict, data_type : str, frame = "dummy", 
 def extract_dict_total_joint_info(data : dict, data_type : str, frame = "dummy", rel_frame = 'dummy'):
     return {k: v for k, v in data.items() if "joint_" + data_type in k}
 
-def extract_dict_info(data : dict, data_type : str, owner_type : str, name : str, frame = "dummy", rel_frame = 'dummy'):
-    if owner_type == "link":
-      return extract_dict_link_info(data, data_type, name, frame, rel_frame)
-    elif owner_type == "joint":
-      return extract_dict_joint_info(data, data_type, name, frame, rel_frame)
-    elif owner_type == "total_link":
-      return extract_dict_total_link_info(data, data_type, frame, rel_frame)
-    elif owner_type == "total_joint":
-      return extract_dict_total_joint_info(data, data_type, frame, rel_frame)
+def extract_dict_info(data : dict, data_type : str, owner_type : str, owner_name : str, frame = "dummy", rel_frame = 'dummy'):
+    if isinstance(data_type, list):
+        return [extract_dict_info(data, dt, owner_type, owner_name, frame, rel_frame) for dt in data_type]
     else:
-      raise ValueError(f"Invalid owner_type: {set(owner_type)}")
+        if owner_type == "link":
+            return extract_dict_link_info(data, data_type, owner_name, frame, rel_frame)
+        elif owner_type == "joint":
+            return extract_dict_joint_info(data, data_type, owner_name, frame, rel_frame)
+        elif owner_type == "total_link":
+            return extract_dict_total_link_info(data, data_type, frame, rel_frame)
+        elif owner_type == "total_joint":
+            return extract_dict_total_joint_info(data, data_type, frame, rel_frame)
+        else:
+            raise ValueError(f"Invalid owner_type: {set(owner_type)}")
 
 def sub_state_dict_vec(data0 : dict, data1 : dict, type : str, name : str) -> dict:
     '''
