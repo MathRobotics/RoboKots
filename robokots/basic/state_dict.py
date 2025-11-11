@@ -214,7 +214,7 @@ def state_dict_to_frame_wrench(state : dict, name : str) -> SE3wrench:
 
     return mat
 
-def __state_dict_to_cmtm_values(state : dict, name : str, order = None) -> tuple[SE3, np.ndarray]:
+def __state_dict_to_cmtm_vecs(state : dict, name : str, order = None) -> np.ndarray:
     '''
     Convert state data to CMTM values
     Args:
@@ -231,8 +231,6 @@ def __state_dict_to_cmtm_values(state : dict, name : str, order = None) -> tuple
 
     vec = np.zeros((order-1, 6))
 
-    if order > 0:
-        mat = state_dict_to_frame(state, name)
     if order > 1:
         vec[0] = np.array(state[name+"_vel"])
     if order > 2:
@@ -240,8 +238,8 @@ def __state_dict_to_cmtm_values(state : dict, name : str, order = None) -> tuple
     if order > 3:
         for i in range(order-keys_order["acc"]):
             vec[i+2] = np.array(state[name+"_acc_diff"+str(i+1)])
-    
-    return mat, vec
+
+    return vec
 
 def state_dict_to_cmtm(state : dict, name : str, order = None) -> CMTM:
     '''
@@ -252,7 +250,8 @@ def state_dict_to_cmtm(state : dict, name : str, order = None) -> CMTM:
     Returns:
         CMTM: CMTM object
     '''
-    mat, vec = __state_dict_to_cmtm_values(state, name, order)
+    mat = state_dict_to_frame(state, name)
+    vec = __state_dict_to_cmtm_vecs(state, name, order)
 
     cmtm = CMTM[SE3](mat, vec)
 
@@ -267,7 +266,8 @@ def state_dict_to_cmtm_wrench(state : dict, name : str, order = None) -> CMTM:
     Returns:
         CMTM: CMTM object
     '''
-    mat, vec = __state_dict_to_cmtm_values(state, name, order)
+    mat = state_dict_to_frame_wrench(state, name)
+    vec = __state_dict_to_cmtm_vecs(state, name, order)
 
     cmtm = CMTM[SE3wrench](mat, vec)
 
