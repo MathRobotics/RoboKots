@@ -39,10 +39,10 @@ class TargetList:
         return [ts] if isinstance(ts, str) else list(ts)
     
     targets = [Target(
-        data_type=normalize_types(target["data_type"]),
+        data_type=normalize_types(target.get("data_type")),
         owner_type=target["owner_type"],
         owner_name=target["owner_name"],
-        frame_name=target["frame_name"],
+        frame_name=target.get("frame_name"),
         frame=np.array(target.get("frame", SE3.eye()))
     ) for target in data["targets"]]
 
