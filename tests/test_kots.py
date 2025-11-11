@@ -38,7 +38,7 @@ def test_kinematics_numerical():
     alias = ["frame", "vel", "acc", "jerk", "snap"]
 
     for i in range(kots.order()-1):
-        ana_vec = kots.state_target_link_info(alias[i+1])[-1]
+        ana_vec = kots.state_info(StateType(data_type=alias[i+1], owner_type = "link", owner_name=kots.target_.target_owner_names[0]))
         num_vec = kots.link_diff_kinematics_numerical(kots.target_.target_owner_names, alias[i], order = kots.order(), update_direction=dv)
 
         num_vec2 = vec[:,6*i:6*(i+1)]
