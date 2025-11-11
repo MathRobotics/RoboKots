@@ -6,6 +6,18 @@ from ..basic.state_dict import state_dict_to_cmtm, state_dict_to_rel_cmtm
 
 from ..kinematics.kinematics_matrix import joint_select_diag_mat
 
+def total_coord_arrange(r : RobotStruct, out_order : int = 3, in_order : int = 3, dim : int = 6) -> np.ndarray:
+    mat = np.zeros((r.joint_dof * out_order, r.joint_dof * in_order))
+    row = 0
+    col = 0
+    for i, joint in enumerate(r.joints):
+        if joint.dof == 0:  # Joint with no degree of freedom
+            continue
+        mat[row:row+joint.dof*out_order, col:col+joint.dof*out_order] = np.eye(joint.dof*out_order)
+        row += joint.dof * out_order
+        col += joint.dof * in_order
+    return mat
+
 def total_cmtm_hat(vec : np.ndarray, mat_type, num : int, order : int, dim : int = 6) -> np.ndarray:
     '''
      Create a block diagonal matrix where each block is the hat matrix of the given vector.
