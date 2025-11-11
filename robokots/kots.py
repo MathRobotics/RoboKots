@@ -282,15 +282,16 @@ class Kots():
       motion[joint.dof_index*order:joint.dof_index*order+joint.dof*order] = m.flatten()
 
     return link_diff_kinematics_numerical(self.robot_, motion, link_name_list, data_type, order, eps, update_method, update_direction)
-  
-  def __jacobian(self, name_list : List[str], data_type_list : List[str], numerical : bool = False):
-    name_list = check_valid_str_list(name_list)
-    data_type_list = check_valid_data_type_list(data_type_list)
 
-    if len(name_list) != len(data_type_list):
-      raise ValueError("name_list and data_type_list must have the same length")
-    
-    max_order = count_time_order(self.robot_, name_list, data_type_list)
+  def __jacobian(self, state_type : StateType, numerical : bool = False):
+    max_order = 0
+
+    data_type_list = check_valid_data_type_list(state_type.data_type)
+    max_order = count_time_order(self.robot_, data_type_list)
+    for name in state_type.owner_name:
+      if name not in self.robot_.link_names and name not in self.robot_.joint_names:
+        raise ValueError(f"Invalid name: {name}. Must be a link or joint name.")
+      
     data_type_list_kinematics = [filter_keys_kinematics(data_type) for data_type in data_type_list]
     data_type_list_momentum = [filter_keys_momentum(data_type) for data_type in data_type_list]
     data_type_list_force = [filter_keys_force(data_type) for data_type in data_type_list]
@@ -300,48 +301,54 @@ class Kots():
     total_jacobian_force = np.zeros((0, self.robot_.dof*max_order))
 
     if numerical:
-      total_jacobian_kinematics = link_jacobian_numerical(self.robot_, self.motions_, name_list, "cmtm", max_order)
+      total_jacobian_kinematics = link_jacobian_numerical(self.robot_, self.motions_, state_type.owner_name, "cmtm", order_=max_order)
       if any(data_type_list_momentum):
-        total_jacobian_momentum = link_dynamics_jacobian_numerical(self.robot_, self.motions_, name_list, "momentum", max_order-1)
+        total_jacobian_momentum = link_dynamics_jacobian_numerical(self.robot_, self.motions_, state_type.owner_name, "momentum", state_type.frame_name, output_order_=max_order-1)
       if any(data_type_list_force):
-        total_jacobian_force = link_dynamics_jacobian_numerical(self.robot_, self.motions_, name_list, "force", max_order-2)
+        total_jacobian_force = link_dynamics_jacobian_numerical(self.robot_, self.motions_, state_type.owner_name, "force", state_type.frame_name, output_order_=max_order-2)
     else:
-      total_jacobian_kinematics = link_cmtm_jacobian(self.robot_, self.motions_, self.state_dict_, name_list, max_order)
+      total_jacobian_kinematics = link_cmtm_jacobian(self.robot_, self.motions_, self.state_dict_, state_type.owner_name, max_order)
       if any(data_type_list_momentum):
-        total_jacobian_momentum = link_momentum_jacobian(self.robot_, self.state_dict_, name_list, max_order)
+        if state_type.frame_name[0] is None:
+          total_jacobian_momentum = link_momentum_jacobian(self.robot_, self.state_dict_, state_type.owner_name, momentum_order=max_order-1)
+        else:
+          total_jacobian_momentum = link_world_momentum_jacobian(self.robot_, self.state_dict_, state_type.owner_name, momentum_order=max_order-1)
       if any(data_type_list_force):
-        total_jacobian_force = link_force_jacobian(self.robot_, self.state_dict_, name_list, max_order-2)
+        total_jacobian_force = link_force_jacobian(self.robot_, self.state_dict_, state_type.owner_name, force_order=max_order-2)
 
-    jacobian_kinematics = filter_cmtm_row_data_to_target(total_jacobian_kinematics, name_list, data_type_list_kinematics, dim=self.dim_)
-    jacobian_momentum = filter_cmtm_row_data_to_target(total_jacobian_momentum, name_list, data_type_list_momentum, dim=self.dim_)
-    jacobian_force = filter_cmtm_row_data_to_target(total_jacobian_force, name_list, data_type_list_force, dim=self.dim_)
+    jacobian_kinematics = filter_cmtm_row_data_to_target(total_jacobian_kinematics, state_type.owner_name, data_type_list_kinematics, dim=self.dim_)
+    jacobian_momentum = filter_cmtm_row_data_to_target(total_jacobian_momentum, state_type.owner_name, data_type_list_momentum, dim=self.dim_)
+    jacobian_force = filter_cmtm_row_data_to_target(total_jacobian_force, state_type.owner_name, data_type_list_force, dim=self.dim_)
 
     jacobian = np.vstack((jacobian_kinematics, jacobian_momentum, jacobian_force))
 
     return jacobian
 
-  def jacobian(self, name_list : List[str], data_type_list : List[str]):
-    return self.__jacobian(name_list, data_type_list, numerical=False)
+  def jacobian(self, state_type : StateType):
+    return self.__jacobian(state_type, numerical=False)
 
-  def jacobian_numerical(self, name_list : List[str], data_type_list : List[str]):
-    return self.__jacobian(name_list, data_type_list, numerical=True)
-  
-  def __check_target(self, data_type_list : List[str] = None):
+  def jacobian_numerical(self, state_type : StateType):
+    return self.__jacobian(state_type, numerical=True)
+
+  def __check_target(self, data_type_list : List[str] = None, frame_name_list : List[str] = None):
     if not self.target_:
       raise ValueError("target_ is not set")
     
-    name_list = self.target_.target_owner_names
+    owner_type_list = self.target_.target_owner_types
+    owner_name_list = self.target_.target_owner_names
     if data_type_list is None:
       data_type_list = self.target_.target_data_types
-    return name_list, data_type_list
+    if frame_name_list is None:
+      frame_name_list = self.target_.target_frame_names
+    return owner_type_list, owner_name_list, data_type_list, frame_name_list
 
-  def jacobian_target(self, data_type_list : List[str] = None):
-    name_list, data_type_list = self.__check_target(data_type_list)
-    return self.jacobian(name_list, data_type_list)
+  def jacobian_target(self, data_type_list : List[str] = None, frame_name_list : List[str] = None):
+    owner_type_list, owner_name_list, data_type_list, frame_name_list = self.__check_target(data_type_list, frame_name_list)
+    return self.jacobian(StateType(owner_type_list, owner_name_list, data_type_list, frame_name_list))
 
-  def jacobian_target_numerical(self, data_type_list : List[str] = None):
-    name_list, data_type_list = self.__check_target(data_type_list)
-    return self.jacobian_numerical(name_list, data_type_list)
+  def jacobian_target_numerical(self, data_type_list : List[str] = None, frame_name_list : List[str] = None):
+    owner_type_list, owner_name_list, data_type_list, frame_name_list = self.__check_target(data_type_list, frame_name_list)
+    return self.jacobian_numerical(StateType(owner_type_list, owner_name_list, data_type_list, frame_name_list))
 
   def jacobian_cmtm(self, name_list : List[str], order = None):
     if order is None:
