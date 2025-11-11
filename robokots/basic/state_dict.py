@@ -370,8 +370,8 @@ def state_dict_to_cmvec(state : dict, name : str, type_name : str, order : int) 
 
     return CMVector(np.stack(vecs))
 
-def extract_dict_link_info(state : dict, data_type : str, link_name : str, frame = "dummy", rel_frame = 'dummy'):
-    if frame != 'dummy':
+def extract_dict_link_info(state : dict, data_type : str, link_name : str, frame = None, rel_frame = 'dummy'):
+    if frame != None:
         if frame == 'world':
             order = keys_order[data_type]
             cmtm = state_dict_to_cmtm(state, link_name, order)
@@ -386,15 +386,15 @@ def extract_dict_link_info(state : dict, data_type : str, link_name : str, frame
     elif "momentum" in data_type:
         if frame == 'world':
             local_momentum = state_dict_to_cmvec(state, link_name, "link_momentum", order).cm_vec()
-            world_momentum = cmtm_wrench.mat_adj() @ local_momentum
-            return world_momentum.reshape(order, 6)[-1]
+            world_momentum = CMVector((cmtm_wrench.mat_adj() @ local_momentum).reshape(-1,6)).vecs()
+            return world_momentum[-1]
         else:
             return np.array(state[link_name+"_link_"+data_type])
     elif "force" in data_type:
         if frame == 'world':
             local_force = state_dict_to_cmvec(state, link_name, "link_force", order).cm_vec()
-            world_force = cmtm_wrench.mat_adj() @ local_force
-            return world_force.reshape(order, 6)[-1]
+            world_force = CMVector((cmtm_wrench.mat_adj() @ local_force).reshape(-1,6)).vecs()
+            return world_force[-1]
         else:
             return np.array(state[link_name+"_link_"+data_type])
     else:
