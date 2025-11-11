@@ -25,11 +25,9 @@ def check_valid_data_type_list(data_type_list : List[str]):
 
     return data_type_list
 
-def count_time_order(robot : RobotStruct, name_list : List[str], data_type_list : List[str]) -> int:
+def count_time_order(robot : RobotStruct, data_type_list : List[str]) -> int:
     max_order = 0
-    for name, link_dt_list in zip(name_list, data_type_list):
-      if name not in robot.link_names and name not in robot.joint_names:
-        raise ValueError(f"Invalid name: {name}. Must be a link or joint name.")
+    for link_dt_list in data_type_list:
       for data_type in link_dt_list:
         if data_type not in keys_time_order:
           raise ValueError(f"Invalid data_type: {data_type}. Must be one of {list(keys_time_order.keys())}.")
