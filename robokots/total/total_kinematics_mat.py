@@ -34,6 +34,8 @@ def total_cmtm_hat_commute(vec : np.ndarray, mat_type, num : int, order : int, d
         order (int): Order of the CMTM.
         dim (int, optional): Dimension of the space. Defaults to 6.
     '''
+    if vec.shape[0] != num * dim * order:
+        raise ValueError("Input vector has incorrect shape.")
     n_ = dim * order
     mat = np.zeros((num * n_, num * n_))
     for i in range(num):
