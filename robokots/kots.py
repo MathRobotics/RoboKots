@@ -19,8 +19,9 @@ from .misc import check_valid_str_list, check_valid_data_type_list, count_time_o
 from .outward.outward import kinematics as outward_kinematics
 from .outward.outward import dynamics_cmtm as outward_dynamics
 from .outward.outward import link_diff_kinematics_numerical, calc_link_total_point_frame
-from .outward.outward_gradient import link_jacobian, link_cmtm_jacobian, link_jacobian_numerical 
-from .outward.outward_total_gradient import link_momentum_jacobian, link_force_jacobian, link_dynamics_jacobian_numerical, joint_momentum_jacobian   
+from .outward.outward_gradient import link_jacobian, link_cmtm_jacobian, link_jacobian_numerical
+from .outward.outward_total_gradient import link_momentum_jacobian, link_world_momentum_jacobian
+from .outward.outward_total_gradient import link_force_jacobian, joint_momentum_jacobian, link_dynamics_jacobian_numerical   
 
 default_order = 3 
 default_dim = 3
