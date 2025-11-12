@@ -56,6 +56,12 @@ def is_in_keys_torque(keys_list):
             return False
     return True
 
+def is_in_keys_dynamics(keys_list):
+    for k in keys_list:
+        if k not in keys_momentum and k not in keys_force and k not in keys_torque:
+            return False
+    return True
+
 def is_in_keys(keys_list):
     for k in keys_list:
         if k not in keys:
