@@ -74,5 +74,8 @@ def total_coord_to_joint_tan_vel_grad_mat(r : RobotStruct, state : dict, order :
 
 #     return mat
 
+def total_coord_to_link_tan_vel_grad_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
+    return total_joint_tan_vel_to_link_tan_vel_grad_mat(r, state, order, dim) @ total_coord_to_joint_tan_vel_grad_mat(r, state, order, dim)
+
 def total_coord_to_link_vel_grad_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 6) -> np.ndarray:
     return total_joint_tan_vel_to_link_vel_grad_mat(r, state, order, dim) @ total_coord_to_joint_tan_vel_grad_mat(r, state, order, dim)
