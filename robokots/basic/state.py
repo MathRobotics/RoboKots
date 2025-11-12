@@ -17,6 +17,7 @@ class StateType:
         self.frame_name = frame_name
         self.order = keys_time_order.get(data_type, 1)
         self.is_dynamics = is_in_keys_dynamics([data_type])
+        self.alliance = f"{owner_name}_{owner_type}_{data_type}"
 
 keys_kinematics = \
     ("pos", "rot", "frame", "vel", "acc", "jerk", "snap", "crackle", "pop", "lock", "drop", "shot", "put")
