@@ -202,3 +202,14 @@ def dim_to_dof(dim : int):
         return 3
     elif dim == 3:
         return 6
+
+def state_type_list_condition(state_type_list : list[StateType]) -> int:
+    max_order = 1
+    is_dynamics = False
+    for st in state_type_list:
+        order = keys_order.get(st.data_type, 1)
+        if order > max_order:
+            max_order = order
+        if is_in_keys_dynamics([st.data_type]):
+            is_dynamics = True
+    return max_order, is_dynamics
