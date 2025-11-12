@@ -20,8 +20,8 @@ from .outward.outward import kinematics as outward_kinematics
 from .outward.outward import dynamics_cmtm as outward_dynamics
 from .outward.outward import link_diff_kinematics_numerical, calc_link_total_point_frame
 from .outward.outward_gradient import jacobian_numerical, link_jacobian, link_cmtm_jacobian, link_jacobian_numerical
-from .outward.outward_total_gradient import link_momentum_jacobian, link_world_momentum_jacobian
-from .outward.outward_total_gradient import link_force_jacobian, joint_momentum_jacobian, link_dynamics_jacobian_numerical   
+from .outward.outward_total_gradient import link_momentum_jacobian, world_link_momentum_jacobian, world_joint_momentum_jacobian
+from .outward.outward_total_gradient import link_force_jacobian, joint_momentum_jacobian, dynamics_jacobian_numerical
 
 default_order = 3 
 default_dim = 3
@@ -287,47 +287,50 @@ class Kots():
     max_order = 0
 
     data_type_list = check_valid_data_type_list(state_type.data_type)
-    max_order = count_time_order(self.robot_, data_type_list)
-    for name in state_type.owner_name:
-      if name not in self.robot_.link_names and name not in self.robot_.joint_names:
-        raise ValueError(f"Invalid name: {name}. Must be a link or joint name.")
+    max_order = count_time_order(data_type_list)
+
+    if state_type.owner_name not in self.robot_.link_names and state_type.owner_name not in self.robot_.joint_names:
+      raise ValueError(f"Invalid name: {state_type.owner_name}. Must be a link or joint name.")
       
-    data_type_list_kinematics = [filter_keys_kinematics(data_type) for data_type in data_type_list]
-    data_type_list_momentum = [filter_keys_momentum(data_type) for data_type in data_type_list]
-    data_type_list_force = [filter_keys_force(data_type) for data_type in data_type_list]
-    data_type_list_torque = [filter_keys_torque(data_type) for data_type in data_type_list]
+    data_type_list_kinematics = filter_keys_kinematics(data_type_list) 
+    data_type_list_momentum = filter_keys_momentum(data_type_list)
+    data_type_list_force = filter_keys_force(data_type_list)
+    data_type_list_torque = filter_keys_torque(data_type_list)
 
     total_jacobian_kinematics = np.zeros((0, self.robot_.dof*max_order))
     total_jacobian_momentum = np.zeros((0, self.robot_.dof*max_order))
     total_jacobian_force = np.zeros((0, self.robot_.dof*max_order))
 
     if numerical:
-      if state_type.owner_type[0] == "link":
-        total_jacobian_kinematics = link_jacobian_numerical(self.robot_, self.motions_, state_type.owner_name, "cmtm", order_=max_order)
+      if state_type.owner_type == "link":
+        total_jacobian_kinematics = link_jacobian_numerical(self.robot_, self.motions_, [state_type.owner_name], "cmtm", order_=max_order)
         if any(data_type_list_momentum):
-          total_jacobian_momentum = link_dynamics_jacobian_numerical(self.robot_, self.motions_, state_type.owner_name, "momentum", state_type.frame_name, output_order_=max_order-1)
+          total_jacobian_momentum = dynamics_jacobian_numerical(self.robot_, self.motions_, [state_type.owner_name], "momentum", "link", state_type.frame_name, output_order_=max_order-1)
         if any(data_type_list_force):
-          total_jacobian_force = link_dynamics_jacobian_numerical(self.robot_, self.motions_, state_type.owner_name, "force", state_type.frame_name, output_order_=max_order-2)
-      elif state_type.owner_type[0] == "joint":
+          total_jacobian_force = dynamics_jacobian_numerical(self.robot_, self.motions_, [state_type.owner_name], "force", "link", state_type.frame_name, output_order_=max_order-2)
+      elif state_type.owner_type == "joint":
         if any(data_type_list_momentum):
-          total_jacobian_momentum = jacobian_numerical(self.robot_, self.motions_, state_type)
+          total_jacobian_momentum = dynamics_jacobian_numerical(self.robot_, self.motions_, [state_type.owner_name], "momentum", "joint", state_type.frame_name, output_order_=max_order-1)
         if any(data_type_list_force):
           total_jacobian_force = jacobian_numerical(self.robot_, self.motions_, state_type)
     else:
-      if state_type.owner_type[0] == "link":
-        total_jacobian_kinematics = link_cmtm_jacobian(self.robot_, self.motions_, self.state_dict_, state_type.owner_name, max_order)
+      if state_type.owner_type == "link":
+        total_jacobian_kinematics = link_cmtm_jacobian(self.robot_, self.motions_, self.state_dict_, [state_type.owner_name], max_order)
         if any(data_type_list_momentum):
-          if state_type.frame_name[0] is None:
-            total_jacobian_momentum = link_momentum_jacobian(self.robot_, self.state_dict_, state_type.owner_name, momentum_order=max_order-1)
+          if state_type.frame_name is None:
+            total_jacobian_momentum = link_momentum_jacobian(self.robot_, self.state_dict_, [state_type.owner_name], momentum_order=max_order-1)
           else:
-            total_jacobian_momentum = link_world_momentum_jacobian(self.robot_, self.state_dict_, state_type.owner_name, momentum_order=max_order-1)
+            total_jacobian_momentum = world_link_momentum_jacobian(self.robot_, self.state_dict_, [state_type.owner_name], momentum_order=max_order-1)
         if any(data_type_list_force):
-          total_jacobian_force = link_force_jacobian(self.robot_, self.state_dict_, state_type.owner_name, force_order=max_order-2)
-      elif state_type.owner_type[0] == "joint":
+          total_jacobian_force = link_force_jacobian(self.robot_, self.state_dict_, [state_type.owner_name], force_order=max_order-2)
+      elif state_type.owner_type == "joint":
         if any(data_type_list_momentum):
-          total_jacobian_momentum = joint_momentum_jacobian(self.robot_, self.state_dict_, state_type.owner_name, momentum_order=max_order-1)
+          if state_type.frame_name is None:
+            total_jacobian_momentum = joint_momentum_jacobian(self.robot_, self.state_dict_, [state_type.owner_name], momentum_order=max_order-1)
+          else:
+            total_jacobian_momentum = world_joint_momentum_jacobian(self.robot_, self.state_dict_, [state_type.owner_name], momentum_order=max_order-1)
         if any(data_type_list_force):
-          total_jacobian_force = joint_force_jacobian(self.robot_, self.state_dict_, state_type.owner_name, force_order=max_order-2)
+          total_jacobian_force = joint_force_jacobian(self.robot_, self.state_dict_, [state_type.owner_name], force_order=max_order-2)
 
     jacobian_kinematics = filter_cmtm_row_data_to_target(total_jacobian_kinematics, state_type.owner_name, data_type_list_kinematics, dim=self.dim_)
     jacobian_momentum = filter_cmtm_row_data_to_target(total_jacobian_momentum, state_type.owner_name, data_type_list_momentum, dim=self.dim_)
