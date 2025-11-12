@@ -215,15 +215,14 @@ def link_dynamics_jacobian_numerical(robot : RobotStruct, motions : RobotMotions
 def jacobian_numerical(robot : RobotStruct, motions : RobotMotions, state_type : StateType) -> np.ndarray:
   def outward_func(x):
     return outward_function(robot, x, state_type)
-
-  motion = np.zeros(robot.dof * state_type.order)
+  motion = np.zeros(robot.dof * state_type.time_order)
 
   for joint in robot.joints:
-      m = motions.joint_motions(joint.dof, joint.dof_index, state_type.order)
-      motion[joint.dof_index*state_type.order:joint.dof_index*state_type.order+joint.dof*state_type.order] = m.flatten()
+      m = motions.joint_motions(joint.dof, joint.dof_index, state_type.time_order)
+      motion[joint.dof_index*state_type.time_order:joint.dof_index*state_type.time_order+joint.dof*state_type.time_order] = m.flatten()
 
   for link in robot.links:
-      m = motions.link_motions(link.dof, link.dof_index, state_type.order)
-      motion[link.dof_index*state_type.order:link.dof_index*state_type.order+link.dof*state_type.order] = m.flatten()
-  
+      m = motions.link_motions(link.dof, link.dof_index, state_type.time_order)
+      motion[link.dof_index*state_type.time_order:link.dof_index*state_type.time_order+link.dof*state_type.time_order] = m.flatten()
+      
   return numerical_grad(motion, outward_func)
