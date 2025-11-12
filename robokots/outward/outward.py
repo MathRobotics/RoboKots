@@ -21,6 +21,8 @@ from ..kinematics.kinematics_soft_link import soft_link_local_cmtm, calc_link_lo
 from ..dynamics.base import spatial_inertia
 from ..dynamics.dynamics import link_dynamics, joint_dynamics, link_momentum_cmtm, link_force_cmtm, link_dynamics_cmtm, joint_dynamics_cmtm
 
+from .outward_state import outward_state
+
 def kinematics(robot : RobotStruct, motions, order = 3) -> dict:
   '''
   Forward kinematics computation
@@ -225,6 +227,4 @@ def outward_function(robot : RobotStruct, motions, state_type : StateType) -> di
   else:
     state_dict = kinematics(robot, motions, state_type.order)
     
-  return extract_dict_info(state_dict, state_type.data_type,
-                           state_type.owner_type[0], state_type.owner_name, 
-                           frame=state_type.frame_name)
+  return outward_state(robot, state_dict, state_type)
