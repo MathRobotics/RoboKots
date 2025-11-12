@@ -403,9 +403,9 @@ def extract_dict_link_info(state : dict, data_type : str, link_name : str, frame
 def extract_dict_joint_info(state : dict, data_type : str, joint_name : str, frame = "dummy", rel_frame = 'dummy'):
     if frame != 'dummy':
         if frame == 'world':
-            cmtm = state_dict_to_cmtm(state, joint_name)
-            cmtm_wrench = CMTM.change_elemclass(cmtm, SE3wrench)
             order = keys_order[data_type]
+            cmtm = state_dict_to_cmtm(state, joint_name, order)
+            cmtm_wrench = CMTM.change_elemclass(cmtm, SE3wrench)
             
     if data_type == "frame":
         return state_dict_to_frame(state, joint_name)
