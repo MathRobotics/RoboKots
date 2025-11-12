@@ -223,8 +223,7 @@ def dynamics_cmtm(robot : RobotStruct, motions, dynamics_order = 1) -> dict:
 
 def outward_function(robot : RobotStruct, motions, state_type : StateType) -> dict:
   if state_type.is_dynamics:
-    state_dict = dynamics_cmtm(robot, motions, max(state_type.order-2,0))
+    state_dict = dynamics_cmtm(robot, motions, max(state_type.time_order-2,0))
   else:
-    state_dict = kinematics(robot, motions, state_type.order)
-    
+    state_dict = kinematics(robot, motions, state_type.time_order)
   return outward_state(robot, state_dict, state_type)

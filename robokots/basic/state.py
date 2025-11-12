@@ -14,8 +14,10 @@ class StateType:
         self.owner_type = owner_type
         self.owner_name = owner_name
         self.data_type = data_type
+
         self.frame_name = frame_name
-        self.order = keys_time_order.get(data_type, 1)
+        self.time_order = keys_time_order.get(data_type, 1)
+        self.key_order = keys_order.get(data_type, 1)
         self.is_dynamics = is_in_keys_dynamics([data_type])
         self.alliance = f"{owner_name}_{owner_type}_{data_type}"
 
