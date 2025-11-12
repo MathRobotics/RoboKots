@@ -19,7 +19,7 @@ from .misc import check_valid_str_list, check_valid_data_type_list, count_time_o
 from .outward.outward import kinematics as outward_kinematics
 from .outward.outward import dynamics_cmtm as outward_dynamics
 from .outward.outward import link_diff_kinematics_numerical, calc_link_total_point_frame
-from .outward.outward_gradient import link_jacobian, link_cmtm_jacobian, link_jacobian_numerical
+from .outward.outward_gradient import jacobian_numerical, link_jacobian, link_cmtm_jacobian, link_jacobian_numerical
 from .outward.outward_total_gradient import link_momentum_jacobian, link_world_momentum_jacobian
 from .outward.outward_total_gradient import link_force_jacobian, joint_momentum_jacobian, link_dynamics_jacobian_numerical   
 
@@ -297,24 +297,37 @@ class Kots():
     data_type_list_force = [filter_keys_force(data_type) for data_type in data_type_list]
     data_type_list_torque = [filter_keys_torque(data_type) for data_type in data_type_list]
 
+    total_jacobian_kinematics = np.zeros((0, self.robot_.dof*max_order))
     total_jacobian_momentum = np.zeros((0, self.robot_.dof*max_order))
     total_jacobian_force = np.zeros((0, self.robot_.dof*max_order))
 
     if numerical:
-      total_jacobian_kinematics = link_jacobian_numerical(self.robot_, self.motions_, state_type.owner_name, "cmtm", order_=max_order)
-      if any(data_type_list_momentum):
-        total_jacobian_momentum = link_dynamics_jacobian_numerical(self.robot_, self.motions_, state_type.owner_name, "momentum", state_type.frame_name, output_order_=max_order-1)
-      if any(data_type_list_force):
-        total_jacobian_force = link_dynamics_jacobian_numerical(self.robot_, self.motions_, state_type.owner_name, "force", state_type.frame_name, output_order_=max_order-2)
+      if state_type.owner_type[0] == "link":
+        total_jacobian_kinematics = link_jacobian_numerical(self.robot_, self.motions_, state_type.owner_name, "cmtm", order_=max_order)
+        if any(data_type_list_momentum):
+          total_jacobian_momentum = link_dynamics_jacobian_numerical(self.robot_, self.motions_, state_type.owner_name, "momentum", state_type.frame_name, output_order_=max_order-1)
+        if any(data_type_list_force):
+          total_jacobian_force = link_dynamics_jacobian_numerical(self.robot_, self.motions_, state_type.owner_name, "force", state_type.frame_name, output_order_=max_order-2)
+      elif state_type.owner_type[0] == "joint":
+        if any(data_type_list_momentum):
+          total_jacobian_momentum = jacobian_numerical(self.robot_, self.motions_, state_type)
+        if any(data_type_list_force):
+          total_jacobian_force = jacobian_numerical(self.robot_, self.motions_, state_type)
     else:
-      total_jacobian_kinematics = link_cmtm_jacobian(self.robot_, self.motions_, self.state_dict_, state_type.owner_name, max_order)
-      if any(data_type_list_momentum):
-        if state_type.frame_name[0] is None:
-          total_jacobian_momentum = link_momentum_jacobian(self.robot_, self.state_dict_, state_type.owner_name, momentum_order=max_order-1)
-        else:
-          total_jacobian_momentum = link_world_momentum_jacobian(self.robot_, self.state_dict_, state_type.owner_name, momentum_order=max_order-1)
-      if any(data_type_list_force):
-        total_jacobian_force = link_force_jacobian(self.robot_, self.state_dict_, state_type.owner_name, force_order=max_order-2)
+      if state_type.owner_type[0] == "link":
+        total_jacobian_kinematics = link_cmtm_jacobian(self.robot_, self.motions_, self.state_dict_, state_type.owner_name, max_order)
+        if any(data_type_list_momentum):
+          if state_type.frame_name[0] is None:
+            total_jacobian_momentum = link_momentum_jacobian(self.robot_, self.state_dict_, state_type.owner_name, momentum_order=max_order-1)
+          else:
+            total_jacobian_momentum = link_world_momentum_jacobian(self.robot_, self.state_dict_, state_type.owner_name, momentum_order=max_order-1)
+        if any(data_type_list_force):
+          total_jacobian_force = link_force_jacobian(self.robot_, self.state_dict_, state_type.owner_name, force_order=max_order-2)
+      elif state_type.owner_type[0] == "joint":
+        if any(data_type_list_momentum):
+          total_jacobian_momentum = joint_momentum_jacobian(self.robot_, self.state_dict_, state_type.owner_name, momentum_order=max_order-1)
+        if any(data_type_list_force):
+          total_jacobian_force = joint_force_jacobian(self.robot_, self.state_dict_, state_type.owner_name, force_order=max_order-2)
 
     jacobian_kinematics = filter_cmtm_row_data_to_target(total_jacobian_kinematics, state_type.owner_name, data_type_list_kinematics, dim=self.dim_)
     jacobian_momentum = filter_cmtm_row_data_to_target(total_jacobian_momentum, state_type.owner_name, data_type_list_momentum, dim=self.dim_)
