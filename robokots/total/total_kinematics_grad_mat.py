@@ -3,6 +3,20 @@ from ..basic.robot import RobotStruct
 from ..basic.state_dict import state_dict_to_cmtm, state_dict_to_rel_cmtm
 from ..kinematics.kinematics_matrix import joint_select_diag_mat
 
+def total_joint_tan_vel_to_link_tan_vel_grad_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
+    n_ = dim * order
+    mat = np.zeros((r.link_num * n_, r.joint_num * n_))
+
+    for i, link in enumerate(r.links):
+        link_route = []
+        joint_route = []
+        r.route_target_link(link, link_route, joint_route)
+        for j in joint_route:
+            joint = r.joints[j]
+            rel_cmtm = state_dict_to_rel_cmtm(state, link.name, r.links[joint.child_link_id].name, order)
+            mat[i*n_:(i+1)*n_, j*n_:(j+1)*n_] = rel_cmtm.mat_adj()
+    return mat
+
 def total_joint_tan_vel_to_link_vel_grad_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
     n_ = dim * order
     mat = np.zeros((r.link_num * n_, r.joint_num * n_))
