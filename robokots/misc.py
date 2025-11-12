@@ -21,19 +21,19 @@ def check_valid_data_type_list(data_type_list : List[str]):
         raise ValueError("data_type_list is empty")
   
     if type(data_type_list) is str:
-        data_type_list = [[data_type_list]]
+        data_type_list = [data_type_list]
 
     return data_type_list
 
-def count_time_order(robot : RobotStruct, data_type_list : List[str]) -> int:
+def count_time_order(data_type_list : List[str]) -> int:
     max_order = 0
-    for link_dt_list in data_type_list:
-      for data_type in link_dt_list:
+
+    for data_type in data_type_list:
         if data_type not in keys_time_order:
-          raise ValueError(f"Invalid data_type: {data_type}. Must be one of {list(keys_time_order.keys())}.")
+            raise ValueError(f"Invalid data_type: {data_type}. Must be one of {list(keys_time_order.keys())}.")
         order = keys_time_order[data_type]
         if order > max_order:
-          max_order = order
+            max_order = order
 
     return max_order
 
@@ -41,12 +41,14 @@ def filter_cmtm_row_data_to_target(cmtm_row_data : np.array, name_list : List[st
     idx = []
     base = dim_to_dof(dim)
 
-    for i, _ in enumerate(name_list):
-        for data_type in data_type_list[i]:
-            order = keys_order[data_type]
-            dof   = data_type_dof(data_type, order, dim)
-            start = base * (order - 1)
-            idx.extend(range(start, start + dof))
+    
+    for data_type in data_type_list:
+        if not data_type:
+            continue
+        order = keys_order[data_type]
+        dof   = data_type_dof(data_type, order, dim)
+        start = base * (order - 1)
+        idx.extend(range(start, start + dof))
 
     if not idx:
         return cmtm_row_data[:0, :]
