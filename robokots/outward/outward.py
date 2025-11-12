@@ -10,8 +10,8 @@ from mathrobo import SO3, SE3, CMTM, SE3wrench, numerical_difference, build_inte
 
 from ..basic.robot import RobotStruct
 from ..basic.motion import RobotMotions
-from ..basic.state_dict import state_dict_to_cmtm, extract_dict_link_info, vecs_to_state_dict, cmtm_to_state_list, state_dict_to_frame, state_dict_to_vecs
-from ..basic.state import data_type_to_sub_func, data_type_dof
+from ..basic.state_dict import state_dict_to_cmtm, extract_dict_link_info, extract_dict_info, vecs_to_state_dict, cmtm_to_state_list, state_dict_to_frame, state_dict_to_vecs
+from ..basic.state import data_type_to_sub_func, data_type_dof, StateType
 
 from ..kinematics.base import convert_joint_to_data, convert_link_to_data
 from ..kinematics.kinematics import joint_local_cmtm, joint_rel_cmtm, joint_rel_frame
@@ -218,3 +218,13 @@ def dynamics_cmtm(robot : RobotStruct, motions, dynamics_order = 1) -> dict:
     state_dict.update(state)
     
   return state_dict
+
+def outward_function(robot : RobotStruct, motions, state_type : StateType) -> dict:
+  if state_type.is_dynamics:
+    state_dict = dynamics_cmtm(robot, motions, max(state_type.order-2,0))
+  else:
+    state_dict = kinematics(robot, motions, state_type.order)
+    
+  return extract_dict_info(state_dict, state_type.data_type,
+                           state_type.owner_type[0], state_type.owner_name, 
+                           frame=state_type.frame_name)
