@@ -16,6 +16,9 @@ class Target:
     
   def set_index(self, i : int):
     self.index = i    
+
+  def __repr__(self):
+     return f"Target(\ndata type:{self.data_type},\nowner type : {self.owner_type},\nowner name : {self.owner_name},\nframe name : {self.frame_name},\nframe : {self.frame})"
 class TargetList:
   def __init__(self, targets_: List["Target"]):
     self.targets = targets_
@@ -47,14 +50,6 @@ class TargetList:
     ) for target in data["targets"]]
 
     return TargetList(targets)
-  
-  def print(self):
-      print(f"Target Number: {self.target_num}")
-      print("\nTargets:")
-      for t in self.targets:
-          print(f"  Owner Type: {t.owner_type}")
-          print(f"  Owner Name: {t.owner_name}")
-          print(f"  Data Type: {t.data_type}")
-          print(f"  Index: {t.index}")
-          print(f"  Frame Name: {t.frame_name}")
-          print(f"  Frame: {t.frame}\n")
+
+  def __repr__(self):
+     return f"TargetList(\n  targets: {self.targets}\n)"
