@@ -12,8 +12,6 @@ def outward_state(robot : RobotStruct, state_dict : dict, state_type : StateType
         joint = robot.joint_list(state_type.owner_name)
         link_name = robot.links[joint.parent_link_id].name
 
-    data_alias = state_type.owner_name+"_"+state_type.owner_type+"_"+state_type.data_type
-
     if state_type.frame_name == "world":
         if state_type.is_dynamics:
             cmtm_wrench = state_dict_to_cmtm_wrench(state_dict, link_name, state_type.order)
@@ -32,7 +30,7 @@ def outward_state(robot : RobotStruct, state_dict : dict, state_type : StateType
             world_momentum = CMVector((cmtm_wrench.mat_adj() @ local_momentum).reshape(-1,6)).vecs()
             return world_momentum[-1]
         else:
-            return np.array(state_dict[data_alias])
+            return np.array(state_dict[state_type.alliance])
     elif "force" in state_type.data_type:
         if state_type.frame_name == 'world':
             local_force = state_dict_to_cmvec(state_dict, state_type.owner_name, \
@@ -41,8 +39,8 @@ def outward_state(robot : RobotStruct, state_dict : dict, state_type : StateType
             world_force = CMVector((cmtm_wrench.mat_adj() @ local_force).reshape(-1,6)).vecs()
             return world_force[-1]
         else:
-            return np.array(state_dict[data_alias])
+            return np.array(state_dict[state_type.alliance])
     elif "torque" in state_type.data_type:
-        return np.array(state_dict[data_alias])
+        return np.array(state_dict[state_type.alliance])
     else:
-        return np.array(state_dict[data_alias])
+        return np.array(state_dict[state_type.alliance])
