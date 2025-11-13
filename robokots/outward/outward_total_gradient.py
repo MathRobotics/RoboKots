@@ -51,8 +51,8 @@ def world_joint_momentum_jacobian(robot : RobotStruct, state : dict, joint_name_
     joints = robot.joint_list(joint_name_list)
     if joints == [None]:
         raise ValueError("joint_name_list contains invalid joint name")
-    mat = total_coord_to_world_joint_momentum_grad_mat(robot, state, order=momentum_order-1, dim=dim)
-    jacobs = np.zeros((dim * (momentum_order-1) * len(joints), robot.dof * momentum_order))
+    mat = total_coord_to_world_joint_momentum_grad_mat(robot, state, order=momentum_order+1, dim=dim)
+    jacobs = np.zeros((dim * (momentum_order) * len(joints), robot.dof * (momentum_order+1)))
 
     for i, joint in enumerate(joints):
         jacobs[i*dim*(momentum_order-1):(i+1)*dim*(momentum_order-1), :] = mat[joint.id*dim*(momentum_order-1):(joint.id+1)*dim*(momentum_order-1), :]
