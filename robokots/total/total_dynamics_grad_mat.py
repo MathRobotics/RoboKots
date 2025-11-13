@@ -28,7 +28,7 @@ def total_link_sp_vel_to_link_force_grad_mat(r : RobotStruct, state : dict, forc
     mat = np.zeros((r.link_num * n_, r.link_num * m_))
 
     for i, link in enumerate(r.links):
-        cmtm = state_dict_to_cmtm(state, link.name, force_order+1)
+        cmtm = state_dict_to_cmtm(state, link.name, "link", force_order+1)
         mat[i*n_:(i+1)*n_, i*m_:(i+1)*m_] = link_to_force_tan_map_mat(cmtm, spatial_inertia(link.mass, link.inertia, link.cog), force_order=force_order, dim=dim)
     return mat
 

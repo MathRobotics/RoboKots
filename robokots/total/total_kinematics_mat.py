@@ -60,7 +60,7 @@ def total_world_link_cmtm(r : RobotStruct, state : dict, order : int = 1, dim : 
     mat = np.zeros((r.link_num * n_, r.link_num * n_))
 
     for i, link in enumerate(r.links):
-        cmtm = state_dict_to_cmtm(state, link.name, order)
+        cmtm = state_dict_to_cmtm(state, link.name, "link", order)
         mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = cmtm.mat_adj()
     return mat
 
@@ -69,7 +69,7 @@ def total_world_link_cmtm_inv(r : RobotStruct, state : dict, order : int = 1, di
     mat = np.zeros((r.link_num * n_, r.link_num * n_))
 
     for i, link in enumerate(r.links):
-        cmtm = state_dict_to_cmtm(state, link.name, order)
+        cmtm = state_dict_to_cmtm(state, link.name, "link", order)
         mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = cmtm.mat_inv_adj()
     return mat
 
@@ -78,7 +78,7 @@ def total_world_joint_cmtm(r : RobotStruct, state : dict, order : int = 1, dim :
     mat = np.zeros((r.joint_num * n_, r.joint_num * n_))
 
     for i, joint in enumerate(r.joints):
-        cmtm = state_dict_to_cmtm(state, r.links[joint.child_link_id].name, order)
+        cmtm = state_dict_to_cmtm(state, r.links[joint.child_link_id].name, "link", order)
         mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = cmtm.mat_adj()
     return mat
 
@@ -87,7 +87,7 @@ def total_world_joint_cmtm_inv(r : RobotStruct, state : dict, order : int = 1, d
     mat = np.zeros((r.joint_num * n_, r.joint_num * n_))
 
     for i, joint in enumerate(r.joints):
-        cmtm = state_dict_to_cmtm(state, r.links[joint.child_link_id].name, order)
+        cmtm = state_dict_to_cmtm(state, r.links[joint.child_link_id].name, "link", order)
         mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = cmtm.mat_inv_adj()
     return mat
 
@@ -98,7 +98,7 @@ def total_link_vel_to_joint_vel_mat(r : RobotStruct, state : dict, order : int =
     for i, joint in enumerate(r.joints):
         p_id = joint.parent_link_id
         c_id = joint.child_link_id
-        rel_cmtm = state_dict_to_rel_cmtm(state, r.links[c_id].name, r.links[p_id].name, order)
+        rel_cmtm = state_dict_to_rel_cmtm(state, r.links[c_id].name, r.links[p_id].name, "link", order)
         mat[i*n_:(i+1)*n_, p_id*n_:(p_id+1)*n_] = - rel_cmtm.mat_adj()
         mat[i*n_:(i+1)*n_, c_id*n_:(c_id+1)*n_] = np.eye(n_)
     return mat
@@ -113,7 +113,7 @@ def total_joint_vel_to_link_vel_mat(r : RobotStruct, state : dict, order : int =
         r.route_target_link(link, link_route, joint_route)
         for j in joint_route:
             joint = r.joints[j]
-            rel_cmtm = state_dict_to_rel_cmtm(state, link.name, r.links[joint.child_link_id].name, order)
+            rel_cmtm = state_dict_to_rel_cmtm(state, link.name, r.links[joint.child_link_id].name, "link", order)
             mat[i*n_:(i+1)*n_, j*n_:(j+1)*n_] = rel_cmtm.mat_adj()
     return mat
 

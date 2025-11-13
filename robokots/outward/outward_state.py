@@ -14,14 +14,14 @@ def outward_state(robot : RobotStruct, state_dict : dict, state_type : StateType
 
     if state_type.frame_name == "world":
         if state_type.is_dynamics:
-            cmtm_wrench = state_dict_to_cmtm_wrench(state_dict, link_name, state_type.key_order)
+            cmtm_wrench = state_dict_to_cmtm_wrench(state_dict, link_name, "link", state_type.key_order)
         else:
-            cmtm = state_dict_to_cmtm(state_dict, link_name, state_type.key_order)
+            cmtm = state_dict_to_cmtm(state_dict, link_name, "link", state_type.key_order)
 
     if state_type.data_type == "frame":
         return state_dict_to_frame(state_dict, state_type.owner_name)
     elif state_type.data_type == "cmtm":
-        return state_dict_to_cmtm(state_dict, state_type.owner_name)
+        return state_dict_to_cmtm(state_dict, state_type.owner_name, state_type.owner_type)
     elif "momentum" in state_type.data_type:
         if state_type.frame_name == 'world':
             local_momentum = state_dict_to_cmvec(state_dict, state_type.owner_name, \

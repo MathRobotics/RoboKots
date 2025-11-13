@@ -72,7 +72,7 @@ def count_dict_time_order(state: dict) -> int:
 
     return max_order
 
-def cmtm_to_state_list(cmtm : CMTM, name : str) -> list:
+def cmtm_to_state_list(cmtm : CMTM, owner_type : str, owner_name : str) -> list:
   '''
   Convert CMTM to state data
   Args:
@@ -85,25 +85,27 @@ def cmtm_to_state_list(cmtm : CMTM, name : str) -> list:
 
   order = cmtm._n
 
+  alias_name = f"{owner_name}_{owner_type}"
+
   mat = cmtm.elem_mat()
   pos = mat[:3,3]
   rot_vec = mat[:3,:3].ravel()
-  state.append((name+"_pos" , pos.tolist()))
-  state.append((name+"_rot" , rot_vec.tolist()))
+  state.append((alias_name+"_pos" , pos.tolist()))
+  state.append((alias_name+"_rot" , rot_vec.tolist()))
   if order > 1:
     veloc = cmtm.elem_vecs(0)
-    state.append((name+"_vel" , veloc.tolist()))
+    state.append((alias_name+"_vel" , veloc.tolist()))
   if order > 2:
     accel = cmtm.elem_vecs(1)
-    state.append((name+"_acc" , accel.tolist()))
+    state.append((alias_name+"_acc" , accel.tolist()))
   if order > 3:
     for i in range(order-keys_order["acc"]):
       vec = cmtm.elem_vecs(i+2)
-      state.append((name+"_acc_diff"+str(i+1) , vec.tolist()))
+      state.append((alias_name+"_acc_diff"+str(i+1) , vec.tolist()))
   
   return state
 
-def vecs_to_state_dict(vec : np.ndarray, name : str, type_name : str, order : int) -> list:
+def vecs_to_state_dict(vec : np.ndarray, owner_type : str, owner_name : str, data_type : str,  order : int) -> list:
     '''
     Convert vector data to state data
     Args:
@@ -120,11 +122,13 @@ def vecs_to_state_dict(vec : np.ndarray, name : str, type_name : str, order : in
         vec_dof = vec.size // order
     else:
         raise ValueError("order must be greater than 0")
+    
+    alias_name = f"{owner_name}_{owner_type}_{data_type}"
 
     if vec.size == 0 or vec_dof == 0:
         return [
             (
-                f"{name}_{type_name}" if i == 0 else f"{name}_{type_name}_diff{i}", []
+                f"{alias_name}" if i == 0 else f"{alias_name}_diff{i}", []
             )
             for i in range(order)
         ]
@@ -133,7 +137,7 @@ def vecs_to_state_dict(vec : np.ndarray, name : str, type_name : str, order : in
 
     state = [
         (
-            f"{name}_{type_name}" if i == 0 else f"{name}_{type_name}_diff{i}",
+            f"{alias_name}" if i == 0 else f"{alias_name}_diff{i}",
             row.tolist(),
         )
         for i, row in enumerate(vecs)
@@ -150,7 +154,7 @@ def state_dict_to_link_pos(state : dict, name : str) -> np.ndarray:
     Returns:
         np.ndarray: position vector
     '''
-    pos = np.array(state[name+"_pos"])
+    pos = np.array(state[name+"_link_pos"])
 
     return pos
 
@@ -170,7 +174,7 @@ def state_dict_to_links_pos(state : dict, link_names : list) -> np.ndarray:
     
     return np.array(pos_list)
 
-def state_dict_to_rot(state : dict, name : str) -> np.ndarray:
+def state_dict_to_rot(state : dict, owner_name : str, owner_type : str = "link") -> np.ndarray:
     '''
     Convert state data to rotation matrix
     Args:
@@ -179,12 +183,12 @@ def state_dict_to_rot(state : dict, name : str) -> np.ndarray:
     Returns:
         np.ndarray: rotation matrix
     '''
-    rot_vec = np.array(state[name+"_rot"])
+    rot_vec = np.array(state[owner_name+"_"+owner_type+"_rot"])
     rot = rot_vec.reshape(3,3)
 
     return rot
 
-def state_dict_to_frame(state : dict, name : str) -> SE3:
+def state_dict_to_frame(state : dict, owner_name : str, owner_type : str = "link") -> SE3:
     '''
     Convert state data to SE3
     Args:
@@ -193,13 +197,13 @@ def state_dict_to_frame(state : dict, name : str) -> SE3:
     Returns:
         SE3: SE3 object
     '''
-    pos = np.array(state[name+"_pos"])
-    rot = state_dict_to_rot(state, name)
+    pos = np.array(state[owner_name+"_"+owner_type+"_pos"])
+    rot = state_dict_to_rot(state, owner_name, owner_type)
     mat = SE3(rot, pos)
 
     return mat
 
-def state_dict_to_frame_wrench(state : dict, name : str) -> SE3wrench:
+def state_dict_to_frame_wrench(state : dict, owner_name : str, owner_type : str = "link") -> SE3wrench:
     '''
     Convert state data to SE3wrench
     Args:
@@ -208,13 +212,13 @@ def state_dict_to_frame_wrench(state : dict, name : str) -> SE3wrench:
     Returns:
         SE3wrench: SE3wrench object
     '''
-    pos = np.array(state[name+"_pos"])
-    rot = state_dict_to_rot(state, name)
+    pos = np.array(state[owner_name+"_"+owner_type+"_pos"])
+    rot = state_dict_to_rot(state, owner_name, owner_type)
     mat = SE3wrench(rot, pos)
 
     return mat
 
-def __state_dict_to_cmtm_vecs(state : dict, name : str, order = None) -> np.ndarray:
+def __state_dict_to_cmtm_vecs(state : dict, owner_name : str, owner_type : str = "link", order = None) -> np.ndarray:
     '''
     Convert state data to CMTM values
     Args:
@@ -232,16 +236,16 @@ def __state_dict_to_cmtm_vecs(state : dict, name : str, order = None) -> np.ndar
     vec = np.zeros((order-1, 6))
 
     if order > 1:
-        vec[0] = np.array(state[name+"_vel"])
+        vec[0] = np.array(state[owner_name+"_"+owner_type+"_vel"])
     if order > 2:
-        vec[1] = np.array(state[name+"_acc"])
+        vec[1] = np.array(state[owner_name+"_"+owner_type+"_acc"])
     if order > 3:
         for i in range(order-keys_order["acc"]):
-            vec[i+2] = np.array(state[name+"_acc_diff"+str(i+1)])
+            vec[i+2] = np.array(state[owner_name+"_"+owner_type+"_acc_diff"+str(i+1)])
 
     return vec
 
-def state_dict_to_cmtm(state : dict, name : str, order = None) -> CMTM:
+def state_dict_to_cmtm(state : dict, owner_name : str, owner_type : str = "link", order = None) -> CMTM:
     '''
     Convert state data to CMTM
     Args:
@@ -250,14 +254,14 @@ def state_dict_to_cmtm(state : dict, name : str, order = None) -> CMTM:
     Returns:
         CMTM: CMTM object
     '''
-    mat = state_dict_to_frame(state, name)
-    vec = __state_dict_to_cmtm_vecs(state, name, order)
+    mat = state_dict_to_frame(state, owner_name, owner_type)
+    vec = __state_dict_to_cmtm_vecs(state, owner_name, owner_type, order)
 
     cmtm = CMTM[SE3](mat, vec)
 
     return cmtm
 
-def state_dict_to_cmtm_wrench(state : dict, name : str, order = None) -> CMTM:
+def state_dict_to_cmtm_wrench(state : dict, owner_name : str, owner_type : str = "link", order = None) -> CMTM:
     '''
     Convert state data to CMTM
     Args:
@@ -266,14 +270,14 @@ def state_dict_to_cmtm_wrench(state : dict, name : str, order = None) -> CMTM:
     Returns:
         CMTM: CMTM object
     '''
-    mat = state_dict_to_frame_wrench(state, name)
-    vec = __state_dict_to_cmtm_vecs(state, name, order)
+    mat = state_dict_to_frame_wrench(state, owner_name, owner_type)
+    vec = __state_dict_to_cmtm_vecs(state, owner_name, owner_type, order)
 
     cmtm = CMTM[SE3wrench](mat, vec)
 
     return cmtm
 
-def state_dict_to_rel_frame(state : dict, base_name : str, target_name : str) -> SE3:
+def state_dict_to_rel_frame(state : dict, base_name : str, target_name : str, owner_type : str = "link") -> SE3:
     '''
     Convert state data to relative SE3
     Args:
@@ -283,13 +287,13 @@ def state_dict_to_rel_frame(state : dict, base_name : str, target_name : str) ->
     Returns:
         SE3: SE3 object
     '''
-    base_frame = state_dict_to_frame(state, base_name)
-    target_frame = state_dict_to_frame(state, target_name)
+    base_frame = state_dict_to_frame(state, base_name, owner_type)
+    target_frame = state_dict_to_frame(state, target_name, owner_type)
     rel_frame = base_frame.inv() @ target_frame
 
     return rel_frame
 
-def state_dict_to_rel_cmtm(state : dict, base_name : str, target_name : str, order = None) -> CMTM:
+def state_dict_to_rel_cmtm(state : dict, base_name : str, target_name : str, owner_type : str = "link", order = None) -> CMTM:
     '''
     Convert state data to relative CMTM
     Args:
@@ -299,13 +303,13 @@ def state_dict_to_rel_cmtm(state : dict, base_name : str, target_name : str, ord
     Returns:
         CMTM: CMTM object
     '''
-    base_cmtm = state_dict_to_cmtm(state, base_name, order)
-    target_cmtm = state_dict_to_cmtm(state, target_name, order)
+    base_cmtm = state_dict_to_cmtm(state, base_name, owner_type, order)
+    target_cmtm = state_dict_to_cmtm(state, target_name, owner_type, order)
     rel_cmtm = base_cmtm.inv() @ target_cmtm
 
     return rel_cmtm
 
-def state_dict_to_rel_cmtm_wrench(state : dict, base_name : str, target_name : str, order = None) -> CMTM:
+def state_dict_to_rel_cmtm_wrench(state : dict, base_name : str, target_name : str, owner_type : str = "link", order = None) -> CMTM:
     '''
     Convert state data to relative CMTM
     Args:
@@ -315,13 +319,12 @@ def state_dict_to_rel_cmtm_wrench(state : dict, base_name : str, target_name : s
     Returns:
         CMTM: CMTM object
     '''
-    base_cmtm = state_dict_to_cmtm_wrench(state, base_name, order)
-    target_cmtm = state_dict_to_cmtm_wrench(state, target_name, order)
-    rel_cmtm = base_cmtm.inv() @ target_cmtm
-
+    base_cmtm = state_dict_to_cmtm_wrench(state, base_name, owner_type, order)
+    target_cmtm = state_dict_to_cmtm_wrench(state, target_name, owner_type, order)
+    rel_cmtm = CMTM.change_elemclass(base_cmtm.inv() @ target_cmtm, SE3wrench)
     return rel_cmtm
 
-def state_dict_to_vecs(state : dict, name : str, type_name : str) -> np.ndarray:
+def state_dict_to_vecs(state : dict, owner_type : str, owner_name : str, data_type : str) -> np.ndarray:
     '''
     Convert state data to vector
     Args:
@@ -334,16 +337,16 @@ def state_dict_to_vecs(state : dict, name : str, type_name : str) -> np.ndarray:
     vecs = []
     
     for k in state.keys():
-        if k.startswith(name + "_") and k.endswith("_" + type_name):
+        if k.startswith(owner_name + "_") and k.endswith("_" + owner_type+"_"+data_type):
             vecs.append(np.array(state[k]))
-        elif re.match(rf"{name}_{type_name}_diff\d+", k):
+        elif re.match(rf"{owner_name}_{owner_type}_{data_type}_diff\d+", k):
             vecs.append(np.array(state[k]))
     if len(vecs) == 0:
-        raise ValueError(f"Invalid name: {name} or type_name: {type_name}.")
+        raise ValueError(f"Invalid name: {owner_name}, type_name: {owner_type} or data_type: {data_type}.")
 
     return np.concatenate(vecs)
 
-def state_dict_to_cmvec(state : dict, name : str, type_name : str, order : int) -> CMVector:
+def state_dict_to_cmvec(state : dict, owner_name : str, owner_type : str, order : int) -> CMVector:
     '''
     Convert state data to vector
     Args:
@@ -357,16 +360,16 @@ def state_dict_to_cmvec(state : dict, name : str, type_name : str, order : int) 
 
     l = 0
     for k in state.keys():
-        if k.startswith(name + "_") and k.endswith("_" + type_name):
+        if k.startswith(owner_name + "_") and k.endswith("_" + owner_type):
             vecs.append(np.array(state[k]))
             l += 1
-        elif re.match(rf"{name}_{type_name}_diff\d+", k):
+        elif re.match(rf"{owner_name}_{owner_type}_diff\d+", k):
             vecs.append(np.array(state[k]))
             l += 1
         if l >= order:
             break
     if len(vecs) == 0:
-        raise ValueError(f"Invalid name: {name} or type_name: {type_name}.")
+        raise ValueError(f"Invalid name: {owner_name} or type_name: {owner_type}.")
 
     return CMVector(np.stack(vecs))
 

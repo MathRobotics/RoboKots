@@ -13,7 +13,7 @@ def total_joint_tan_vel_to_link_tan_vel_grad_mat(r : RobotStruct, state : dict, 
         r.route_target_link(link, link_route, joint_route)
         for j in joint_route:
             joint = r.joints[j]
-            rel_cmtm = state_dict_to_rel_cmtm(state, link.name, r.links[joint.child_link_id].name, order)
+            rel_cmtm = state_dict_to_rel_cmtm(state, link.name, r.links[joint.child_link_id].name, "link", order)
             mat[i*n_:(i+1)*n_, j*n_:(j+1)*n_] = rel_cmtm.mat_adj()
     return mat
 
@@ -27,8 +27,8 @@ def total_joint_tan_vel_to_link_vel_grad_mat(r : RobotStruct, state : dict, orde
         r.route_target_link(link, link_route, joint_route)
         for j in joint_route:
             joint = r.joints[j]
-            rel_cmtm = state_dict_to_rel_cmtm(state, link.name, r.links[joint.child_link_id].name, order)
-            link_cmtm = state_dict_to_cmtm(state, link.name, order)
+            rel_cmtm = state_dict_to_rel_cmtm(state, link.name, r.links[joint.child_link_id].name, "link", order)
+            link_cmtm = state_dict_to_cmtm(state, link.name, "link", order)
             mat[i*n_:(i+1)*n_, j*n_:(j+1)*n_] = link_cmtm.tangent_mat_inv() @ rel_cmtm.mat_adj()
     return mat
 
@@ -43,8 +43,8 @@ def total_joint_tan_vel_to_link_sp_vel_grad_mat(r : RobotStruct, state : dict, o
         r.route_target_link(link, link_route, joint_route)
         for j in joint_route:
             joint = r.joints[j]
-            rel_cmtm = state_dict_to_rel_cmtm(state, link.name, r.links[joint.child_link_id].name, order)
-            link_cmtm = state_dict_to_cmtm(state, link.name, order)
+            rel_cmtm = state_dict_to_rel_cmtm(state, link.name, r.links[joint.child_link_id].name, "link", order)
+            link_cmtm = state_dict_to_cmtm(state, link.name, "link", order)
             mat[i*n_l:(i+1)*n_l, j*n_j:(j+1)*n_j] = link_cmtm.tangent_mat_inv()[dim:] @ rel_cmtm.mat_adj()
     return mat
 
@@ -55,7 +55,7 @@ def total_coord_to_joint_tan_vel_grad_mat(r : RobotStruct, state : dict, order :
     for i, joint in enumerate(r.joints):
         if joint.dof == 0:  # Joint with no degree of freedom
             continue
-        joint_cmtm = state_dict_to_cmtm(state, joint.name, order)
+        joint_cmtm = state_dict_to_cmtm(state, joint.name, "joint", order)
         mat[i*n_:(i+1)*n_, joint.dof_index*order:(joint.dof_index+joint.dof)*order] = \
             joint_cmtm.tangent_mat() @ joint_select_diag_mat(joint.select_mat, order)
 
