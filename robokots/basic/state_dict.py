@@ -319,8 +319,8 @@ def state_dict_to_rel_cmtm_wrench(state : dict, base_name : str, target_name : s
     Returns:
         CMTM: CMTM object
     '''
-    base_cmtm = state_dict_to_cmtm_wrench(state, base_name, owner_type, order)
-    target_cmtm = state_dict_to_cmtm_wrench(state, target_name, owner_type, order)
+    base_cmtm = state_dict_to_cmtm(state, base_name, owner_type, order)
+    target_cmtm = state_dict_to_cmtm(state, target_name, owner_type, order)
     rel_cmtm = CMTM.change_elemclass(base_cmtm.inv() @ target_cmtm, SE3wrench)
     return rel_cmtm
 
@@ -371,7 +371,7 @@ def state_dict_to_cmvec(state : dict, owner_name : str, owner_type : str, data_t
     if len(vecs) == 0:
         raise ValueError(f"Invalid name: {owner_name}, type_name: {owner_type} or data_type: {data_type}.")
 
-    return CMVector(np.stack(vecs))
+    return CMVector(np.stack(vecs).reshape(order, -1))
 
 def extract_dict_link_info(state : dict, data_type : str, link_name : str, frame = None, rel_frame = 'dummy'):
     if frame != None:
