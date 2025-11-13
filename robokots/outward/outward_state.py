@@ -25,7 +25,8 @@ def outward_state(robot : RobotStruct, state_dict : dict, state_type : StateType
     elif "momentum" in state_type.data_type:
         if state_type.frame_name == 'world':
             local_momentum = state_dict_to_cmvec(state_dict, state_type.owner_name, \
-                                                 state_type.owner_type+"_momentum", \
+                                                 state_type.owner_type,
+                                                 "momentum", \
                                                  state_type.key_order).cm_vec()
             world_momentum = CMVector((Factorial.mat(state_type.key_order, dim=6) @ cmtm_wrench.mat_adj() @ local_momentum).reshape(-1,6)).vecs()
             return world_momentum[-1]
@@ -34,7 +35,8 @@ def outward_state(robot : RobotStruct, state_dict : dict, state_type : StateType
     elif "force" in state_type.data_type:
         if state_type.frame_name == 'world':
             local_force = state_dict_to_cmvec(state_dict, state_type.owner_name, \
-                                                state_type.owner_type+"_force", \
+                                                state_type.owner_type,
+                                                "force", \
                                                 state_type.key_order).cm_vec()
             world_force = CMVector((Factorial.mat(state_type.key_order, dim=6) @ cmtm_wrench.mat_adj() @ local_force).reshape(-1,6)).vecs()
             return world_force[-1]

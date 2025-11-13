@@ -346,7 +346,7 @@ def state_dict_to_vecs(state : dict, owner_type : str, owner_name : str, data_ty
 
     return np.concatenate(vecs)
 
-def state_dict_to_cmvec(state : dict, owner_name : str, owner_type : str, order : int) -> CMVector:
+def state_dict_to_cmvec(state : dict, owner_name : str, owner_type : str, data_type : str, order : int) -> CMVector:
     '''
     Convert state data to vector
     Args:
@@ -360,16 +360,16 @@ def state_dict_to_cmvec(state : dict, owner_name : str, owner_type : str, order 
 
     l = 0
     for k in state.keys():
-        if k.startswith(owner_name + "_") and k.endswith("_" + owner_type):
+        if k.startswith(owner_name + "_") and k.endswith("_" + owner_type + "_" + data_type):
             vecs.append(np.array(state[k]))
             l += 1
-        elif re.match(rf"{owner_name}_{owner_type}_diff\d+", k):
+        elif re.match(rf"{owner_name}_{owner_type}_{data_type}_diff\d+", k):
             vecs.append(np.array(state[k]))
             l += 1
         if l >= order:
             break
     if len(vecs) == 0:
-        raise ValueError(f"Invalid name: {owner_name} or type_name: {owner_type}.")
+        raise ValueError(f"Invalid name: {owner_name}, type_name: {owner_type} or data_type: {data_type}.")
 
     return CMVector(np.stack(vecs))
 
@@ -442,7 +442,7 @@ def extract_dict_total_link(state : dict, link_name_list : str, data_type : str,
 
 def extract_dict_total_link_cmvec(state : dict, link_name_list : str, data_type : str, order : int) -> CMVector:
     for i, link_name in enumerate(link_name_list):
-        vec = state_dict_to_cmvec(state, link_name, data_type, order)  
+        vec = state_dict_to_cmvec(state, link_name, "link", data_type, order)  
         if i == 0:
             total_vec = np.zeros((len(link_name_list), vec._len)) 
         total_vec[i] = vec.cm_vec()
