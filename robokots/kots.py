@@ -5,10 +5,12 @@
 import numpy as np
 from typing import List, Dict, Any
 
+from robokots.outward import outward_state
+
 from .basic.motion import RobotMotions
 from .basic.state_df import RobotState
 from .basic.state import StateType, keys_order, keys_time_order, filter_keys_kinematics, filter_keys_momentum, filter_keys_force, filter_keys_torque
-from .basic.state_dict import extract_dict_info, extract_dict_link_info, extract_dict_joint_info, state_dict_to_links_pos, print_state_dict
+from .basic.state_dict import state_dict_to_links_pos, print_state_dict
 from .basic.robot import RobotStruct
 from .basic.target import TargetList
 from .basic.robot_drow import show_robot, show_robot_traj, RobotColor, show_link_points
@@ -19,6 +21,7 @@ from .misc import check_valid_str_list, check_valid_data_type_list, count_time_o
 from .outward.outward import kinematics as outward_kinematics
 from .outward.outward import dynamics_cmtm as outward_dynamics
 from .outward.outward import link_diff_kinematics_numerical, calc_link_total_point_frame
+from .outward.outward_state import outward_state
 from .outward.outward_gradient import jacobian_numerical, link_jacobian, link_cmtm_jacobian, link_jacobian_numerical
 from .outward.outward_total_gradient import link_momentum_jacobian, world_link_momentum_jacobian, world_joint_momentum_jacobian
 from .outward.outward_total_gradient import link_force_jacobian, joint_momentum_jacobian, dynamics_jacobian_numerical
@@ -187,10 +190,10 @@ class Kots():
     return self.state_.df()
 
   def state_info(self, state_type : StateType):
-    return extract_dict_info(self.state_dict_, state_type.data_type, state_type.owner_type, state_type.owner_name, state_type.frame_name)
+    return outward_state(self.robot_, self.state_dict_, state_type)
 
   def state_info_list(self, state_type_list : List[StateType]) -> List[np.ndarray]:
-    return [extract_dict_info(self.state_dict_, st.data_type, st.owner_type, st.owner_name, st.frame_name) for st in state_type_list]
+    return [outward_state(self.robot_, self.state_dict_, st) for st in state_type_list]
   
   def target_state_info(self, data_type : str, frame_name : str = None) -> np.ndarray:
     if self.target_ is None:
@@ -230,7 +233,7 @@ class Kots():
 
       out: Dict[str, Dict[str, Any]] = {}
       for owner_type, owner_name, data_types, frame_name in zip(owner_types, owner_names, data_types_list, frame_names):
-          out[owner_name] = {t: extract_dict_info(self.state_dict_, t, owner_type, owner_name, frame_name) for t in data_types}
+          out[owner_name] = {t: outward_state(self.robot_, self.state_dict_, StateType(owner_type, owner_name, t, frame_name)) for t in data_types}
       return out
   
   def target_info_vecs(self) -> np.ndarray:
