@@ -55,18 +55,18 @@ def world_joint_momentum_jacobian(robot : RobotStruct, state : dict, joint_name_
     jacobs = np.zeros((dim * (momentum_order) * len(joints), robot.dof * (momentum_order+1)))
 
     for i, joint in enumerate(joints):
-        jacobs[i*dim*(momentum_order-1):(i+1)*dim*(momentum_order-1), :] = mat[joint.id*dim*(momentum_order-1):(joint.id+1)*dim*(momentum_order-1), :]
+        jacobs[i*dim*(momentum_order):(i+1)*dim*(momentum_order), :] = mat[joint.id*dim*(momentum_order):(joint.id+1)*dim*(momentum_order), :]
     return jacobs
 
 def joint_momentum_jacobian(robot : RobotStruct, state : dict, joint_name_list : list[str], momentum_order : int = 1, dim : int = 6) -> np.ndarray:
     joints = robot.joint_list(joint_name_list)
     if joints == [None]:
         raise ValueError("joint_name_list contains invalid joint name")
-    mat = total_coord_to_joint_momentum_grad_mat(robot, state, order=momentum_order-1, dim=dim)
-    jacobs = np.zeros((dim * (momentum_order-1) * len(joints), robot.dof * momentum_order))
+    mat = total_coord_to_joint_momentum_grad_mat(robot, state, order=momentum_order+1, dim=dim)
+    jacobs = np.zeros((dim * (momentum_order) * len(joints), robot.dof * (momentum_order+1)))
 
     for i, joint in enumerate(joints):
-        jacobs[i*dim*(momentum_order-1):(i+1)*dim*(momentum_order-1), :] = mat[joint.id*dim*(momentum_order-1):(joint.id+1)*dim*(momentum_order-1), :]
+        jacobs[i*dim*(momentum_order):(i+1)*dim*(momentum_order), :] = mat[joint.id*dim*(momentum_order):(joint.id+1)*dim*(momentum_order), :]
     return jacobs
 
 def link_force_jacobian(robot : RobotStruct, state : dict, link_name_list : list[str], force_order : int = 1, dim : int = 6) -> np.ndarray:
