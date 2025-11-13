@@ -51,7 +51,7 @@ def joint_dynamics(joint_select : np.ndarray, rel_frame : SE3, p_joint_force : n
     joint_torque = joint_select.T @ joint_force
     return joint_torque, joint_torque
 
-def link_momentum_cmtm(inertia : np.ndarray, vel : CMVector) -> CMVector:
+def link_momentum_cmvec(inertia : np.ndarray, vel : CMVector) -> CMVector:
     """
     Calculate the link momentum and centripetal momentum.
     Args:
@@ -63,7 +63,7 @@ def link_momentum_cmtm(inertia : np.ndarray, vel : CMVector) -> CMVector:
     vecs = (vel.vecs() @ inertia.T).reshape(-1, inertia.shape[0])
     return CMVector(vecs)
 
-def link_force_cmtm(vel : CMVector, momentum : CMVector, dim : int = 6) -> np.ndarray:
+def link_force_cmvec(vel : CMVector, momentum : CMVector, dim : int = 6) -> np.ndarray:
     """
     Calculate the link force and centripetal momentum.
     Args:
@@ -86,7 +86,7 @@ def link_force_cmtm(vel : CMVector, momentum : CMVector, dim : int = 6) -> np.nd
     v_x_mom = Factorial.mat(momentum._n-1, dim) @ CMTM.hat_adj(SE3wrench, vel.cm_vecs()[:vel._n-1]) @ momentum.cm_vecs()[:momentum._n-1].flatten()
     return CMVector(mom_diff + v_x_mom)
 
-def link_dynamics_cmtm(inertia : np.ndarray, vecs : np.ndarray) -> np.ndarray:
+def link_dynamics_cmvec(inertia : np.ndarray, vecs : np.ndarray) -> np.ndarray:
     """
     Calculate the link force and centripetal momentum.
     Args:
@@ -101,9 +101,9 @@ def link_dynamics_cmtm(inertia : np.ndarray, vecs : np.ndarray) -> np.ndarray:
         frac[i] = frac[i-1] * i
 
     ## remain : implement frac
-    return link_momentum_cmtm(inertia, vecs[1:]) + CMTM.hat_adj(SE3, vecs[:-1]) @ link_momentum_cmtm(inertia, vecs[:-1])
+    return link_momentum_cmvec(inertia, vecs[1:]) + CMTM.hat_adj(SE3, vecs[:-1]) @ link_momentum_cmvec(inertia, vecs[:-1])
 
-def joint_dynamics_cmtm(joint : JointStruct, rel_cmtm : CMTM, p_joint_force : np.ndarray, link_force : np.ndarray) -> tuple:
+def joint_dynamics_cmvec(joint : JointStruct, rel_cmtm : CMTM, p_joint_force : np.ndarray, link_force : np.ndarray) -> tuple:
     joint_force = rel_cmtm.mat_inv_adj() @ p_joint_force - link_force
     joint_torque = np.zeros(joint.dof*rel_cmtm._n)
     for i in range(rel_cmtm._n):

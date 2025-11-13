@@ -7,7 +7,7 @@ import numpy as np
 from mathrobo import Factorial
 from mathrobo import SO3wrench, SE3wrench, CMTM
 
-from .dynamics import link_momentum_cmtm
+from .dynamics import link_momentum_cmvec
 
 def inertia_diag_mat(inertia : np.ndarray, order : int = 1) -> np.ndarray:
     if inertia.shape != (6, 6):
@@ -33,7 +33,7 @@ def link_to_force_tan_map_mat(link_cmtm : CMTM, inertia : np.ndarray, force_orde
     mat = np.zeros((force_dof, momentum_dof))
     m = np.zeros((force_dof, momentum_dof - dim))
 
-    momentum = link_momentum_cmtm(inertia, link_cmtm.cmvecs())
+    momentum = link_momentum_cmvec(inertia, link_cmtm.cmvecs())
 
     m[:, dim:] = np.diag(np.repeat(np.arange(1, force_order+1), dim)) @ inertia_diag_mat(inertia, force_order)
     if dim == 6:

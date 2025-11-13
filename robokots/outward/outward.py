@@ -5,12 +5,13 @@
 
 import numpy as np
 
-from mathrobo import CMVector
+from mathrobo import CMVector, Factorial
 from mathrobo import SO3, SE3, CMTM, SE3wrench, numerical_difference, build_integrator
 
 from ..basic.robot import RobotStruct
 from ..basic.motion import RobotMotions
-from ..basic.state_dict import state_dict_to_cmtm, extract_dict_link_info, extract_dict_info, vecs_to_state_dict, cmtm_to_state_list, state_dict_to_frame, state_dict_to_vecs
+from ..basic.state_dict import state_dict_to_cmtm, state_dict_to_cmtm_wrench, state_dict_to_cmvec, state_dict_to_rel_cmtm_wrench
+from ..basic.state_dict import extract_dict_link_info, extract_dict_info, vecs_to_state_dict, cmtm_to_state_list, state_dict_to_frame, state_dict_to_vecs
 from ..basic.state import data_type_to_sub_func, data_type_dof, StateType
 
 from ..kinematics.base import convert_joint_to_data, convert_link_to_data
@@ -19,7 +20,7 @@ from ..kinematics.kinematics_matrix import joint_select_diag_mat
 from ..kinematics.kinematics_soft_link import soft_link_local_cmtm, calc_link_local_point_frame
 
 from ..dynamics.base import spatial_inertia
-from ..dynamics.dynamics import link_dynamics, joint_dynamics, link_momentum_cmtm, link_force_cmtm, link_dynamics_cmtm, joint_dynamics_cmtm
+from ..dynamics.dynamics import link_dynamics, joint_dynamics, link_momentum_cmvec, link_force_cmvec, link_dynamics_cmvec, joint_dynamics_cmvec
 
 from .outward_state import outward_state
 
@@ -165,26 +166,25 @@ def dynamics_cmtm(robot : RobotStruct, motions, dynamics_order = 1) -> dict:
 
     link_cmtm = state_dict_to_cmtm(state_dict, child.name, "link", dynamics_order + 2)
 
-    link_momentum = link_momentum_cmtm(inertia, link_cmtm.cmvecs())
+    link_momentum = link_momentum_cmvec(inertia, link_cmtm.cmvecs())
     state = vecs_to_state_dict(link_momentum.vecs(), "link", child.name, "momentum", dynamics_order+1)
     state_dict.update(state)
 
     if dynamics_order > 0:
-      link_force = link_force_cmtm(link_cmtm.cmvecs(), link_momentum)
+      link_force = link_force_cmvec(link_cmtm.cmvecs(), link_momentum)
       state = vecs_to_state_dict(link_force.vecs(), "link", child.name, "force", dynamics_order)
       state_dict.update(state)
 
     joint_momentums = link_momentum.vec()
     for c_id in child_joint_ids:
       c_joint = robot.joints[c_id]
-      c_joint_data = convert_joint_to_data(c_joint)
+      c_joint_link = robot.links[c_joint.child_link_id]
 
-      c_joint_cmtm = joint_rel_cmtm(c_joint_data, motion, dynamics_order + 1)
-      c_joint_cmtm_wrench = CMTM.change_elemclass(c_joint_cmtm, SE3wrench)
+      c_joint_cmtm_wrench = state_dict_to_rel_cmtm_wrench(state_dict, child.name, c_joint_link.name, "link", dynamics_order + 1)
 
-      c_joint_momentums = state_dict_to_vecs(momentum_dict, "joint", c_joint.name, "momentum")
+      c_joint_momentums = state_dict_to_cmvec(momentum_dict, c_joint.name, "joint", "momentum", dynamics_order + 1)
 
-      joint_momentums += c_joint_cmtm_wrench.mat_adj() @ c_joint_momentums
+      joint_momentums += Factorial.mat(dynamics_order+1, 6) @ c_joint_cmtm_wrench.mat_adj() @ c_joint_momentums.cm_vec()
 
     momentum_dict.update([(joint.name+'_joint_momentum', joint_momentums)])
 
@@ -194,7 +194,7 @@ def dynamics_cmtm(robot : RobotStruct, motions, dynamics_order = 1) -> dict:
     link_cmtm = state_dict_to_cmtm(state_dict, child.name, "link", dynamics_order + 2)
     joint_momentum = CMVector(joint_momentums.reshape(-1,6))
     if dynamics_order > 0:
-      joint_force = link_force_cmtm(link_cmtm.cmvecs(), joint_momentum)
+      joint_force = link_force_cmvec(link_cmtm.cmvecs(), joint_momentum)
       state = vecs_to_state_dict(joint_force.vecs(), "joint", joint.name, "force", dynamics_order)
       state_dict.update(state)
 
@@ -210,12 +210,12 @@ def dynamics_cmtm(robot : RobotStruct, motions, dynamics_order = 1) -> dict:
   link_cmtm = state_dict_to_cmtm(state_dict, world_link.name, "link", dynamics_order + 2)
 
   link_vel = CMVector(link_cmtm.vecs())
-  link_momentum = link_momentum_cmtm(inertia, link_vel)
+  link_momentum = link_momentum_cmvec(inertia, link_vel)
   state = vecs_to_state_dict(link_momentum.vecs(), "link", world_link.name, "momentum", dynamics_order+1)
   state_dict.update(state)
 
   if dynamics_order > 0:
-    link_force = link_force_cmtm(link_vel, link_momentum)
+    link_force = link_force_cmvec(link_vel, link_momentum)
     state = vecs_to_state_dict(link_force.vecs(), "link", world_link.name, "force", dynamics_order)
     state_dict.update(state)
     
