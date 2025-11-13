@@ -25,10 +25,10 @@ keys_kinematics = \
     ("pos", "rot", "frame", "vel", "acc", "jerk", "snap", "crackle", "pop", "lock", "drop", "shot", "put")
 
 keys_momentum = \
-    ("momentum","momentum_diff1", "momentum_diff2", "momentum_diff3")
+    ("momentum","momentum_diff1", "momentum_diff2", "momentum_diff3", "momentum_diff4", "momentum_diff5", "momentum_diff6", "momentum_diff7", "momentum_diff8")
 
 keys_force = \
-    ("force","force_diff1", "force_diff2", "force_diff3")
+    ("force","force_diff1", "force_diff2", "force_diff3", "force_diff4", "force_diff5", "force_diff6", "force_diff7")
 
 keys_torque = \
     ("torque",)
@@ -153,7 +153,25 @@ keys_name = {
     "lock" : "acc_diff5",
     "drop" : "acc_diff6",
     "shot" : "acc_diff7",
-    "put" : "acc_diff8"
+    "put" : "acc_diff8",
+    "momentum" : "momentum",
+    "momentum_diff1" : "momentum_diff1",
+    "momentum_diff2" : "momentum_diff2",
+    "momentum_diff3" : "momentum_diff3",
+    "momentum_diff4" : "momentum_diff4",
+    "momentum_diff5" : "momentum_diff5",
+    "momentum_diff6" : "momentum_diff6",
+    "momentum_diff7" : "momentum_diff7",
+    "momentum_diff8" : "momentum_diff8",
+    "force" : "force",
+    "force_diff1" : "force_diff1",
+    "force_diff2" : "force_diff2",
+    "force_diff3" : "force_diff3",
+    "force_diff4" : "force_diff4",
+    "force_diff5" : "force_diff5",
+    "force_diff6" : "force_diff6",
+    "force_diff7" : "force_diff7",
+    "torque" : "torque",
 }
 
 def data_type_to_sub_func(data_type : str):
