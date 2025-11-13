@@ -10,7 +10,7 @@ def outward_state(robot : RobotStruct, state_dict : dict, state_type : StateType
         link_name = state_type.owner_name
     elif state_type.owner_type == "joint":
         joint = robot.joint_list([state_type.owner_name])
-        link_name = robot.links[joint[0].parent_link_id].name
+        link_name = robot.links[joint[0].child_link_id].name
 
     if state_type.frame_name == "world":
         if state_type.is_dynamics:
