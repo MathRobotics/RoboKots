@@ -345,7 +345,7 @@ def _test_kinematics_cmtm_numerical():
         x_ = D @ x_init + d @ direct
         return x_
 
-    # diff = mr.numerical_difference(joint_motions, func, delta, sub_func = mr.CMTM.sub_tan_vec_var, update_func=update_func, direction=np.ones(1))
+    # diff = mr.numerical_difference(joint_motions, func, delta, sub_func = mr.CMTM.sub_tan_vec, update_func=update_func, direction=np.ones(1))
     diff = mr.numerical_difference(joint_motions, func, delta, sub_func = mr.CMTM.sub_vec, update_func=update_func, direction=np.ones(1))
 
     link_cmtm = p_link_cmtm @ rel_cmtm
