@@ -195,16 +195,16 @@ class RobotState:
       link names
     '''
     if type == "pos":
-      return RobotState.state_vecs_traj(self.df(), link_names, "pos")
+      return RobotState.state_vecs_traj(self.df(), link_names, "link_pos")
     elif type == "rot":
-      return RobotState.state_mat(self.df(), link_names, "rot")
+      return RobotState.state_mat(self.df(), link_names, "link_rot")
     elif type == "vel":
-      return RobotState.state_vecs_traj(self.df(), link_names, "vel")
+      return RobotState.state_vecs_traj(self.df(), link_names, "link_vel")
     elif type == "acc":
-      return RobotState.state_vecs_traj(self.df(), link_names, "acc")
+      return RobotState.state_vecs_traj(self.df(), link_names, "link_acc")
     elif type == "frame":
-      return SE3(RobotState.state_mat(self.df(), link_names, "rot"),
-             RobotState.state_vecs_traj(self.df(), link_names, "pos"))
+      return SE3(RobotState.state_mat(self.df(), link_names, "link_rot"),
+             RobotState.state_vecs_traj(self.df(), link_names, "link_pos"))
     elif type == "cmtm":
       return self.link_cmtm(link_names)
     else:
