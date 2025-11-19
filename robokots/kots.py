@@ -195,7 +195,7 @@ class Kots():
   def state_info_list(self, state_type_list : List[StateType]) -> List[np.ndarray]:
     return [outward_state(self.robot_, self.state_dict_, st) for st in state_type_list]
   
-  def target_state_info(self, data_type : str, frame_name : str = None) -> np.ndarray:
+  def target_state_info(self, data_type : str = None, frame_name : str = None) -> np.ndarray:
     if self.target_ is None:
         raise ValueError("target is not set")
     
