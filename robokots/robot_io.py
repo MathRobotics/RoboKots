@@ -36,14 +36,14 @@ def load_robot_json_file(file_path: str, lib: str = "numpy") -> "RobotStruct":
 def print_robot_structure(robot : RobotStruct):
     robot.print()
 
-def load_target_json(data: Dict) -> "TargetList":
+def load_target_dict(data: Dict) -> "TargetList":
     if not isinstance(data, dict):
         raise ValueError("Input data must be a dictionary.")
     return TargetList.from_dict(data)
         
 def load_target_json_file(file_path: str) -> "TargetList":
     data = load_json_file(file_path)
-    return load_target_json(data)
+    return load_target_dict(data)
 
 def print_target_list(t_list : TargetList):
     t_list.print()
