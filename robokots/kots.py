@@ -268,7 +268,7 @@ class Kots():
     if not isinstance(target_file, str):
       raise TypeError("target_file must be a string")
     self.target_ = load_target_json_file(target_file)
-    type_order = [keys_time_order[item] for sublist in self.target_.target_data_types for item in sublist]
+    type_order = [keys_time_order[item] for item in self.target_._target_data_types]
     max_order = max(type_order)
     self.set_order(max_order)
 
@@ -362,12 +362,34 @@ class Kots():
     return owner_type_list, owner_name_list, data_type_list, frame_name_list
 
   def jacobian_target(self, data_type_list : List[str] = None, frame_name_list : List[str] = None):
-    owner_type_list, owner_name_list, data_type_list, frame_name_list = self.__check_target(data_type_list, frame_name_list)
-    return self.jacobian(StateType(owner_type_list, owner_name_list, data_type_list, frame_name_list))
+    jacob = np.empty((0, self.robot_.dof * self.order_))
+    for target in self.target_._targets:
+      if data_type_list is None:
+        d_types = [target.data_type]
+      else:
+        d_types = [data_type_list] if isinstance(data_type_list, str) else data_type_list
+      if frame_name_list is None:
+        f_names = [target.frame_name]
+      else:
+        f_names = [frame_name_list] if isinstance(frame_name_list, str) else frame_name_list
+      for d_type, f_name in zip(d_types, f_names):
+        jacob = np.vstack((jacob, self.jacobian(StateType(target.owner_type, target.owner_name, d_type, f_name))))
+    return jacob
 
   def jacobian_target_numerical(self, data_type_list : List[str] = None, frame_name_list : List[str] = None):
-    owner_type_list, owner_name_list, data_type_list, frame_name_list = self.__check_target(data_type_list, frame_name_list)
-    return self.jacobian_numerical(StateType(owner_type_list, owner_name_list, data_type_list, frame_name_list))
+    jacob = np.empty((0, self.robot_.dof * self.order_))
+    for target in self.target_._targets:
+      if data_type_list is None:
+        d_types = [target.data_type]
+      else:
+        d_types = [data_type_list] if isinstance(data_type_list, str) else data_type_list
+      if frame_name_list is None:
+        f_names = [target.frame_name]
+      else:
+        f_names = [frame_name_list] if isinstance(frame_name_list, str) else frame_name_list
+      for d_type, f_name in zip(d_types, f_names):
+        jacob = np.vstack((jacob, self.jacobian(StateType(target.owner_type, target.owner_name, d_type, f_name))))
+    return jacob
 
   def jacobian_cmtm(self, name_list : List[str], order = None):
     if order is None:
