@@ -393,12 +393,22 @@ class Kots():
   def show_target_link_points(self, plt = None, dimension=3):
     if not self.target_:
       raise ValueError("target_ is not set")
-    show_link_points(state_dict_to_links_pos(self.state_dict_, self.target_.target_owner_names), plt, dimension)
+    
+    owner_link_names = []
+    for t in self.target_._targets:
+      if t._state_type.owner_type == "link":
+        owner_link_names.append(t._state_type.owner_name)
+    show_link_points(state_dict_to_links_pos(self.state_dict_, owner_link_names), plt, dimension)
 
   def target_link_pos_traj(self):
     if not self.target_:
       raise ValueError("target_ is not set")
-    return self.state_.extract_links_info_traj("pos", self.target_.target_owner_names)
+    
+    owner_link_names = []
+    for t in self.target_._targets:
+      if t._state_type.owner_type == "link":
+        owner_link_names.append(t._state_type.owner_name)
+    return self.state_.extract_links_info_traj("pos", owner_link_names)
 
   def show_points(self, points, ax = None, dimension=3):
     show_link_points(points, ax, dimension)
