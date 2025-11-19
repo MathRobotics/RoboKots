@@ -14,6 +14,9 @@ class Target:
     self._index = -1
     self._target_name = None
 
+  def state_type(self) -> StateType:
+    return self._state_type
+
   def set_index(self, i : int):
     self._index = i
 
