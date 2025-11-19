@@ -20,17 +20,13 @@ class Target:
   def __repr__(self):
      return f"Target(\ndata type:{self.data_type},\nowner type : {self.owner_type},\nowner name : {self.owner_name},\nframe name : {self.frame_name},\nframe : {self.frame})"
 class TargetList:
-  def __init__(self, targets_: List["Target"]):
-    self.targets = targets_
-    self.target_num = len(self.targets)  
-    self.target_owner_types = [t.owner_type for t in self.targets]
-    self.target_owner_names = [t.owner_name for t in self.targets]
-    self.target_data_types = [t.data_type for t in self.targets]
-    self.target_frame_names = [t.frame_name for t in self.targets]
-    self.target_frames = [t.frame for t in self.targets]
+  def __init__(self, targets: List["Target"]):
+    self._targets = targets
+    self._target_num = len(self._targets)  
+    self._target_data_types = [t.data_type for t in self._targets]
     
     index = 0
-    for t in self.targets:
+    for t in self._targets:
       t.set_index(index)
       index += 1
     
@@ -41,13 +37,20 @@ class TargetList:
     def normalize_types(ts):
         return [ts] if isinstance(ts, str) else list(ts)
     
-    targets = [Target(
-        data_type=normalize_types(target.get("data_type")),
-        owner_type=target["owner_type"],
-        owner_name=target["owner_name"],
-        frame_name=target.get("frame_name"),
-        frame=np.array(target.get("frame", SE3.eye()))
-    ) for target in data["targets"]]
+    for target in data["targets"]:
+      if isinstance(target.get("data_type"), str):
+        data_types = [target.get("data_type")]
+      else:
+        data_types = list(target.get("data_type"))
+      for dt in data_types:
+        t = Target(
+          data_type=dt,
+          owner_type=target["owner_type"],
+          owner_name=target["owner_name"],
+          frame_name=target.get("frame_name"),
+          frame=np.array(target.get("frame", SE3.eye()))
+        )
+        targets.append(t)
 
     return TargetList(targets)
 
