@@ -268,9 +268,7 @@ class Kots():
     if not isinstance(target_file, str):
       raise TypeError("target_file must be a string")
     self.target_ = load_target_json_file(target_file)
-    type_order = [keys_time_order[item] for item in self.target_._target_data_types]
-    max_order = max(type_order)
-    self.set_order(max_order)
+    self.set_order(self.target_._max_order)
 
   def print_targets(self):
     print_target_list(self.target_)
