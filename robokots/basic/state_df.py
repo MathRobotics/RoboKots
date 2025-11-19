@@ -35,12 +35,12 @@ class RobotState:
     if len(l_aliases) != 0:
       for l_name in link_names:
         for al in l_aliases:
-          names.append(l_name + separator + al)
+          names.append(l_name + separator + "link" + separator + al)
     
     if len(j_aliases) != 0:
       for j_name in joint_names:
         for al in j_aliases:
-          names.append(j_name + separator + al)
+          names.append(j_name + separator + "joint" + separator + al)
 
     self.state_df = RobotDF(names)
     
