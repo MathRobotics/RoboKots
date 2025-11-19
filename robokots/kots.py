@@ -323,31 +323,25 @@ class Kots():
   def jacobian_target(self, data_type_list : List[str] = None, frame_name_list : List[str] = None):
     jacob = np.empty((0, self.robot_.dof * self.order_))
     for target in self.target_._targets:
-      if data_type_list is None:
-        d_types = [target.data_type]
+      if data_type_list is None and frame_name_list is None:
+        jacob = np.vstack((jacob, self.jacobian(target.state_type())))
       else:
         d_types = [data_type_list] if isinstance(data_type_list, str) else data_type_list
-      if frame_name_list is None:
-        f_names = [target.frame_name]
-      else:
         f_names = [frame_name_list] if isinstance(frame_name_list, str) else frame_name_list
-      for d_type, f_name in zip(d_types, f_names):
-        jacob = np.vstack((jacob, self.jacobian(StateType(target.owner_type, target.owner_name, d_type, f_name))))
+        for d_t, f_n in zip(d_types, f_names):
+          jacob = np.vstack((jacob, self.jacobian(StateType(target._state_type.owner_type, target._state_type.owner_name, d_t, f_n))))
     return jacob
 
   def jacobian_target_numerical(self, data_type_list : List[str] = None, frame_name_list : List[str] = None):
     jacob = np.empty((0, self.robot_.dof * self.order_))
     for target in self.target_._targets:
-      if data_type_list is None:
-        d_types = [target.data_type]
+      if data_type_list is None and frame_name_list is None:
+        jacob = np.vstack((jacob, self.jacobian(target.state_type())))
       else:
         d_types = [data_type_list] if isinstance(data_type_list, str) else data_type_list
-      if frame_name_list is None:
-        f_names = [target.frame_name]
-      else:
         f_names = [frame_name_list] if isinstance(frame_name_list, str) else frame_name_list
-      for d_type, f_name in zip(d_types, f_names):
-        jacob = np.vstack((jacob, self.jacobian(StateType(target.owner_type, target.owner_name, d_type, f_name))))
+        for d_t, f_n in zip(d_types, f_names):
+          jacob = np.vstack((jacob, self.jacobian_numerical(StateType(target._state_type.owner_type, target._state_type.owner_name, d_t, f_n))))
     return jacob
 
   def jacobian_cmtm(self, name_list : List[str], order = None):
