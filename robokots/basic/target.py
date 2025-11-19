@@ -55,4 +55,4 @@ class TargetList:
     return TargetList(targets)
 
   def __repr__(self):
-     return f"TargetList(\n  targets: {self.targets}\n)"
+     return f"TargetList(\n  targets: {self._targets}\n)"
