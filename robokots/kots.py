@@ -199,51 +199,12 @@ class Kots():
     if self.target_ is None:
         raise ValueError("target is not set")
     
-    owner_types = self.target_.target_owner_types
-    owner_names = self.target_.target_owner_names
-
     if data_type is None:
-        data_types = self.target_.target_data_types
+      state_type_list = [t.state_type() for t in self.target_._targets]
     else:
-        data_types = [data_type for _ in owner_names]
-
-    if frame_name is None:
-        frame_names = self.target_.target_frame_names
-    else:
-        frame_names = [frame_name for _ in owner_names]
-
-    state_type_list = [StateType(o_type, o_name, d_type, f_name) for o_type, o_name, d_type, f_name in zip(owner_types, owner_names, data_types, frame_names)]
+      state_type_list = [StateType(t._state_type.owner_type, t._state_type.owner_name, data_type, frame_name if frame_name is not None else t._state_type.frame_name) for t in self.target_._targets]
 
     return self.state_info_list(state_type_list)
-  
-  def target_info(self, data_type : List = None) -> Dict[str, Dict[str, Any]]:
-      if self.target_ is None:
-          raise ValueError("target is not set")
-
-      owner_types = self.target_.target_owner_types
-      owner_names = self.target_.target_owner_names
-      if data_type is None:
-        data_types_list = self.target_.target_data_types
-      else:
-        data_types_list = [data_type for _ in owner_names]
-      frame_names = self.target_.target_frame_names
-
-      if len(owner_names) != len(data_types_list):
-          raise ValueError(f"length mismatch: target_owner_names={len(owner_names)} vs target_data_types={len(data_types_list)}")
-
-      out: Dict[str, Dict[str, Any]] = {}
-      for owner_type, owner_name, data_types, frame_name in zip(owner_types, owner_names, data_types_list, frame_names):
-          out[owner_name] = {t: outward_state(self.robot_, self.state_dict_, StateType(owner_type, owner_name, t, frame_name)) for t in data_types}
-      return out
-  
-  def target_info_vecs(self) -> np.ndarray:
-      target_info = self.target_info()
-      vecs = []
-      for _, info in target_info.items():
-          for _, vec in info.items():
-              if vec.size > 0:
-                  vecs.append(vec)
-      return np.concatenate(vecs) if vecs else np.array([]) 
   
   def kinematics(self, order = None):
     if order is None:
