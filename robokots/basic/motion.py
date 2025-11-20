@@ -112,7 +112,7 @@ class RobotMotions:
 
     return np.array(values)
   
-  def link_motions(self, link_dof : int, link_dof_index : int, order = None):
+  def link_motions_cm(self, link_dof : int, link_dof_index : int, order = None):
     if order is None:
       order = self.motion_num
     values = ()
