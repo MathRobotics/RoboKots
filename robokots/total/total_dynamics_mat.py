@@ -44,7 +44,7 @@ def total_world_joint_cmtm_wrench(r : RobotStruct, state : dict, order : int = 1
     mat = np.zeros((r.joint_num * n_, r.joint_num * n_))
 
     for i, joint in enumerate(r.joints):
-        cmtm_wrench = state_dict_to_cmtm_wrench(state, r.links[joint.child_link_id].name, "link",order)
+        cmtm_wrench = state_dict_to_cmtm_wrench(state, r.links[joint.child_link_id].name, "link", order)
         mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = cmtm_wrench.mat_adj()
     return mat
 
