@@ -236,12 +236,9 @@ class Kots():
 
   def link_diff_kinematics_numerical(self, link_name_list : list[str], data_type = "vel", order = None, eps = 1e-8, update_method = "poly", update_direction = None):
     if order is None:
-      order = keys_order(data_type)
+      order = self.order_
       
-    motion = np.zeros(self.robot_.dof * order)
-    for joint in self.robot_.joints:
-      m = self.motions_.joint_motions(joint.dof, joint.dof_index, order)
-      motion[joint.dof_index*order:joint.dof_index*order+joint.dof*order] = m.flatten()
+    motion = self.motion(order)
 
     return link_diff_kinematics_numerical(self.robot_, motion, link_name_list, data_type, order, eps, update_method, update_direction)
 
