@@ -401,7 +401,7 @@ def extract_dict_link_info(state : dict, data_type : str, link_name : str, frame
         else:
             return np.array(state[link_name+"_link_"+data_type])
     else:
-        return np.array(state[link_name+"_"+keys_name[data_type]])
+        return np.array(state[link_name+"_link_"+keys_name[data_type]])
     
 def extract_dict_joint_info(state : dict, data_type : str, joint_name : str, frame = "dummy", rel_frame = 'dummy'):
     if frame != 'dummy':
@@ -431,7 +431,7 @@ def extract_dict_joint_info(state : dict, data_type : str, joint_name : str, fra
     elif "torque" in data_type:
         return np.array(state[joint_name+"_joint_"+data_type])
     else:
-        return np.array(state[joint_name+"_"+data_type])
+        return np.array(state[joint_name+"_joint_"+data_type])
     
 def extract_dict_total_link(state : dict, link_name_list : str, data_type : str, order : int) -> CMVector:
     for i, link_name in enumerate(link_name_list):
