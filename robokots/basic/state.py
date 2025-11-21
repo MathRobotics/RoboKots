@@ -175,31 +175,27 @@ keys_name = {
 }
 
 def data_type_to_sub_func(data_type : str):
-    if data_type == "pos":
-        return None
-    elif data_type == "rot":
+    if data_type == "rot":
         return SO3.sub_tan_vec
-    elif data_type == "vel":
-        return None
-    elif data_type == "acc":
-        return None
-    elif data_type in ["jerk", "snap", "crackle", "pop", "lock", "drop", "shot", "put"]:
-        return None
     elif data_type == "frame":
         return SE3.sub_tan_vec
     elif data_type == "cmtm":
         return CMTM.sub_vec
+    elif data_type in ["pos", "vel", "acc"] \
+        or data_type in ["jerk", "snap", "crackle", "pop", "lock", "drop", "shot", "put"]  \
+        or data_type in ["force", "force_diff1", "force_diff2", "force_diff3"] \
+        or data_type in ["momentum", "momentum_diff1", "momentum_diff2", "momentum_diff3"]:
+        return None
     else:
         raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'jerk', 'frame' or 'cmtm'.")
 
 def data_type_dof(data_type : str, order = None, dim = 3):
     if data_type == "pos" or data_type == "rot":
         return dim
-    elif data_type == "vel" or data_type == "acc" or data_type == "jerk"  \
-        or data_type == "snap" or data_type == "crackle" or data_type == "pop" \
-        or data_type == "lock" or data_type == "drop" or data_type == "shot" or data_type == "put" \
-        or data_type == "force" or data_type == "force_diff1" or data_type == "force_diff2" or data_type == "force_diff3" \
-        or data_type == "momentum" or data_type == "momentum_diff1" or data_type == "momentum_diff2" or data_type == "momentum_diff3":
+    elif data_type in ["vel", "acc"] \
+        or data_type in ["jerk", "snap", "crackle", "pop", "lock", "drop", "shot", "put"]  \
+        or data_type in ["force", "force_diff1", "force_diff2", "force_diff3"] \
+        or data_type in ["momentum", "momentum_diff1", "momentum_diff2", "momentum_diff3"]:
         return dim * 2
     elif data_type == "frame":
         return dim * 2
