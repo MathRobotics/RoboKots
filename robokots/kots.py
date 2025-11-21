@@ -20,7 +20,7 @@ from .misc import check_valid_str_list, check_valid_data_type_list, count_time_o
 
 from .outward.outward import kinematics as outward_kinematics
 from .outward.outward import dynamics_cmtm as outward_dynamics
-from .outward.outward import link_diff_kinematics_numerical, calc_link_total_point_frame
+from .outward.outward import link_diff_kinematics_numerical, calc_link_total_point_frame, diff_outward_numerical
 from .outward.outward_state import outward_state
 from .outward.outward_gradient import jacobian_numerical, link_jacobian, link_cmtm_jacobian, link_jacobian_numerical
 from .outward.outward_total_gradient import link_momentum_jacobian, world_link_momentum_jacobian, world_joint_momentum_jacobian
@@ -237,10 +237,18 @@ class Kots():
   def link_diff_kinematics_numerical(self, link_name_list : list[str], data_type = "vel", order = None, eps = 1e-8, update_method = "poly", update_direction = None):
     if order is None:
       order = self.order_
-      
+
     motion = self.motion(order)
 
     return link_diff_kinematics_numerical(self.robot_, motion, link_name_list, data_type, order, eps, update_method, update_direction)
+  
+  def diff_outward_numerical(self, state_type : StateType, order : int = None, eps : float = 1e-8, update_method : str = "poly", update_direction = None):
+    if order is None:
+      order = self.order_
+
+    motion = self.motion(order)
+
+    return diff_outward_numerical(self.robot_, motion, state_type, order, eps, update_method, update_direction)
 
   def __jacobian(self, state_type : StateType, numerical : bool = False):
     max_order = 0
