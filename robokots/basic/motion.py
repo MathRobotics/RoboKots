@@ -5,7 +5,6 @@
 import numpy as np
 import re
 import math
-
 class RobotMotions:
   motions : np.ndarray = np.array([])
   ALLOWED_ALIASES = frozenset(["coord", "veloc", "accel"])
@@ -120,3 +119,9 @@ class RobotMotions:
       values += (self.gen_value(link_dof, link_dof_index, self.aliases[i])/math.factorial(i),)
 
     return np.array(values)
+  
+  @staticmethod
+  def owner_vec_index(owner_dof, owner_dof_index, vec_order, out_put_order = None):
+    if out_put_order is None:
+      out_put_order = vec_order
+    return slice(owner_dof_index * vec_order, owner_dof_index * vec_order + owner_dof * out_put_order)
