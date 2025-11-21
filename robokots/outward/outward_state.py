@@ -9,8 +9,8 @@ def outward_state(robot : RobotStruct, state_dict : dict, state_type : StateType
     if state_type.owner_type == "link":
         link_name = state_type.owner_name
     elif state_type.owner_type == "joint":
-        joint = robot.joint_list([state_type.owner_name])
-        link_name = robot.links[joint[0].child_link_id].name
+        joint = robot.joint_list([state_type.owner_name])[0]
+        link_name = robot.links[joint.child_link_id].name
 
     if state_type.frame_name == "world":
         if state_type.is_dynamics:
@@ -28,7 +28,7 @@ def outward_state(robot : RobotStruct, state_dict : dict, state_type : StateType
                                                  state_type.owner_type,
                                                  "momentum", \
                                                  state_type.key_order).cm_vec()
-            world_momentum = CMVector((Factorial.mat(state_type.key_order, dim=6) @ cmtm_wrench.mat_adj() @ local_momentum).reshape(-1,6)).vecs()
+            world_momentum = CMVector.set_cmvecs((cmtm_wrench.mat_adj() @ local_momentum).reshape(-1,6)).vecs()
             return world_momentum[-1]
         else:
             return np.array(state_dict[state_type.alliance])
@@ -38,7 +38,7 @@ def outward_state(robot : RobotStruct, state_dict : dict, state_type : StateType
                                                 state_type.owner_type,
                                                 "force", \
                                                 state_type.key_order).cm_vec()
-            world_force = CMVector((Factorial.mat(state_type.key_order, dim=6) @ cmtm_wrench.mat_adj() @ local_force).reshape(-1,6)).vecs()
+            world_force = CMVector.set_cmvecs((cmtm_wrench.mat_adj() @ local_force).reshape(-1,6)).vecs()
             return world_force[-1]
         else:
             return np.array(state_dict[state_type.alliance])
@@ -56,7 +56,7 @@ def outward_state_cmvec(robot : RobotStruct, state_dict : dict, state_type : Sta
             joint = robot.joint_list([state_type.owner_name])
             link_name = robot.links[joint[0].child_link_id].name
         cmtm_wrench = state_dict_to_cmtm_wrench(state_dict, link_name, "link", order)
-        vec = CMVector((Factorial.mat(order, dim=6) @ CMTM.change_elemclass(cmtm_wrench, SE3wrench).mat_adj() @ vec.cm_vec()).reshape(-1,6)).cm_vec()
+        vec = CMTM.change_elemclass(cmtm_wrench, SE3wrench).mat_adj() @ vec.cm_vec()
     return vec
 
 def outward_total_state_cmvec(robot : RobotStruct, state_dict : dict, owner_type : str, data_type : str, frame_name : None, order : int) -> CMVector:
