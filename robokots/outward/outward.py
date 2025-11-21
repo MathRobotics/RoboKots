@@ -54,8 +54,8 @@ def kinematics(robot : RobotStruct, motions, order = 3) -> dict:
     joint_data = convert_joint_to_data(joint)
     link_data = convert_link_to_data(child)
 
-    joint_motions = motions[joint.dof_index*order:joint.dof_index*order+joint.dof*order]
-    link_motions = motions[child.dof_index*order:child.dof_index*order+child.dof*order]
+    joint_motions = motions[RobotMotions.owner_vec_index(joint.dof, joint.dof_index, order)]
+    link_motions = motions[RobotMotions.owner_vec_index(child.dof, child.dof_index, order)]
 
     p_link_cmtm = cmtm_dict[parent.name]
     joint_cmtm = joint_rel_cmtm(joint_data, joint_motions, order)
@@ -86,38 +86,6 @@ def calc_link_total_point_frame(robot : RobotStruct, motions : RobotMotions, sta
       p_link_frame = state_dict_to_frame(state, p_link.name)
       coord = motions.link_motions(l.dof, l.dof_index, 1)[0]
       return calc_link_local_point_frame(l, coord, p_link_frame, point - base)
-  
-def link_diff_kinematics_numerical(robot : RobotStruct, motions, link_name_list : list[str],  data_type : str, order = 3, \
-                                    eps = 1e-8, update_method = None, update_direction = None) -> np.ndarray:
-  if data_type not in ["pos", "rot", "vel", "acc", "jerk", "snap", "frame", "cmtm"]:
-    raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'frame' or 'cmtm'.")
-
-  dof = data_type_dof(data_type, order, dim=3)
-
-  diff = np.zeros((len(link_name_list), dof))
-
-  def update_func(x_init, direct, eps):
-    x_ = x_init.copy()
-    
-    if update_method is None:
-      D, d = build_integrator(1, order, eps, method="poly")
-    else:
-      D, d = build_integrator(1, order, eps, method=update_method)
-
-    x_ = np.kron(np.eye(robot.dof), D) @ x_init + np.kron(np.eye(robot.dof), d) @ direct
-    return x_
-
-  for i in range(len(link_name_list)):
-    def kinematics_func(x):
-      state = kinematics(robot, x, order)
-      y = extract_dict_link_info(state, data_type, link_name_list[i])
-      return y
-    
-    sub_func = data_type_to_sub_func(data_type)
-    # diff[i] = numerical_difference(motions.motions, kinematics_func, sub_func = sub_func, update_func = update_func, direction = update_direction, eps=eps)
-    diff[i] = numerical_difference(motions, kinematics_func, sub_func = sub_func, update_func = update_func, direction = update_direction, eps=eps)
-
-  return diff
 
 # specific 3d space (magic number 6)
 def dynamics(robot : RobotStruct, joint_motions) -> dict:  
@@ -227,3 +195,69 @@ def outward_function(robot : RobotStruct, motions, state_type : StateType) -> di
   else:
     state_dict = kinematics(robot, motions, state_type.time_order)
   return outward_state(robot, state_dict, state_type)
+
+def link_diff_kinematics_numerical(robot : RobotStruct, motions, link_name_list : list[str],  data_type : str, order = 3, \
+                                    eps = 1e-8, update_method = None, update_direction = None) -> np.ndarray:
+  if data_type not in ["pos", "rot", "vel", "acc", "jerk", "snap", "frame", "cmtm"]:
+    raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'frame' or 'cmtm'.")
+
+  dof = data_type_dof(data_type, order, dim=3)
+
+  diff = np.zeros((len(link_name_list), dof))
+
+  def update_func(x_init, direct, eps):
+    x_ = x_init.copy()
+    
+    if update_method is None:
+      D, d = build_integrator(1, order, eps, method="poly")
+    else:
+      D, d = build_integrator(1, order, eps, method=update_method)
+
+    x_ = np.kron(np.eye(robot.dof), D) @ x_init + np.kron(np.eye(robot.dof), d) @ direct
+    return x_
+
+  for i in range(len(link_name_list)):
+    def kinematics_func(x):
+      state = kinematics(robot, x, order)
+      y = extract_dict_link_info(state, data_type, link_name_list[i])
+      return y
+
+    sub_func = data_type_to_sub_func(data_type)
+
+    if update_direction is None:
+      update_direction = np.ones(robot.dof)
+    diff[i] = numerical_difference(motions, kinematics_func, sub_func = sub_func, update_func = update_func, direction = update_direction, eps=eps)
+
+  return diff
+
+def diff_outward_numerical(robot : RobotStruct, motions, state_type : StateType, order = None, eps = 1e-8, update_method = None, update_direction = None) -> np.ndarray:
+  if order is None:
+    order = state_type.time_order
+
+  if state_type.time_order > order:
+    return ValueError(f"Invalid order: {order}. Must be equal or larger than state_type.time_order {state_type.time_order}.")
+
+  def update_func(x_init, direct, eps):
+    x_ = x_init.copy()
+    
+    if update_method is None:
+      D, d = build_integrator(1, order, eps, method="poly")
+    else:
+      D, d = build_integrator(1, order, eps, method=update_method)
+
+    x_ = np.kron(np.eye(robot.dof), D) @ x_init + np.kron(np.eye(robot.dof), d) @ direct
+    return x_
+
+  def func(x):
+    m = np.zeros(robot.dof * state_type.time_order)
+    for joint in robot.joints:
+      m[joint.dof_index*state_type.time_order:joint.dof_index*state_type.time_order+joint.dof*state_type.time_order] = \
+        x[RobotMotions.owner_vec_index(joint.dof, joint.dof_index, order, state_type.time_order)]
+    return outward_function(robot, m, state_type)
+
+  sub_func = data_type_to_sub_func(state_type.data_type)
+
+  if update_direction is None:
+    update_direction = np.ones(robot.dof)
+
+  return numerical_difference(motions, func, sub_func = sub_func, update_func = update_func, direction = update_direction, eps=eps)
