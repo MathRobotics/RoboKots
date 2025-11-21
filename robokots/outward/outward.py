@@ -128,21 +128,24 @@ def dynamics_cmtm(robot : RobotStruct, motions, dynamics_order = 1) -> dict:
   for joint in reversed(robot.joints):
     child = robot.links[joint.child_link_id]
     child_joint_ids = child.child_joint_ids
+    # print("child_joint_ids:", child_joint_ids)
 
-    motion = motions[joint.dof_index*(dynamics_order+2):joint.dof_index*(dynamics_order+2) + joint.dof*(dynamics_order+2)]
     inertia = spatial_inertia(child.mass, child.inertia, child.cog)
 
     link_cmtm = state_dict_to_cmtm(state_dict, child.name, "link", dynamics_order + 2)
 
+    # calculate link momentum
     link_momentum = link_momentum_cmvec(inertia, link_cmtm.cmvecs())
     state = vecs_to_state_dict(link_momentum.vecs(), "link", child.name, "momentum", dynamics_order+1)
     state_dict.update(state)
 
+    # calculate link force
     if dynamics_order > 0:
       link_force = link_force_cmvec(link_cmtm.cmvecs(), link_momentum)
       state = vecs_to_state_dict(link_force.vecs(), "link", child.name, "force", dynamics_order)
       state_dict.update(state)
 
+    # calculate joint momentum
     joint_momentums = link_momentum.vec()
     for c_id in child_joint_ids:
       c_joint = robot.joints[c_id]
@@ -159,7 +162,7 @@ def dynamics_cmtm(robot : RobotStruct, motions, dynamics_order = 1) -> dict:
     state = vecs_to_state_dict(joint_momentums, "joint", joint.name, "momentum", dynamics_order+1)
     state_dict.update(state)
 
-    link_cmtm = state_dict_to_cmtm(state_dict, child.name, "link", dynamics_order + 2)
+    # calculate joint force and torque
     joint_momentum = CMVector(joint_momentums.reshape(-1,6))
     if dynamics_order > 0:
       joint_force = link_force_cmvec(link_cmtm.cmvecs(), joint_momentum)
@@ -173,7 +176,7 @@ def dynamics_cmtm(robot : RobotStruct, motions, dynamics_order = 1) -> dict:
       state_dict.update(state)
 
   # Compute for the world link
-  world_link = robot.links[robot.joints[0].parent_link_id]
+  world_link = robot.links[0]
   inertia = spatial_inertia(world_link.mass, world_link.inertia, world_link.cog)
   link_cmtm = state_dict_to_cmtm(state_dict, world_link.name, "link", dynamics_order + 2)
 
