@@ -5,6 +5,7 @@
 from .basic import *
 from .kinematics import *
 from .dynamics import *
+from .total import *
 from .outward import *
 from .inward import *
 from .robot_io import *
