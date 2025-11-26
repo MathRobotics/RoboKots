@@ -46,7 +46,7 @@ def total_coord_to_joint_momentum_grad_mat(r : RobotStruct, state : dict, order 
     total_world_joint_momentum = total_world_link_wrench_to_world_joint_wrench_mat(r, order-1, dim) @ total_world_link_cmtm_wrench(r, state, order-1, dim) @ total_local_link_momentum
     
     j1 = total_world_joint_cmtm_wrench_inv(r, state, order-1, dim) @ total_factorial_mat_inv(r.joint_num, order-1, dim) @ total_coord_to_world_joint_momentum_grad_mat(r, state, order, dim)
-    j2 = -total_joint_cmtm_wrench_inv_var_x_arb_vec(r, state, total_world_joint_momentum, order-1, dim) \
+    j2 = -total_joint_cmtm_wrench_inv_var_x_arb_vec(r, state, total_world_joint_momentum, order-1, dim) @ total_world_link_cmtm_wrench(r, state, order-1, dim)[(order-1)*dim:, (order-1)*dim:]\
           @ total_coord_to_link_tan_vel_grad_mat(r, state, order-1, dim)[(order-1)*dim:] @ total_coord_arrange(r, out_order=order-1, in_order=order, dim=dim)
     
     return total_factorial_mat(r.joint_num, order-1, dim) @ (j1 + j2)
