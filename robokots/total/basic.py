@@ -82,8 +82,7 @@ def total_joint_cmtm_wrench_inv_var_x_arb_vec(r : RobotStruct, state : dict, tot
     for i, joint in enumerate(r.joints):
         arb_v = CMVector.set_cmvecs(total_cm_vecs[i].reshape(order, -1))
         c_link = r.links[joint.child_link_id]
-        cmtm_wrench = state_dict_to_cmtm_wrench(state, c_link.name, "link", order) # should be update to state_dict_to_cmtm_wrench_inv
-        cmtm_wrench_inv = cmtm_wrench.inv()
-        m = cmtm_wrench_inv.mat_var_x_arb_vec_jacob(arb_v, frame='bframe')
+        cmtm_wrench = state_dict_to_cmtm_wrench(state, c_link.name, "link", order)
+        m = cmtm_wrench.mat_inv_var_x_arb_vec_jacob(arb_v, frame='bframe')
         mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = m
     return mat
