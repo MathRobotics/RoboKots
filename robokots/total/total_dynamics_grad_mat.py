@@ -72,3 +72,7 @@ def total_coord_to_joint_momentum_grad_mat(r : RobotStruct, state : dict, order 
           @ total_coord_to_link_tan_vel_grad_mat(r, state, order-1, dim)[(order-1)*dim:] @ total_coord_arrange(r, out_order=order-1, in_order=order, dim=dim)
     
     return total_factorial_mat(r.joint_num, order-1, dim) @ (j1 + j2)
+
+def total_coord_to_joint_force_grad_mat(r : RobotStruct, state : dict, force_order : int = 1, dim : int = 6) -> np.ndarray:
+    return total_partial_momentum_to_force_grad_mat(r, state, force_order=force_order, dim=dim)[:,(force_order+1)*dim:] @ total_coord_to_joint_momentum_grad_mat(r, state, order=force_order+2, dim=dim) \
+              + total_partial_link_sp_vel_to_force_grad_mat(r, state, force_order=force_order, dim=dim)[:,(force_order+2)*dim:] @ total_coord_to_link_vel_grad_mat(r, state, force_order+2, dim)[(force_order+2)*dim:]

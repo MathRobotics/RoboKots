@@ -15,7 +15,7 @@ from ..basic.motion import RobotMotions
 from ..total.total_kinematics_grad_mat import total_coord_to_link_vel_grad_mat
 from ..total.total_dynamics_grad_mat import total_coord_to_link_momentum_grad_mat, total_coord_to_joint_momentum_grad_mat
 from ..total.total_dynamics_grad_mat import total_coord_to_world_link_momentum_grad_mat, total_coord_to_world_joint_momentum_grad_mat
-from ..total.total_dynamics_grad_mat import total_coord_to_link_force_grad_mat
+from ..total.total_dynamics_grad_mat import total_coord_to_link_force_grad_mat, total_coord_to_joint_force_grad_mat
 
 from .outward import dynamics_cmtm as outward_dynamics
 from .outward_state import outward_state
@@ -79,7 +79,13 @@ def link_force_jacobian(robot : RobotStruct, state : dict, link_name_list : list
     return jacobs
 
 def joint_force_jacobian(robot : RobotStruct, state : dict, joint_name_list : list[str], force_order : int = 1, dim : int = 6) -> np.ndarray:
-    pass
+    joints = robot.joint_list(joint_name_list)
+    mat = total_coord_to_joint_force_grad_mat(robot, state, force_order=force_order, dim=dim)
+    jacobs = np.zeros((dim * force_order * len(joints), robot.dof * (force_order+2)))
+
+    for i, joint in enumerate(joints):
+        jacobs[i*dim*force_order:(i+1)*dim*force_order, :] = mat[joint.id*dim*force_order:(joint.id+1)*dim*force_order, :]
+    return jacobs
 
 def dynamics_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str], data_type, owner_type, frame_name : str = None, output_order_ : int = 1) -> np.ndarray:
     order = keys_time_order[data_type] + output_order_ - 1

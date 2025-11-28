@@ -24,7 +24,7 @@ from .outward.outward import link_diff_kinematics_numerical, calc_link_total_poi
 from .outward.outward_state import outward_state
 from .outward.outward_gradient import jacobian_numerical, link_jacobian, link_cmtm_jacobian, link_jacobian_numerical
 from .outward.outward_total_gradient import link_momentum_jacobian, world_link_momentum_jacobian, world_joint_momentum_jacobian
-from .outward.outward_total_gradient import link_force_jacobian, joint_momentum_jacobian, dynamics_jacobian_numerical
+from .outward.outward_total_gradient import link_force_jacobian, joint_force_jacobian, joint_momentum_jacobian, dynamics_jacobian_numerical
 
 default_order = 3 
 default_dim = 3
@@ -279,7 +279,7 @@ class Kots():
         if any(data_type_list_momentum):
           total_jacobian_momentum = dynamics_jacobian_numerical(self.robot_, self.motions_, [state_type.owner_name], "momentum", "joint", state_type.frame_name, output_order_=max_order-1)
         if any(data_type_list_force):
-          total_jacobian_force = jacobian_numerical(self.robot_, self.motions_, state_type)
+          total_jacobian_force = dynamics_jacobian_numerical(self.robot_, self.motions_, [state_type.owner_name], "force", "joint", state_type.frame_name, output_order_=max_order-2)
     else:
       if state_type.owner_type == "link":
         total_jacobian_kinematics = link_cmtm_jacobian(self.robot_, self.motions_, self.state_dict_, [state_type.owner_name], max_order)

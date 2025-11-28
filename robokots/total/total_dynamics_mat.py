@@ -132,5 +132,5 @@ def total_coord_to_joint_momentum_mat(r : RobotStruct, state : dict, order : int
 def total_coord_to_link_force_mat(r : RobotStruct, state : dict, force_order : int = 1, dim : int = 6) -> np.ndarray:
     return total_momentum_to_force_mat(r, state, force_order, dim) @ total_coord_to_link_momentum_mat(r, state, force_order+1, dim)
 
-def total_coord_to_joint_force_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 6) -> np.ndarray:
-    pass
+def total_coord_to_joint_force_mat(r : RobotStruct, state : dict, force_order : int = 1, dim : int = 6) -> np.ndarray:
+    return total_momentum_to_force_mat(r, state, force_order, dim)[:,(force_order+1)*dim:] @ total_coord_to_joint_momentum_mat(r, state, force_order+1, dim)
