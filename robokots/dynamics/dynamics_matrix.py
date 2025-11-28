@@ -4,7 +4,7 @@
 # dynamics computation module by matrix formulation
 
 import numpy as np
-from mathrobo import Factorial
+from mathrobo import Factorial, CMVector
 from mathrobo import SO3wrench, SE3wrench, CMTM
 
 from .dynamics import link_momentum_cmvec
@@ -22,12 +22,12 @@ def momentum_to_force_mat(link_cmtm : CMTM, force_order : int = 1, dim : int = 6
 
     mat[:, dim:] = np.diag(np.repeat(np.arange(1, force_order+1), dim))
     if dim == 6:
-      mat[:, :-dim] += CMTM.hat_adj(SE3wrench, link_cmtm.cmvecs().vecs()[:force_order+1])
+      mat[:, :-dim] += CMTM.hat_adj(SE3wrench, link_cmtm.cmvecs().cm_vecs()[:force_order+1])
     elif dim == 3:
-      mat[:, :-dim] += CMTM.hat_adj(SO3wrench, link_cmtm.cmvecs().vecs()[:force_order+1])
+      mat[:, :-dim] += CMTM.hat_adj(SO3wrench, link_cmtm.cmvecs().cm_vecs()[:force_order+1])
     return Factorial.mat(force_order, dim) @ mat @ Factorial.mat_inv(force_order+1, dim)
 
-def link_to_force_tan_map_mat(link_cmtm : CMTM, inertia : np.ndarray, force_order : int = 1, dim : int = 6) -> np.ndarray:
+def link_sp_vel_to_link_force_grad_mat(link_cmtm : CMTM, inertia : np.ndarray, force_order : int = 1, dim : int = 6) -> np.ndarray:
     momentum_dof = dim * (force_order+2)
     force_dof = dim * force_order
     mat = np.zeros((force_dof, momentum_dof))
@@ -42,5 +42,18 @@ def link_to_force_tan_map_mat(link_cmtm : CMTM, inertia : np.ndarray, force_orde
     elif dim == 3:
       m[:, :-dim] += (CMTM.hat_adj(SO3wrench, link_cmtm.cmvecs().cm_vecs()[:force_order+1]) @ inertia_diag_mat(inertia, force_order) 
                       + CMTM.hat_commute_adj(SO3wrench, momentum.cm_vecs()[:force_order+1]))
+    mat[:, dim:] = Factorial.mat(force_order, dim) @ m @ Factorial.mat_inv(force_order+1, dim)
+    return mat
+
+def partial_momentum_to_force_grad_mat(link_cmtm : CMTM, force_order : int = 1, dim : int = 6) -> np.ndarray:
+    return momentum_to_force_mat(link_cmtm, force_order=force_order, dim=dim)
+
+def partial_link_sp_vel_to_force_grad_mat(momentum : CMVector, force_order : int = 1, dim : int = 6) -> np.ndarray:
+    momentum_dof = dim * (force_order+2)
+    force_dof = dim * force_order
+    mat = np.zeros((force_dof, momentum_dof))
+    m = np.zeros((force_dof, momentum_dof - dim))
+
+    m[:, :-dim] = CMTM.hat_commute_adj(SE3wrench, momentum.cm_vecs()[:force_order+1])
     mat[:, dim:] = Factorial.mat(force_order, dim) @ m @ Factorial.mat_inv(force_order+1, dim)
     return mat
