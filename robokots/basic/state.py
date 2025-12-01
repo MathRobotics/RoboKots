@@ -31,7 +31,7 @@ keys_force = \
     ("force","force_diff1", "force_diff2", "force_diff3", "force_diff4", "force_diff5", "force_diff6", "force_diff7")
 
 keys_torque = \
-    ("torque",)
+    ("torque", "torque_diff1", "torque_diff2", "torque_diff3", "torque_diff4", "torque_diff5", "torque_diff6", "torque_diff7")
 
 keys = keys_kinematics + keys_momentum + keys_force + keys_torque
 
@@ -101,11 +101,14 @@ keys_time_order = {
     "force_diff1": 4,
     "force_diff2": 5,
     "force_diff3": 6,
-    "torque": 3,
     "momentum": 2,
     "momentum_diff1": 3,
     "momentum_diff2": 4,
     "momentum_diff3": 5,
+    "torque": 3,
+    "torque_diff1": 4,
+    "torque_diff2": 5,
+    "torque_diff3": 6,
 }
 
 keys_order_kinematics = {
@@ -138,7 +141,15 @@ keys_order_momentum = {
     "momentum_diff4": 5,
 }
 
-keys_order = {**keys_order_kinematics, **keys_order_momentum, **keys_order_force}
+keys_order_torque = {
+    "torque": 1,
+    "torque_diff1": 2,
+    "torque_diff2": 3,
+    "torque_diff3": 4,
+    "torque_diff4": 5,
+}
+
+keys_order = {**keys_order_kinematics, **keys_order_momentum, **keys_order_force, **keys_order_torque}
 
 keys_name = {
     "pos" : "pos",
@@ -172,6 +183,13 @@ keys_name = {
     "force_diff6" : "force_diff6",
     "force_diff7" : "force_diff7",
     "torque" : "torque",
+    "torque_diff1" : "torque_diff1",
+    "torque_diff2" : "torque_diff2",
+    "torque_diff3" : "torque_diff3",
+    "torque_diff4" : "torque_diff4",
+    "torque_diff5" : "torque_diff5",
+    "torque_diff6" : "torque_diff6",
+    "torque_diff7" : "torque_diff7",
 }
 
 def data_type_to_sub_func(data_type : str):
@@ -184,7 +202,8 @@ def data_type_to_sub_func(data_type : str):
     elif data_type in ["pos", "vel", "acc"] \
         or data_type in ["jerk", "snap", "crackle", "pop", "lock", "drop", "shot", "put"]  \
         or data_type in ["force", "force_diff1", "force_diff2", "force_diff3"] \
-        or data_type in ["momentum", "momentum_diff1", "momentum_diff2", "momentum_diff3"]:
+        or data_type in ["momentum", "momentum_diff1", "momentum_diff2", "momentum_diff3"] \
+        or data_type in ["torque", "torque_diff1", "torque_diff2", "torque_diff3"]:
         return None
     else:
         raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'jerk', 'frame' or 'cmtm'.")
