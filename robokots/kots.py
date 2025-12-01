@@ -16,7 +16,7 @@ from .basic.target import TargetList
 from .basic.robot_drow import show_robot, show_robot_traj, RobotColor, show_link_points
 
 from .robot_io import *
-from .misc import check_valid_str_list, check_valid_data_type_list, count_time_order, filter_cmtm_row_data_to_target
+from .misc import check_valid_str_list, check_valid_data_type_list, count_time_order, filter_cm_row_mat_to_target_mat, filter_cm_row_mat_to_gen_mat
 
 from .outward.outward import kinematics as outward_kinematics
 from .outward.outward import dynamics_cmtm as outward_dynamics
@@ -24,7 +24,8 @@ from .outward.outward import link_diff_kinematics_numerical, calc_link_total_poi
 from .outward.outward_state import outward_state
 from .outward.outward_gradient import jacobian_numerical, link_jacobian, link_cmtm_jacobian, link_jacobian_numerical
 from .outward.outward_total_gradient import link_momentum_jacobian, world_link_momentum_jacobian, world_joint_momentum_jacobian
-from .outward.outward_total_gradient import link_force_jacobian, joint_force_jacobian, joint_momentum_jacobian, dynamics_jacobian_numerical
+from .outward.outward_total_gradient import link_force_jacobian, joint_force_jacobian, joint_momentum_jacobian, joint_torque_jacobian
+from .outward.outward_total_gradient import dynamics_jacobian_numerical
 
 default_order = 3 
 default_dim = 3
@@ -266,6 +267,7 @@ class Kots():
 
     total_jacobian_kinematics = np.zeros((0, self.robot_.dof*max_order))
     total_jacobian_momentum = np.zeros((0, self.robot_.dof*max_order))
+    total_jacobian_torque = np.zeros((0, self.robot_.dof*max_order))
     total_jacobian_force = np.zeros((0, self.robot_.dof*max_order))
 
     if numerical:
@@ -280,6 +282,8 @@ class Kots():
           total_jacobian_momentum = dynamics_jacobian_numerical(self.robot_, self.motions_, [state_type.owner_name], "momentum", "joint", state_type.frame_name, output_order_=max_order-1)
         if any(data_type_list_force):
           total_jacobian_force = dynamics_jacobian_numerical(self.robot_, self.motions_, [state_type.owner_name], "force", "joint", state_type.frame_name, output_order_=max_order-2)
+        if any(data_type_list_torque):
+          total_jacobian_torque = dynamics_jacobian_numerical(self.robot_, self.motions_, [state_type.owner_name], "torque", "joint", None, output_order_=max_order-2)
     else:
       if state_type.owner_type == "link":
         total_jacobian_kinematics = link_cmtm_jacobian(self.robot_, self.motions_, self.state_dict_, [state_type.owner_name], max_order)
@@ -298,12 +302,15 @@ class Kots():
             total_jacobian_momentum = world_joint_momentum_jacobian(self.robot_, self.state_dict_, [state_type.owner_name], momentum_order=max_order-1)
         if any(data_type_list_force):
           total_jacobian_force = joint_force_jacobian(self.robot_, self.state_dict_, [state_type.owner_name], force_order=max_order-2)
+        if any(data_type_list_torque):
+          total_jacobian_torque = joint_torque_jacobian(self.robot_, self.state_dict_, [state_type.owner_name], torque_order=max_order-2)
 
-    jacobian_kinematics = filter_cmtm_row_data_to_target(total_jacobian_kinematics, state_type.owner_name, data_type_list_kinematics, dim=self.dim_)
-    jacobian_momentum = filter_cmtm_row_data_to_target(total_jacobian_momentum, state_type.owner_name, data_type_list_momentum, dim=self.dim_)
-    jacobian_force = filter_cmtm_row_data_to_target(total_jacobian_force, state_type.owner_name, data_type_list_force, dim=self.dim_)
+    jacobian_kinematics = filter_cm_row_mat_to_target_mat(total_jacobian_kinematics, state_type.owner_name, data_type_list_kinematics, dim=self.dim_)
+    jacobian_momentum = filter_cm_row_mat_to_target_mat(total_jacobian_momentum, state_type.owner_name, data_type_list_momentum, dim=self.dim_)
+    jacobian_force = filter_cm_row_mat_to_target_mat(total_jacobian_force, state_type.owner_name, data_type_list_force, dim=self.dim_)
+    jacobian_torque = filter_cm_row_mat_to_gen_mat(total_jacobian_torque, state_type.owner_name, data_type_list_torque, data_dof=1) # should be update for torque dim
 
-    jacobian = np.vstack((jacobian_kinematics, jacobian_momentum, jacobian_force))
+    jacobian = np.vstack((jacobian_kinematics, jacobian_momentum, jacobian_force, jacobian_torque))
 
     return jacobian
 
