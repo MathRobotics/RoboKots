@@ -1,9 +1,16 @@
 from mathrobo import CMTM, SE3, SE3wrench
 
 from ..basic.robot import RobotStruct
-from ..basic.state import StateType
+from ..basic.state import StateType, data_type_dof
 
 from ..basic.state_dict import *
+
+def outward_state_dof(robot : RobotStruct, state_type : StateType, dim : int = 3) -> int:
+    if "torque" in state_type.data_type:
+        joint = robot.joint_list([state_type.owner_name])[0]
+        return joint.dof
+    else:
+        return data_type_dof(state_type.data_type, dim = dim)
 
 def outward_state(robot : RobotStruct, state_dict : dict, state_type : StateType):
     if state_type.owner_type == "link":
