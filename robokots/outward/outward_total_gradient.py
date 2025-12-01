@@ -98,10 +98,10 @@ def joint_torque_jacobian(robot : RobotStruct, state : dict, joint_name_list : l
     joints = robot.joint_list(joint_name_list)
     mat = total_coord_to_joint_torque_grad_mat(robot, state, torque_order=torque_order, dim=dim)
     jacobs = np.empty((0, robot.dof * (torque_order+2)))
+    
+    for joint in joints:
+        jacobs = np.vstack((jacobs, mat[joint.dof_index*torque_order:(joint.dof_index+joint.dof)*torque_order, :]))
 
-    for i, joint in enumerate(joints):
-        dof = joint.dof
-        jacobs = np.vstack((jacobs, mat[joint.id*dof*torque_order:(joint.id+1)*dof*torque_order, :]))
     return jacobs
 
 def dynamics_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str], data_type, owner_type, frame_name : str = None, output_order_ : int = 1) -> np.ndarray:

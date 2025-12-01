@@ -5,6 +5,7 @@ from ..basic.state import dim_to_dof
 from ..basic.state_dict import state_dict_to_cmtm
 from ..basic.state_dict import state_dict_to_cmtm_wrench, state_dict_to_rel_cmtm_wrench
 
+from ..kinematics.kinematics_matrix import joint_select_diag_mat
 from ..dynamics.base import spatial_inertia
 from ..dynamics.dynamics_matrix import inertia_diag_mat, momentum_to_force_mat
 
@@ -17,7 +18,7 @@ def total_joint_wrench_to_joint_torque_mat(r : RobotStruct, torque_order : int =
     for i, joint in enumerate(r.joints):
         if joint.dof == 0:  # Joint with no degree of freedom
             continue
-        mat[joint.dof_index:joint.dof_index+joint.dof, i*n_:(i+1)*n_] = joint.select_mat.T
+        mat[joint.dof_index*torque_order:(joint.dof_index+joint.dof)*torque_order, i*n_:(i+1)*n_] = joint_select_diag_mat(joint.select_mat, torque_order).T
     return mat
 
 def total_world_link_cmtm_wrench(r : RobotStruct, state : dict, order : int = 1, dim : int = 3) -> np.ndarray:
