@@ -171,7 +171,7 @@ def dynamics_cmtm(robot : RobotStruct, motions, dynamics_order = 1) -> dict:
 
       if joint.dof == 0:
         continue
-      joint_torque = joint_select_diag_mat(joint.select_mat, dynamics_order).T @ link_force.vec()
+      joint_torque = joint_select_diag_mat(joint.select_mat, dynamics_order).T @ joint_force.vec()
       state = vecs_to_state_dict(joint_torque.reshape(-1, joint.dof), "joint", joint.name, "torque", dynamics_order)
       state_dict.update(state)
 
