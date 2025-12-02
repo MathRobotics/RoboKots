@@ -12,7 +12,7 @@ class TargetList:
     self._max_order = max([keys_time_order[t.data_type] for t in self._targets])
 
   @staticmethod
-  def from_dict(data: Dict) -> "StateType":  
+  def from_dict(data: Dict) -> "TargetList":  
     state_types = []
     
     for target in data["targets"]:

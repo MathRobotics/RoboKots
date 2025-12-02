@@ -109,6 +109,9 @@ class Kots():
 
   def print_state_dict(self):
     print_state_dict(self.state_dict_)
+
+  def targets(self):
+    return self.target_
     
   def dof(self):
     return self.robot_.dof
