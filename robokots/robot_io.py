@@ -44,6 +44,3 @@ def load_target_dict(data: Dict) -> "TargetList":
 def load_target_json_file(file_path: str) -> "TargetList":
     data = load_json_file(file_path)
     return load_target_dict(data)
-
-def print_target_list(t_list : TargetList):
-    t_list.print()
