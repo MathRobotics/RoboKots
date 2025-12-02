@@ -69,7 +69,6 @@ def total_partial_momentum_to_force_grad_mat(r : RobotStruct, state : dict, forc
     return mat
 
 def total_coord_to_link_force_grad_mat(r : RobotStruct, state : dict, force_order : int = 1, dim : int = 3) -> np.ndarray:
-    # return total_link_sp_vel_to_link_force_grad_mat(r, state, force_order=force_order, dim=dim) @ total_coord_to_link_vel_grad_mat(r, state, force_order+2, dim)
     return total_partial_momentum_to_force_grad_mat(r, state, force_order=force_order, dim=dim) @ total_coord_to_link_momentum_grad_mat(r, state, order=force_order+2, dim=dim) \
               + total_partial_link_sp_vel_to_link_force_grad_mat(r, state, force_order=force_order, dim=dim) @ total_coord_to_link_vel_grad_mat(r, state, order=force_order+2, dim=dim)
 
