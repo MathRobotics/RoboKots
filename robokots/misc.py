@@ -37,11 +37,10 @@ def count_time_order(data_type_list : List[str]) -> int:
 
     return max_order
 
-def filter_cm_row_mat_to_target_mat(cmtm_row_data : np.array, name_list : List[str], data_type_list : List[str], dim = 3) -> np.array:
+def filter_cm_row_mat_to_target_mat(cmtm_row_data : np.array, data_type_list : List[str], dim = 3) -> np.array:
     idx = []
     base = dim_to_dof(dim)
 
-    
     for data_type in data_type_list:
         if not data_type:
             continue
@@ -55,7 +54,7 @@ def filter_cm_row_mat_to_target_mat(cmtm_row_data : np.array, name_list : List[s
 
     return cmtm_row_data[np.asarray(idx, dtype=int), :]
 
-def filter_cm_row_mat_to_gen_mat(cm_row_mat: np.array, name_list: List[str], data_type_list: List[str], data_dof : int = 1) -> np.array:
+def filter_cm_row_mat_to_gen_mat(cm_row_mat: np.array, data_type_list: List[str], data_dof : int = 1) -> np.array:
     idx = []
 
     for data_type in data_type_list:
