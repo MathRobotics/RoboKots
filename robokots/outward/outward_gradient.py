@@ -212,17 +212,26 @@ def link_dynamics_jacobian_numerical(robot : RobotStruct, motions : RobotMotions
 
     return jacobs
 
-def jacobian_numerical(robot : RobotStruct, motions : RobotMotions, state_type : StateType) -> np.ndarray:
+def jacobian_numerical(robot : RobotStruct, motions : RobotMotions, state_type : StateType, input_motion_order = None) -> np.ndarray:
   def outward_func(x):
-    return outward_function(robot, x, state_type)
-  motion = np.zeros(robot.dof * state_type.time_order)
+    return outward_function(robot, x, state_type, input_order = input_motion_order)
+
+  if input_motion_order is None:
+    motion = np.zeros(robot.dof * state_type.time_order)
+    order = state_type.time_order
+  else:
+    motion = np.zeros(robot.dof * input_motion_order)
+    order = input_motion_order
 
   for joint in robot.joints:
-      m = motions.joint_motions(joint.dof, joint.dof_index, state_type.time_order)
-      motion[joint.dof_index*state_type.time_order:joint.dof_index*state_type.time_order+joint.dof*state_type.time_order] = m.flatten()
+      m = motions.joint_motions(joint.dof, joint.dof_index, order)
+      motion[joint.dof_index*order:joint.dof_index*order+joint.dof*order] = m.flatten()
 
   for link in robot.links:
-      m = motions.link_motions(link.dof, link.dof_index, state_type.time_order)
-      motion[link.dof_index*state_type.time_order:link.dof_index*state_type.time_order+link.dof*state_type.time_order] = m.flatten()
-      
-  return numerical_grad(motion, outward_func)
+      m = motions.link_motions(link.dof, link.dof_index, order)
+      motion[link.dof_index*order:link.dof_index*order+link.dof*order] = m.flatten()
+
+  return numerical_grad(
+            x = motion, 
+            func = outward_func, 
+            sub_func = data_type_to_sub_func(state_type.data_type))

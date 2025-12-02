@@ -192,11 +192,25 @@ def dynamics_cmtm(robot : RobotStruct, motions, dynamics_order = 1) -> dict:
     
   return state_dict
 
-def outward_function(robot : RobotStruct, motions, state_type : StateType) -> dict:
-  if state_type.is_dynamics:
-    state_dict = dynamics_cmtm(robot, motions, max(state_type.time_order-2,0))
+def outward_function(robot : RobotStruct, motions, state_type : StateType, input_order = None) -> dict:
+  motion = np.zeros(robot.dof * state_type.time_order)
+
+  if input_order is None:
+    motion = motions
   else:
-    state_dict = kinematics(robot, motions, state_type.time_order)
+    time_order = state_type.time_order
+    for joint in robot.joints:
+        m = motions[joint.dof_index*input_order:joint.dof_index*input_order+joint.dof*time_order]
+        motion[joint.dof_index*time_order:joint.dof_index*time_order+joint.dof*time_order] = m.flatten()
+
+    for link in robot.links:
+        m = motions[link.dof_index*input_order:link.dof_index*input_order+link.dof*time_order]
+        motion[link.dof_index*time_order:link.dof_index*time_order+link.dof*time_order] = m.flatten()
+
+  if state_type.is_dynamics:
+    state_dict = dynamics_cmtm(robot, motion, max(state_type.time_order-2,0))
+  else:
+    state_dict = kinematics(robot, motion, state_type.time_order)
   return outward_state(robot, state_dict, state_type)
 
 def link_diff_kinematics_numerical(robot : RobotStruct, motions, link_name_list : list[str],  data_type : str, order = 3, \
