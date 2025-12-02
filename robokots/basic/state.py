@@ -21,6 +21,9 @@ class StateType:
         self.is_dynamics = is_in_keys_dynamics([data_type])
         self.alliance = f"{owner_name}_{owner_type}_{keys_name[data_type]}"
 
+    def __repr__(self):
+        return f"StateType(\n  owner type: {self.owner_type}\n  owner name: {self.owner_name}\n  data type: {self.data_type}\n  frame name: {self.frame_name}\n  time order: {self.time_order}\n  key order: {self.key_order}\n  is dynamics: {self.is_dynamics}\n  alliance: {self.alliance}\n)"
+
 keys_kinematics = \
     ("pos", "rot", "frame", "vel", "acc", "jerk", "snap", "crackle", "pop", "lock", "drop", "shot", "put")
 
