@@ -1,3 +1,4 @@
+from typing import List
 from mathrobo import SO3, SE3, CMTM
 
 frame_names = ("world","local")
@@ -23,6 +24,64 @@ class StateType:
 
     def __repr__(self):
         return f"StateType(\n  owner type: {self.owner_type}\n  owner name: {self.owner_name}\n  data type: {self.data_type}\n  frame name: {self.frame_name}\n  time order: {self.time_order}\n  key order: {self.key_order}\n  is dynamics: {self.is_dynamics}\n  alliance: {self.alliance}\n)"
+
+    @staticmethod
+    def create_list(owner_type: str, owner_name: str, data_type_list: List[str], frame_name: str = None) -> List["StateType"]:
+        state_type_list = []
+        for dt in data_type_list:
+            st = StateType(
+                owner_type,
+                owner_name,
+                dt,
+                frame_name
+            )
+            state_type_list.append(st)
+        return state_type_list
+
+    @staticmethod
+    def max_time_order(state_type_list : List["StateType"]) -> int:
+        max_order = 0
+        for st in state_type_list:
+            if st.time_order > max_order:
+                max_order = st.time_order
+        return max_order
+    
+    def is_list_all_in_kinematics(state_type_list : List["StateType"]) -> bool: 
+        for st in state_type_list:
+            if st.is_dynamics:
+                return False
+        return True
+
+    def is_list_all_in_dynamics(state_type_list : List["StateType"]) -> bool:
+        for st in state_type_list:
+            if not st.is_dynamics:
+                return False
+        return True
+
+    @staticmethod
+    def filter_list_by_kinematics(state_type_list : List["StateType"]) -> bool:
+        return [st for st in state_type_list if not st.is_dynamics]
+    @staticmethod
+    def filter_list_by_dynamics(state_type_list : List["StateType"]) -> bool:
+        return [st for st in state_type_list if st.is_dynamics]
+
+    @staticmethod
+    def filter_list_by_owner_type(state_type_list : List["StateType"], owner_type : List[str]) -> List["StateType"]:
+        return [st for st in state_type_list if st.owner_type in owner_type]
+    @staticmethod
+    def filter_list_by_owner_name(state_type_list : List["StateType"], owner_name : List[str]) -> List["StateType"]:
+        return [st for st in state_type_list if st.owner_name in owner_name]
+    @staticmethod
+    def filter_list_by_data_type(state_type_list : List["StateType"], data_type : List[str]) -> List["StateType"]:
+        return [st for st in state_type_list if st.data_type in data_type]
+    @staticmethod
+    def get_owner_names_from_list(state_type_list : List["StateType"]) -> List[str]:
+        owner_names = []
+        for st in state_type_list:
+            if st.owner_name not in owner_names:
+                owner_names.append(st.owner_name)
+        return owner_names
+    
 
 keys_kinematics = \
     ("pos", "rot", "frame", "vel", "acc", "jerk", "snap", "crackle", "pop", "lock", "drop", "shot", "put")
