@@ -9,6 +9,7 @@ from mathrobo import numerical_grad
 
 from ..basic.robot import RobotStruct
 from ..basic.state import keys_order, data_type_dof, keys_time_order, StateType, dim_to_dof
+from ..basic.state import keys_kinematics, keys_momentum, keys_force, keys_torque
 from ..basic.state_dict import extract_dict_link_info
 from ..basic.motion import RobotMotions
 
@@ -102,6 +103,81 @@ def joint_torque_jacobian(robot : RobotStruct, state : dict, joint_name_list : l
     for joint in joints:
         jacobs = np.vstack((jacobs, mat[joint.dof_index*torque_order:(joint.dof_index+joint.dof)*torque_order, :]))
 
+    return jacobs
+
+def outward_kinematics_jacobian(robot : RobotStruct, state : dict, state_type_list : list[StateType], max_time_order = None, dim : int = 3) -> np.ndarray:
+    kine_state_type_list = StateType.filter_list_by_kinematics(state_type_list)
+    if max_time_order is None:
+        max_time_order = StateType.max_time_order(kine_state_type_list)
+    mat = total_coord_to_link_vel_grad_mat(robot, state, order=max_time_order, dim=dim)
+    jacobs = np.empty((0, robot.dof * max_time_order))
+    dof = dim_to_dof(dim)
+    for st in kine_state_type_list:
+        link = robot.link(st.owner_name)
+        if link is None:
+            raise ValueError(f"Invalid link name: {st.owner_name}")
+        base = link.id * dof * max_time_order
+        jacob_part = mat[base + dof*(st.time_order-1) : base + dof*st.time_order, :]
+        jacobs =  np.vstack((jacobs, jacob_part))
+
+    return jacobs
+
+def outward_jacobian(robot : RobotStruct, state : dict, state_type_list : list[StateType], max_time_order = None, dim : int = 3) -> np.ndarray:
+    if StateType.is_list_all_in_kinematics(state_type_list):
+        return outward_kinematics_jacobian(robot, state, state_type_list, max_time_order, dim=dim)
+    
+    if max_time_order is None:
+        max_time_order = StateType.max_time_order(state_type_list)
+
+    mat_kine = total_coord_to_link_vel_grad_mat(robot, state, order=max_time_order, dim=dim)
+    mat_link_mom = total_coord_to_link_momentum_grad_mat(robot, state, order=max_time_order, dim=dim)
+    mat_joint_mom = total_coord_to_joint_momentum_grad_mat(robot, state, order=max_time_order, dim=dim)
+    if max_time_order >=3:
+        mat_link_force = total_coord_to_link_force_grad_mat(robot, state, force_order=max_time_order-2, dim=dim)
+        mat_joint_force = total_coord_to_joint_force_grad_mat(robot, state, force_order=max_time_order-2, dim=dim)
+        mat_joint_torque = total_coord_to_joint_torque_grad_mat(robot, state, torque_order=max_time_order-2, dim=dim)
+    dof = dim_to_dof(dim)
+
+    jacobs = np.empty((0, robot.dof * max_time_order))
+    for st in state_type_list:
+        if st.owner_type == "link":
+            link = robot.link(st.owner_name)
+            if link is None:
+                raise ValueError(f"Invalid link name: {st.owner_name}")
+        elif st.owner_type == "joint":
+            joint = robot.joint(st.owner_name)
+            if joint is None:
+                raise ValueError(f"Invalid joint name: {st.owner_name}")
+            
+        order = st.key_order
+
+        if st.data_type in keys_kinematics:
+            base = link.id * dof * max_time_order
+            jacob_part = mat_kine[base + dof*order : base + dof*(order+1), :]
+            jacobs = np.vstack((jacobs, jacob_part))
+        elif st.data_type in keys_momentum:
+            if st.owner_type == "link":
+                base = link.id * dof * (max_time_order-1)
+                jacob_part = mat_link_mom[base + dof*(order) : base + dof*(order+1), :]
+            elif st.owner_type == "joint":
+                base = joint.id * dof * (max_time_order-1)
+                jacob_part = mat_joint_mom[base + dof*(order) : base + dof*(order+1), :]
+            jacobs = np.vstack((jacobs, jacob_part))
+        elif st.data_type in keys_force:
+            if st.owner_type == "link":
+                base = link.id * dof * (max_time_order-2)
+                jacob_part = mat_link_force[base + dof*order : base + dof*(order+1), :]
+            elif st.owner_type == "joint":
+                base = joint.id * dof * (max_time_order-2)
+                jacob_part = mat_joint_force[base + dof*order : base + dof*(order+1), :]
+            jacobs = np.vstack((jacobs, jacob_part))
+        elif st.data_type in keys_torque:
+            if st.owner_type == "joint":
+                base = joint.dof_index * (max_time_order-2)
+                jacob_part = mat_joint_torque[base + joint.dof*(order) : base + joint.dof*(order+1), :]
+            else:
+                raise ValueError("torque can be specified only for joint owner type")
+            jacobs = np.vstack((jacobs, jacob_part))
     return jacobs
 
 def dynamics_jacobian_numerical(robot : RobotStruct, motions : RobotMotions, link_name_list : list[str], data_type, owner_type, frame_name : str = None, output_order_ : int = 1) -> np.ndarray:
