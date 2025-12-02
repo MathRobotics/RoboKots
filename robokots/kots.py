@@ -9,23 +9,19 @@ from robokots.outward import outward_state
 
 from .basic.motion import RobotMotions
 from .basic.state_df import RobotState
-from .basic.state import StateType, keys_order, keys_time_order, filter_keys_kinematics, filter_keys_momentum, filter_keys_force, filter_keys_torque
+from .basic.state import StateType
 from .basic.state_dict import state_dict_to_links_pos, print_state_dict
 from .basic.robot import RobotStruct
 from .basic.target import TargetList
 from .basic.robot_drow import show_robot, show_robot_traj, RobotColor, show_link_points
 
 from .robot_io import *
-from .misc import check_valid_str_list, check_valid_data_type_list, count_time_order, filter_cm_row_mat_to_target_mat, filter_cm_row_mat_to_gen_mat
-
 from .outward.outward import kinematics as outward_kinematics
 from .outward.outward import dynamics_cmtm as outward_dynamics
 from .outward.outward import link_diff_kinematics_numerical, calc_link_total_point_frame, diff_outward_numerical
 from .outward.outward_state import outward_state
-from .outward.outward_gradient import jacobian_numerical, link_jacobian, link_cmtm_jacobian, link_jacobian_numerical
-from .outward.outward_total_gradient import link_momentum_jacobian, world_link_momentum_jacobian, world_joint_momentum_jacobian
-from .outward.outward_total_gradient import link_force_jacobian, joint_force_jacobian, joint_momentum_jacobian, joint_torque_jacobian
-from .outward.outward_total_gradient import dynamics_jacobian_numerical
+from .outward.outward_gradient import jacobian_numerical, link_cmtm_jacobian
+from .outward.outward_total_gradient import outward_jacobian
 
 default_order = 3 
 default_dim = 3
@@ -251,86 +247,20 @@ class Kots():
 
     return diff_outward_numerical(self.robot_, motion, state_type, order, eps, update_method, update_direction)
 
-  def __jacobian(self, state_type : StateType, numerical : bool = False):
-    max_order = 0
-
-    data_type_list = check_valid_data_type_list(state_type.data_type)
-    max_order = count_time_order(data_type_list)
-
-    if state_type.owner_name not in self.robot_.link_names and state_type.owner_name not in self.robot_.joint_names:
-      raise ValueError(f"Invalid name: {state_type.owner_name}. Must be a link or joint name.")
-      
-    data_type_list_kinematics = filter_keys_kinematics(data_type_list) 
-    data_type_list_momentum = filter_keys_momentum(data_type_list)
-    data_type_list_force = filter_keys_force(data_type_list)
-    data_type_list_torque = filter_keys_torque(data_type_list)
-
-    total_jacobian_kinematics = np.zeros((0, self.robot_.dof*max_order))
-    total_jacobian_momentum = np.zeros((0, self.robot_.dof*max_order))
-    total_jacobian_torque = np.zeros((0, self.robot_.dof*max_order))
-    total_jacobian_force = np.zeros((0, self.robot_.dof*max_order))
-
-    if numerical:
-      if state_type.owner_type == "link":
-        total_jacobian_kinematics = link_jacobian_numerical(self.robot_, self.motions_, [state_type.owner_name], "cmtm", order_=max_order)
-        if any(data_type_list_momentum):
-          total_jacobian_momentum = dynamics_jacobian_numerical(self.robot_, self.motions_, [state_type.owner_name], "momentum", "link", state_type.frame_name, output_order_=max_order-1)
-        if any(data_type_list_force):
-          total_jacobian_force = dynamics_jacobian_numerical(self.robot_, self.motions_, [state_type.owner_name], "force", "link", state_type.frame_name, output_order_=max_order-2)
-      elif state_type.owner_type == "joint":
-        if any(data_type_list_momentum):
-          total_jacobian_momentum = dynamics_jacobian_numerical(self.robot_, self.motions_, [state_type.owner_name], "momentum", "joint", state_type.frame_name, output_order_=max_order-1)
-        if any(data_type_list_force):
-          total_jacobian_force = dynamics_jacobian_numerical(self.robot_, self.motions_, [state_type.owner_name], "force", "joint", state_type.frame_name, output_order_=max_order-2)
-        if any(data_type_list_torque):
-          total_jacobian_torque = dynamics_jacobian_numerical(self.robot_, self.motions_, [state_type.owner_name], "torque", "joint", None, output_order_=max_order-2)
+  def jacobian(self, state_type, numerical : bool = False):
+    if type(state_type) is list:
+      state_type_list = state_type
     else:
-      if state_type.owner_type == "link":
-        total_jacobian_kinematics = link_cmtm_jacobian(self.robot_, self.motions_, self.state_dict_, [state_type.owner_name], max_order)
-        if any(data_type_list_momentum):
-          if state_type.frame_name is None:
-            total_jacobian_momentum = link_momentum_jacobian(self.robot_, self.state_dict_, [state_type.owner_name], momentum_order=max_order-1)
-          else:
-            total_jacobian_momentum = world_link_momentum_jacobian(self.robot_, self.state_dict_, [state_type.owner_name], momentum_order=max_order-1)
-        if any(data_type_list_force):
-          total_jacobian_force = link_force_jacobian(self.robot_, self.state_dict_, [state_type.owner_name], force_order=max_order-2)
-      elif state_type.owner_type == "joint":
-        if any(data_type_list_momentum):
-          if state_type.frame_name is None:
-            total_jacobian_momentum = joint_momentum_jacobian(self.robot_, self.state_dict_, [state_type.owner_name], momentum_order=max_order-1)
-          else:
-            total_jacobian_momentum = world_joint_momentum_jacobian(self.robot_, self.state_dict_, [state_type.owner_name], momentum_order=max_order-1)
-        if any(data_type_list_force):
-          total_jacobian_force = joint_force_jacobian(self.robot_, self.state_dict_, [state_type.owner_name], force_order=max_order-2)
-        if any(data_type_list_torque):
-          total_jacobian_torque = joint_torque_jacobian(self.robot_, self.state_dict_, [state_type.owner_name], torque_order=max_order-2)
-
-    jacobian_kinematics = filter_cm_row_mat_to_target_mat(total_jacobian_kinematics, state_type.owner_name, data_type_list_kinematics, dim=self.dim_)
-    jacobian_momentum = filter_cm_row_mat_to_target_mat(total_jacobian_momentum, state_type.owner_name, data_type_list_momentum, dim=self.dim_)
-    jacobian_force = filter_cm_row_mat_to_target_mat(total_jacobian_force, state_type.owner_name, data_type_list_force, dim=self.dim_)
-    jacobian_torque = filter_cm_row_mat_to_gen_mat(total_jacobian_torque, state_type.owner_name, data_type_list_torque, data_dof=1) # should be update for torque dim
-
-    jacobian = np.vstack((jacobian_kinematics, jacobian_momentum, jacobian_force, jacobian_torque))
-
-    return jacobian
-
-  def jacobian(self, state_type : StateType):
-    return self.__jacobian(state_type, numerical=False)
-
-  def jacobian_numerical(self, state_type : StateType):
-    return self.__jacobian(state_type, numerical=True)
-
-  def __check_target(self, data_type_list : List[str] = None, frame_name_list : List[str] = None):
-    if not self.target_:
-      raise ValueError("target_ is not set")
+      state_type_list = [state_type]
     
-    owner_type_list = self.target_.target_owner_types
-    owner_name_list = self.target_.target_owner_names
-    if data_type_list is None:
-      data_type_list = self.target_.target_data_types
-    if frame_name_list is None:
-      frame_name_list = self.target_.target_frame_names
-    return owner_type_list, owner_name_list, data_type_list, frame_name_list
+    if numerical:
+      max_order = StateType.max_time_order(state_type_list)
+      jacob = np.empty((0, self.robot_.dof * max_order))
+      for st in state_type_list:
+        jacob = np.vstack((jacob, jacobian_numerical(self.robot_, self.motions_, st, max_order)))
+      return jacob 
+
+    return outward_jacobian(self.robot_, self.state_dict_, state_type_list, dim = self.dim_)
 
   def jacobian_target(self, data_type_list : List[str] = None, frame_name_list : List[str] = None):
     jacob = np.empty((0, self.robot_.dof * self.order_))
