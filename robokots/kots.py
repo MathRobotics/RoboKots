@@ -20,7 +20,7 @@ from .outward.outward import kinematics as outward_kinematics
 from .outward.outward import dynamics_cmtm as outward_dynamics
 from .outward.outward import link_diff_kinematics_numerical, calc_link_total_point_frame, diff_outward_numerical
 from .outward.outward_state import outward_state
-from .outward.outward_gradient import jacobian_numerical, link_cmtm_jacobian
+from .outward.outward_gradient import jacobian_numerical
 from .outward.outward_total_gradient import outward_jacobian
 
 default_order = 3 
@@ -194,17 +194,12 @@ class Kots():
 
   def state_info_list(self, state_type_list : List[StateType]) -> List[np.ndarray]:
     return [outward_state(self.robot_, self.state_dict_, st) for st in state_type_list]
-  
-  def target_state_info(self, data_type : str = None, frame_name : str = None) -> np.ndarray:
-    if self.target_ is None:
-        raise ValueError("target is not set")
-    
-    if data_type is None:
-      state_type_list = [t.state_type() for t in self.target_._targets]
-    else:
-      state_type_list = [StateType(t._state_type.owner_type, t._state_type.owner_name, data_type, frame_name if frame_name is not None else t._state_type.frame_name) for t in self.target_._targets]
 
-    return self.state_info_list(state_type_list)
+  def target_state_info(self) -> np.ndarray:
+    if self.target_ is None:
+      raise ValueError("target is not set")
+
+    return self.state_info_list(self.target_._targets)
   
   def kinematics(self, order = None):
     if order is None:
@@ -261,51 +256,12 @@ class Kots():
       return jacob 
 
     return outward_jacobian(self.robot_, self.state_dict_, state_type_list, dim = self.dim_)
-
-  def jacobian_target(self, data_type_list : List[str] = None, frame_name_list : List[str] = None):
-    jacob = np.empty((0, self.robot_.dof * self.order_))
-    for target in self.target_._targets:
-      if data_type_list is None and frame_name_list is None:
-        jacob = np.vstack((jacob, self.jacobian(target.state_type())))
-      else:
-        d_types = [data_type_list] if isinstance(data_type_list, str) else data_type_list
-        if frame_name_list is None:
-          f_names = [target._state_type.frame_name] * len(d_types)
-        else:
-          f_names = [frame_name_list] if isinstance(frame_name_list, str) else frame_name_list
-        for d_t, f_n in zip(d_types, f_names):
-          jacob = np.vstack((jacob, self.jacobian(StateType(target._state_type.owner_type, target._state_type.owner_name, d_t, f_n))))
-    return jacob
-
-  def jacobian_target_numerical(self, data_type_list : List[str] = None, frame_name_list : List[str] = None):
-    jacob = np.empty((0, self.robot_.dof * self.order_))
-    for target in self.target_._targets:
-      if data_type_list is None:
-        jacob = np.vstack((jacob, self.jacobian(target.state_type())))
-      else:
-        d_types = [data_type_list] if isinstance(data_type_list, str) else data_type_list
-        if frame_name_list is None:
-          f_names = [target._state_type.frame_name] * len(d_types)
-        else:
-          f_names = [frame_name_list] if isinstance(frame_name_list, str) else frame_name_list
-        for d_t, f_n in zip(d_types, f_names):
-          jacob = np.vstack((jacob, self.jacobian_numerical(StateType(target._state_type.owner_type, target._state_type.owner_name, d_t, f_n))))
-    return jacob
-
-  def jacobian_cmtm(self, name_list : List[str], order = None):
-    if order is None:
-      order = self.order_
-    if order < 1:
-      raise ValueError("order must be greater than 0")
-    if order > self.order_:
-      raise ValueError(f"order must be less than or equal to {self.order_}")
-
-    if not name_list:
-      raise ValueError("name_list is empty")
-    if not all(name in self.robot_.link_names or name in self.robot_.joint_names for name in name_list):
-      raise ValueError("name_list contains invalid names")
-
-    return link_cmtm_jacobian(self.robot_, self.motions_, self.state_dict_, name_list, order)
+  
+  def jacobian_target(self, numerical : bool = False):
+    if self.target_ is None:
+      raise ValueError("target is not set")
+    
+    return self.jacobian(self.target_._targets, numerical=numerical)
 
   def show_robot(self, save = False):
     conectivity = np.zeros((self.robot_.joint_num, 2), dtype='int64')
