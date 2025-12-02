@@ -131,7 +131,9 @@ def outward_jacobian(robot : RobotStruct, state : dict, state_type_list : list[S
 
     mat_kine = total_coord_to_link_vel_grad_mat(robot, state, order=max_time_order, dim=dim)
     mat_link_mom = total_coord_to_link_momentum_grad_mat(robot, state, order=max_time_order, dim=dim)
+    mat_link_wmom = total_coord_to_world_link_momentum_grad_mat(robot, state, order=max_time_order, dim=dim)
     mat_joint_mom = total_coord_to_joint_momentum_grad_mat(robot, state, order=max_time_order, dim=dim)
+    mat_joint_wmom = total_coord_to_world_joint_momentum_grad_mat(robot, state, order=max_time_order, dim=dim)
     if max_time_order >=3:
         mat_link_force = total_coord_to_link_force_grad_mat(robot, state, force_order=max_time_order-2, dim=dim)
         mat_joint_force = total_coord_to_joint_force_grad_mat(robot, state, force_order=max_time_order-2, dim=dim)
@@ -149,7 +151,7 @@ def outward_jacobian(robot : RobotStruct, state : dict, state_type_list : list[S
             if joint is None:
                 raise ValueError(f"Invalid joint name: {st.owner_name}")
             
-        order = st.key_order
+        order = st.key_order -1
 
         if st.data_type in keys_kinematics:
             base = link.id * dof * max_time_order
@@ -157,11 +159,19 @@ def outward_jacobian(robot : RobotStruct, state : dict, state_type_list : list[S
             jacobs = np.vstack((jacobs, jacob_part))
         elif st.data_type in keys_momentum:
             if st.owner_type == "link":
-                base = link.id * dof * (max_time_order-1)
-                jacob_part = mat_link_mom[base + dof*(order) : base + dof*(order+1), :]
+                if st.frame_name == "world":
+                    base = link.id * dof * (max_time_order-1)
+                    jacob_part = mat_link_wmom[base + dof*(order) : base + dof*(order+1), :]
+                else:
+                    base = link.id * dof * (max_time_order-1)
+                    jacob_part = mat_link_mom[base + dof*(order) : base + dof*(order+1), :]
             elif st.owner_type == "joint":
-                base = joint.id * dof * (max_time_order-1)
-                jacob_part = mat_joint_mom[base + dof*(order) : base + dof*(order+1), :]
+                if st.frame_name == "world":
+                    base = joint.id * dof * (max_time_order-1)
+                    jacob_part = mat_joint_wmom[base + dof*(order) : base + dof*(order+1), :]
+                else:
+                    base = joint.id * dof * (max_time_order-1)
+                    jacob_part = mat_joint_mom[base + dof*(order) : base + dof*(order+1), :]
             jacobs = np.vstack((jacobs, jacob_part))
         elif st.data_type in keys_force:
             if st.owner_type == "link":
