@@ -235,9 +235,6 @@ class Kots():
     self.target_ = load_target_json_file(target_file)
     self.set_order(self.target_._max_order)
 
-  def print_targets(self):
-    print_target_list(self.target_)
-
   def link_diff_kinematics_numerical(self, link_name_list : list[str], data_type = "vel", order = None, eps = 1e-8, update_method = "poly", update_direction = None):
     if order is None:
       order = self.order_
