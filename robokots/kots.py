@@ -192,14 +192,18 @@ class Kots():
   def state_info(self, state_type : StateType):
     return outward_state(self.robot_, self.state_dict_, state_type)
 
-  def state_info_list(self, state_type_list : List[StateType]) -> List[np.ndarray]:
-    return [outward_state(self.robot_, self.state_dict_, st) for st in state_type_list]
+  def state_info_list(self, state_type_list : List[StateType], list_output : bool = False) -> List[np.ndarray]:
+    state_list = [outward_state(self.robot_, self.state_dict_, st) for st in state_type_list]
+    if list_output:
+        return state_list
+    else:
+        return np.vstack(state_list)
 
-  def target_state_info(self) -> np.ndarray:
+  def target_state_info(self, list_output : bool = False) -> np.ndarray:
     if self.target_ is None:
       raise ValueError("target is not set")
 
-    return self.state_info_list(self.target_._targets)
+    return self.state_info_list(self.target_._targets, list_output=list_output)
   
   def kinematics(self, order = None):
     if order is None:
@@ -242,7 +246,7 @@ class Kots():
 
     return diff_outward_numerical(self.robot_, motion, state_type, order, eps, update_method, update_direction)
 
-  def jacobian(self, state_type, numerical : bool = False):
+  def jacobian(self, state_type, numerical : bool = False, list_output : bool = False):
     if type(state_type) is list:
       state_type_list = state_type
     else:
@@ -250,18 +254,19 @@ class Kots():
     
     if numerical:
       max_order = StateType.max_time_order(state_type_list)
-      jacob = np.empty((0, self.robot_.dof * max_order))
-      for st in state_type_list:
-        jacob = np.vstack((jacob, jacobian_numerical(self.robot_, self.motions_, st, max_order)))
-      return jacob 
+      jacobs = [jacobian_numerical(self.robot_, self.motions_, st, max_order) for st in state_type_list]
+      if list_output:
+        return jacobs
+      else:
+        return np.vstack(jacobs)
 
-    return outward_jacobian(self.robot_, self.state_dict_, state_type_list, dim = self.dim_)
+    return outward_jacobian(self.robot_, self.state_dict_, state_type_list, dim = self.dim_, list_output = list_output)
   
-  def jacobian_target(self, numerical : bool = False):
+  def jacobian_target(self, numerical : bool = False, list_output : bool = False):
     if self.target_ is None:
       raise ValueError("target is not set")
     
-    return self.jacobian(self.target_._targets, numerical=numerical)
+    return self.jacobian(self.target_._targets, numerical=numerical, list_output=list_output)
 
   def show_robot(self, save = False):
     conectivity = np.zeros((self.robot_.joint_num, 2), dtype='int64')
