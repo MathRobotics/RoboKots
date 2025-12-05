@@ -1,8 +1,11 @@
 import numpy as np
+
 from ..basic.robot import RobotStruct
 from ..basic.state import dim_to_dof
 from ..basic.state_dict import state_dict_to_cmtm, state_dict_to_rel_cmtm
 from ..kinematics.kinematics_matrix import joint_select_diag_mat
+
+from .total_kinematics_mat import total_coord_arrange
 
 def total_joint_tan_vel_to_link_tan_vel_grad_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 3) -> np.ndarray:
     n_ = dim_to_dof(dim) * order
@@ -75,8 +78,12 @@ def total_coord_to_joint_tan_vel_grad_mat(r : RobotStruct, state : dict, order :
 
 #     return mat
 
-def total_coord_to_link_tan_vel_grad_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 3) -> np.ndarray:
-    return total_joint_tan_vel_to_link_tan_vel_grad_mat(r, state, order, dim) @ total_coord_to_joint_tan_vel_grad_mat(r, state, order, dim)
+def total_coord_to_link_tan_vel_grad_mat(r : RobotStruct, state : dict, out_order : int = 3, in_order = None, dim : int = 3) -> np.ndarray:
+    if in_order is None:
+        return total_joint_tan_vel_to_link_tan_vel_grad_mat(r, state, out_order, dim) @ total_coord_to_joint_tan_vel_grad_mat(r, state, out_order, dim)
+    else:
+        return total_joint_tan_vel_to_link_tan_vel_grad_mat(r, state, out_order, dim) @ total_coord_to_joint_tan_vel_grad_mat(r, state, out_order, dim) \
+               @ total_coord_arrange(r, out_order=out_order, in_order=in_order)
 
 def total_coord_to_link_vel_grad_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 3) -> np.ndarray:
     return total_joint_tan_vel_to_link_vel_grad_mat(r, state, order, dim) @ total_coord_to_joint_tan_vel_grad_mat(r, state, order, dim)
