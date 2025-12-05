@@ -5,21 +5,14 @@
 
 import numpy as np
 
-from mathrobo import numerical_grad
-
 from ..basic.robot import RobotStruct
-from ..basic.state import keys_order, data_type_dof, keys_time_order, StateType, dim_to_dof
+from ..basic.state import StateType, dim_to_dof
 from ..basic.state import keys_kinematics, keys_momentum, keys_force, keys_torque
-from ..basic.state_dict import extract_dict_link_info
-from ..basic.motion import RobotMotions
 
 from ..total.total_kinematics_grad_mat import total_coord_to_link_vel_grad_mat
 from ..total.total_dynamics_grad_mat import total_coord_to_link_momentum_grad_mat, total_coord_to_joint_momentum_grad_mat
 from ..total.total_dynamics_grad_mat import total_coord_to_world_link_momentum_grad_mat, total_coord_to_world_joint_momentum_grad_mat
 from ..total.total_dynamics_grad_mat import total_coord_to_link_force_grad_mat, total_coord_to_joint_force_grad_mat, total_coord_to_joint_torque_grad_mat
-
-from .outward import dynamics_cmtm as outward_dynamics
-from .outward_state import outward_state, outward_state_dof
 
 def link_jacobian(robot : RobotStruct, state : dict, link_name_list : list[str], order : int = 3, dim : int = 3) -> np.ndarray:
     links = robot.link_list(link_name_list)
@@ -122,6 +115,9 @@ def outward_kinematics_jacobian(robot : RobotStruct, state : dict, state_type_li
 
     return jacobs
 
+from ..total.total_kinematics_grad_mat import total_coord_to_link_tan_vel_grad_mat
+from ..total.total_partial_grad_mat import *
+
 def outward_jacobian(robot : RobotStruct, state : dict, state_type_list : list[StateType], max_time_order = None, dim : int = 3, list_output : bool = False) -> np.ndarray:
     if StateType.is_list_all_in_kinematics(state_type_list):
         return outward_kinematics_jacobian(robot, state, state_type_list, max_time_order, dim=dim)
@@ -129,16 +125,29 @@ def outward_jacobian(robot : RobotStruct, state : dict, state_type_list : list[S
     if max_time_order is None:
         max_time_order = StateType.max_time_order(state_type_list)
 
-    mat_kine = total_coord_to_link_vel_grad_mat(robot, state, order=max_time_order, dim=dim)
-    mat_link_mom = total_coord_to_link_momentum_grad_mat(robot, state, order=max_time_order, dim=dim)
-    mat_link_wmom = total_coord_to_world_link_momentum_grad_mat(robot, state, order=max_time_order, dim=dim)
-    mat_joint_mom = total_coord_to_joint_momentum_grad_mat(robot, state, order=max_time_order, dim=dim)
-    mat_joint_wmom = total_coord_to_world_joint_momentum_grad_mat(robot, state, order=max_time_order, dim=dim)
-    if max_time_order >=3:
-        mat_link_force = total_coord_to_link_force_grad_mat(robot, state, force_order=max_time_order-2, dim=dim)
-        mat_joint_force = total_coord_to_joint_force_grad_mat(robot, state, force_order=max_time_order-2, dim=dim)
-        mat_joint_torque = total_coord_to_joint_torque_grad_mat(robot, state, torque_order=max_time_order-2, dim=dim)
     dof = dim_to_dof(dim)
+
+    mat_kine = total_coord_to_link_vel_grad_mat(robot, state, order=max_time_order, dim=dim)
+    mat_tan_kine = total_coord_to_link_tan_vel_grad_mat(robot, state, out_order=max_time_order-1, in_order=max_time_order, dim=dim)
+    
+    mat_link_mom = total_coord_to_link_momentum_grad_mat(robot, state, order=max_time_order, dim=dim)
+    
+    mat_link_wmom = total_partial_link_momentum_to_world_link_momentum_grad_mat(robot, state, order=max_time_order, dim=dim) @ mat_link_mom \
+        + total_partial_link_tan_vel_to_world_link_momentum_grad_mat(robot, state, order=max_time_order, dim=dim) @ mat_tan_kine
+    
+    mat_joint_wmom = total_world_link_wrench_to_world_joint_wrench_mat(robot, order=max_time_order-1, dim=dim) @ mat_link_wmom
+
+    mat_joint_mom = total_partial_world_joint_momentum_to_joint_momentum_grad_mat(robot, state, max_time_order, dim) @ mat_joint_wmom \
+                + total_partial_link_tan_vel_to_joint_momentum_grad_mat(robot, state, max_time_order, dim) @ mat_tan_kine[(max_time_order-1)*dof:]    
+
+    if max_time_order >= 3:
+        mat_link_force = total_partial_momentum_to_force_grad_mat(robot, state, force_order=max_time_order-2, dim=dim) @ mat_link_mom \
+                + total_partial_link_sp_vel_to_link_force_grad_mat(robot, state, force_order=max_time_order-2, dim=dim) @ mat_kine
+
+        mat_joint_force = total_partial_momentum_to_force_grad_mat(robot, state, force_order=max_time_order-2, dim=dim)[(max_time_order-2)*dof:,(max_time_order-1)*dof:] @ mat_joint_mom \
+                    + total_partial_link_sp_vel_to_joint_force_grad_mat(robot, state, force_order=max_time_order-2, dim=dim) @ mat_kine[(max_time_order)*dof:]
+
+        mat_joint_torque = total_joint_wrench_to_joint_torque_mat(robot, torque_order=max_time_order-2, dim=dim) @ mat_joint_force
 
     jacob_list = []
     for st in state_type_list:
