@@ -77,7 +77,9 @@ def show_robot(joint_conectivity, marker_pos, save = False, ax = None, color : R
   
   set_equall_aspect_3d(ax, marker_pos, 0.1)
 
-  plt.show()
+  if ax is None:
+    plt.show()
+    
   if save:  
     plt.savefig('simple_draw.png')
 
