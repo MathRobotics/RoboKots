@@ -268,14 +268,14 @@ class Kots():
     
     return self.jacobian(self.target_._targets, numerical=numerical, list_output=list_output)
 
-  def show_robot(self, save = False):
+  def show_robot(self, save = False, ax = None, color : RobotColor = None):
     conectivity = np.zeros((self.robot_.joint_num, 2), dtype='int64')
     for i in range(self.robot_.joint_num):
       joint = self.robot_.joints[i]
       conectivity[i, 0] = joint.child_link_id
       conectivity[i, 1] = joint.parent_link_id
 
-    show_robot(conectivity, state_dict_to_links_pos(self.state_dict_, self.robot_.link_names), save)
+    show_robot(conectivity, state_dict_to_links_pos(self.state_dict_, self.robot_.link_names), save, ax, color)
 
   def show_robot_traj(self, traj = None, save = False, ax = None, color : RobotColor = None):
     conectivity = np.zeros((self.robot_.joint_num, 2), dtype='int64')

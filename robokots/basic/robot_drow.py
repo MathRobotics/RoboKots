@@ -50,11 +50,15 @@ def set_equall_aspect_3d(ax, data, margin):
   ax.set_ylim3d(ax_ave[1] - box_length[1]*box_ratio[1]*0.5, ax_ave[1] + box_length[1]*box_ratio[1]*0.5)
   ax.set_zlim3d(ax_ave[2] - box_length[2]*box_ratio[2]*0.5, ax_ave[2] + box_length[2]*box_ratio[2]*0.5)
   
-def show_robot(joint_conectivity, marker_pos, save = False):
-  fig = plt.figure()
-  ax = fig.add_subplot(111, projection='3d')
+def show_robot(joint_conectivity, marker_pos, save = False, ax = None, color : RobotColor = None):
+  if ax is None:
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
 
-  ax.scatter(marker_pos[:,0], marker_pos[:,1], marker_pos[:,2], c='r', marker='o')
+  if color is None:
+    color = RobotColor()
+
+  ax.scatter(marker_pos[:,0], marker_pos[:,1], marker_pos[:,2], c=color.joint_color, marker='o')
 
   for c in joint_conectivity:
     c_id = c[0]
@@ -63,7 +67,7 @@ def show_robot(joint_conectivity, marker_pos, save = False):
       ax.plot(
         [marker_pos[c_id,0], marker_pos[p_id,0]], 
         [marker_pos[c_id,1], marker_pos[p_id,1]], 
-        [marker_pos[c_id,2], marker_pos[p_id,2]], 'b')
+        [marker_pos[c_id,2], marker_pos[p_id,2]], c=color.link_color)
     else:
       print(f"Invalid indices: c_id={c_id}, p_id={p_id}")
 
@@ -73,7 +77,9 @@ def show_robot(joint_conectivity, marker_pos, save = False):
   
   set_equall_aspect_3d(ax, marker_pos, 0.1)
 
-  plt.show()
+  if ax is None:
+    plt.show()
+    
   if save:  
     plt.savefig('simple_draw.png')
 
