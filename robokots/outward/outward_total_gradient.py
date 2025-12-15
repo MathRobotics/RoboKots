@@ -98,29 +98,33 @@ def joint_torque_jacobian(robot : RobotStruct, state : dict, joint_name_list : l
 
     return jacobs
 
-def outward_kinematics_jacobian(robot : RobotStruct, state : dict, state_type_list : list[StateType], max_time_order = None, dim : int = 3) -> np.ndarray:
+def outward_kinematics_jacobian(robot : RobotStruct, state : dict, state_type_list : list[StateType], max_time_order = None, dim : int = 3, list_output : bool = False) -> np.ndarray:
     kine_state_type_list = StateType.filter_list_by_kinematics(state_type_list)
     if max_time_order is None:
         max_time_order = StateType.max_time_order(kine_state_type_list)
     mat = total_coord_to_link_vel_grad_mat(robot, state, order=max_time_order, dim=dim)
-    jacobs = np.empty((0, robot.dof * max_time_order))
     dof = dim_to_dof(dim)
+
+    jacob_list = []
     for st in kine_state_type_list:
         link = robot.link(st.owner_name)
         if link is None:
             raise ValueError(f"Invalid link name: {st.owner_name}")
         base = link.id * dof * max_time_order
         jacob_part = mat[base + dof*(st.time_order-1) : base + dof*st.time_order, :]
-        jacobs =  np.vstack((jacobs, jacob_part))
+        jacob_list.append(jacob_part)
 
-    return jacobs
+    if list_output:
+        return jacob_list
+    else:
+        return np.vstack(jacob_list)
 
 from ..total.total_kinematics_grad_mat import total_coord_to_link_tan_vel_grad_mat
 from ..total.total_partial_grad_mat import *
 
 def outward_jacobian(robot : RobotStruct, state : dict, state_type_list : list[StateType], max_time_order = None, dim : int = 3, list_output : bool = False) -> np.ndarray:
     if StateType.is_list_all_in_kinematics(state_type_list):
-        return outward_kinematics_jacobian(robot, state, state_type_list, max_time_order, dim=dim)
+        return outward_kinematics_jacobian(robot, state, state_type_list, max_time_order, dim=dim, list_output=list_output)
     
     if max_time_order is None:
         max_time_order = StateType.max_time_order(state_type_list)
