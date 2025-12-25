@@ -1,7 +1,7 @@
 
 import numpy as np
 
-from robokots.basic.state_df import RobotDF, RobotState
+from robokots.core.state_df import RobotDF, RobotState
 
 '''
 Test data for RobotDF
@@ -46,8 +46,8 @@ class MockRobot:
     link_names = ["link1", "link2"]
     joint_names = ["joint1", "joint2"]
 
-test_link_aliases = ["pos", "rot"]
-test_joint_aliases = ["vel", "acc"]
+test_link_aliases = ["link_pos", "link_rot"]
+test_joint_aliases = ["joint_vel", "joint_acc"]
 
 test_state_names = []
 for l_name in MockRobot.link_names:

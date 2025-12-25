@@ -1,6 +1,6 @@
 import numpy as np
 
-from robokots.basic.motion import RobotMotions
+from robokots.core.motion import RobotMotions
         
 test_robot_dof = 3
 test_dof = 1

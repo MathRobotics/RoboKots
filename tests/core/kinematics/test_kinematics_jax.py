@@ -1,8 +1,8 @@
 import numpy as np
 
 from mathrobo import SE3, CMTM, numerical_grad
-from robokots.kinematics.kinematics import joint_rel_cmtm, part_link_cmtm_jacob
-from robokots.kinematics.kinematics_jax import kinematics, kinematics_vel, kinematics_acc, kinematics_jerk
+from robokots.core.kinematics.kinematics import joint_rel_cmtm, part_link_cmtm_jacob
+from robokots.core.kinematics.kinematics_jax import kinematics, kinematics_vel, kinematics_acc, kinematics_jerk
 from jax import jacrev
 import jax.numpy as jnp
 import jax
