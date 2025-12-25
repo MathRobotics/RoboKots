@@ -233,7 +233,7 @@ class Kots():
   def link_diff_kinematics_numerical(self, link_name_list : list[str], data_type = "vel", order = None, eps = 1e-8, update_method = "poly", update_direction = None):
     if order is None:
       order = self.order_
-
+    
     motion = self.motion(order)
 
     return link_diff_kinematics_numerical(self.robot_, motion, link_name_list, data_type, order, eps, update_method, update_direction)
@@ -243,7 +243,7 @@ class Kots():
       order = self.order_
 
     motion = self.motion(order)
-
+    
     return diff_outward_numerical(self.robot_, motion, state_type, order, eps, update_method, update_direction)
 
   def jacobian(self, state_type, numerical : bool = False, list_output : bool = False):
