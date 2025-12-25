@@ -50,31 +50,31 @@ class RobotState:
     return self.state_df.df
     
   @staticmethod
-  def state_vec(df, name : str, type : str) -> np.ndarray:
-    return df[name+"_"+type][-1].to_numpy()
+  def state_vec(df, owner_name : str, owner_type : str, data_type : str) -> np.ndarray:
+    return df[owner_name+"_"+owner_type+"_"+data_type][-1].to_numpy()
   
   @staticmethod
-  def state_vecs(df, names : list, type : str) -> np.ndarray:
+  def state_vecs(df, owner_name_list : str, owner_type : str, data_type : str) -> np.ndarray:
     vecs = []
-    for name in names:
-      vecs.append(df[name+"_"+type][-1])
+    for name in owner_name_list:
+      vecs.append(df[name+"_"+owner_type+"_"+data_type][-1])
     return np.array(vecs)
   
   @staticmethod
-  def state_vec_traj(df, name : str, type : str) -> np.ndarray:
-    return df[name+"_"+type].to_numpy()
-  
+  def state_vec_traj(df, owner_name : str, owner_type : str, data_type : str) -> np.ndarray:
+    return df[owner_name+"_"+owner_type+"_"+data_type].to_numpy()
+
   @staticmethod
-  def state_vecs_traj(df, names : list, type : str) -> np.ndarray:
-    length = df[names[0]+"_"+type].shape[0]
-    vecs = np.zeros((len(names), length, 3))
-    for i in range(len(names)):
-      vecs[i] = np.array(df[names[i]+"_"+type].to_list())
+  def state_vecs_traj(df, owner_name_list : list, owner_type : str, data_type : str) -> np.ndarray:
+    length = df[owner_name_list[0]+"_"+owner_type+"_"+data_type].shape[0]
+    vecs = np.zeros((len(owner_name_list), length, 3))
+    for i in range(len(owner_name_list)):
+      vecs[i] = np.array(df[owner_name_list[i]+"_"+owner_type+"_"+data_type].to_list())
     return vecs
   
   @staticmethod
-  def state_mat(df, name : str, type : str) -> np.ndarray:
-    mat_vec = df[name+"_"+type][-1].to_numpy()
+  def state_mat(df, owner_name : str, owner_type : str, data_type : str) -> np.ndarray:
+    mat_vec = df[owner_name+"_"+owner_type+"_"+data_type][-1].to_numpy()
     mat = mat_vec.reshape((3,3))
     return mat
   
@@ -90,7 +90,7 @@ class RobotState:
       d.append(self.link_acc(link_name))
     if order > 3:
       for i in range(order-3):
-        d.append(RobotState.state_vec(self.df(), link_name, "acc_diff"+str(i+1)))
+        d.append(RobotState.state_vec(self.df(), link_name, "link", "acc_diff"+str(i+1)))
     return d
   
   def link_cmtm(self, link_name : str, order = 3) -> CMTM:
@@ -114,7 +114,7 @@ class RobotState:
       d.append(self.joint_acc(joint_name))
     if order > 3:
       for i in range(order-3):
-        d.append(RobotState.state_vec(self.df(), joint_name, "acc_diff"+str(i+1)))
+        d.append(RobotState.state_vec(self.df(), joint_name, "joint", "acc_diff"+str(i+1)))
     return d
   
   def joint_cmtm(self, joint_name : str, order = 3) -> CMTM:
@@ -129,16 +129,16 @@ class RobotState:
   #specific 3d-CMTM
   def extract_link_info(self, type : str, link_name : str, frame = "dummy", rel_frame = 'dummy'):
     if type == "pos":
-      return RobotState.state_vec(self.df(), link_name, "pos")
+      return RobotState.state_vec(self.df(), link_name, "link", "pos")
     elif type == "rot":
-      return RobotState.state_mat(self.df(), link_name, "rot")
+      return RobotState.state_mat(self.df(), link_name, "link", "rot")
     elif type == "vel":
-      return RobotState.state_vec(self.df(), link_name, "vel")
+      return RobotState.state_vec(self.df(), link_name, "link", "vel")
     elif type == "acc":
-      return RobotState.state_vec(self.df(), link_name, "acc")
+      return RobotState.state_vec(self.df(), link_name, "link", "acc")
     elif type == "frame":
-      return SE3(RobotState.state_mat(self.df(), link_name, "rot"),
-             RobotState.state_vec(self.df(), link_name, "pos"))
+      return SE3(RobotState.state_mat(self.df(), link_name, "link", "rot"),
+             RobotState.state_vec(self.df(), link_name, "link", "pos"))
     elif type == "cmtm":
       return self.link_cmtm(link_name)
     else:
@@ -146,11 +146,11 @@ class RobotState:
     
   def extract_joint_info(self, type : str, joint_name : str, frame = "dummy", rel_frame = 'dummy'):
     if type == "coord":
-      return RobotState.state_vec(self.df(), joint_name, "coord")
+      return RobotState.state_vec(self.df(), joint_name, "joint", "coord")
     elif type == "veloc":
-      return  RobotState.state_vec(self.df(), joint_name, "veloc")
+      return  RobotState.state_vec(self.df(), joint_name, "joint", "veloc")
     elif type == "accel":
-      return RobotState.state_vec(self.df(), joint_name, "accel")
+      return RobotState.state_vec(self.df(), joint_name, "joint", "accel")
     elif type == "cmtm":
       return self.joint_cmtm(joint_name)
     else:
