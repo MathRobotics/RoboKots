@@ -7,6 +7,8 @@ from jax import jacrev
 import jax.numpy as jnp
 import jax
 
+import pytest
+
 # Define a mock joint object with a select_mat attribute
 class MockJoint:
     def __init__(self, select_mat, lib="jax"):
@@ -24,6 +26,7 @@ class MockJoint:
     def selector(self, mat: np.ndarray) -> np.ndarray:
         return mat[:, self.select_indeces]
     
+@pytest.mark.slow 
 def test_joint_vel_local_jacobian():
      # Create a mock joint with a specific select_mat
     joint = MockJoint(np.array([[0, 1, 0, 0, 0, 0]]).T)
@@ -61,6 +64,7 @@ def test_joint_vel_local_jacobian():
     assert np.allclose(jacob_ana[(p-1)*6:], jacob_auto, atol=1e-6, rtol=1e-6)
     assert np.allclose(jacob_ana[(p-1)*6:], jacob_num, atol=1e-3, rtol=1e-3) # eps = 1e-3, bucause of numerical error
 
+@pytest.mark.slow 
 def test_joint_acc_local_jacobian():
     # Create a mock joint with a specific select_mat
     select_mat = np.array([[1, 0], [0, 1], [0, 0], [0, 0], [0, 0], [0, 0]])
@@ -85,7 +89,7 @@ def test_joint_acc_local_jacobian():
     assert np.allclose(jacob_ana[(p-1)*6:], jacob_auto, atol=1e-6, rtol=1e-6)
     assert np.allclose(jacob_ana[(p-1)*6:], jacob_num, atol=1e-3, rtol=1e-3) # eps = 1e-3, bucause of numerical error
 
-
+@pytest.mark.slow 
 def test_joint_jerk_local_jacobian():
     # Create a mock joint with a specific select_mat
     select_mat = np.array([[1, 0], [0, 1], [0, 0], [0, 0], [0, 0], [0, 0]])
@@ -114,6 +118,7 @@ def test_joint_jerk_local_jacobian():
         print(f"Joint {i} Acceleration Numerical Jacobian:\n{jacob_num[i:i+1]}")
     assert np.allclose(jacob_ana[12:], jacob_num, atol=1e-3, rtol=1e-3)
 
+@pytest.mark.slow 
 def test_joint_snap_local_jacobian():
     # Create a mock joint with a specific select_mat
     select_mat = np.array([[1, 0], [0, 1], [0, 0], [0, 0], [0, 0], [0, 0]])
@@ -139,7 +144,7 @@ def test_joint_snap_local_jacobian():
     assert np.allclose(jacob_ana[18:], jacob_auto)
     assert np.allclose(jacob_ana[18:], jacob_num, atol=1e-3, rtol=1e-3)
 
-
+@pytest.mark.slow 
 def test_joint_jerk_part_jacobian():
     # Create a mock joint with a specific select_mat
     select_mat = np.array([[1, 0], [0, 1], [0, 0], [0, 0], [0, 0], [0, 0]])
@@ -179,6 +184,7 @@ def test_joint_jerk_part_jacobian():
     assert np.allclose(jacob_ana[12:], jacob_auto, atol=1e-6, rtol=1e-6)
     assert np.allclose(jacob_ana[12:], jacob_num, atol=1e-3, rtol=1e-3)
 
+@pytest.mark.slow 
 def test_joint_snap_part_jacobian():
     # Create a mock joint with a specific select_mat
     select_mat = np.array([[1, 0], [0, 1], [0, 0], [0, 0], [0, 0], [0, 0]])

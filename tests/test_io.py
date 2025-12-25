@@ -87,9 +87,9 @@ def test_load_target_json_file():
         json.dump(target_data, f)
     target_list = load_target_json_file("./file/test_target.json")
     assert isinstance(target_list, TargetList)
-    assert target_list.targets[0].data_type == ["pos"]
-    assert target_list.targets[1].owner_name == "link2"
-    
+    assert target_list._targets[0].data_type == "pos"
+    assert target_list._targets[1].owner_name == "link2"
+
     # Test loading a non-existent target JSON file
     try:
         load_target_json_file("non_existent.json")
@@ -103,12 +103,4 @@ def test_load_target_json_file():
         load_target_json_file("./file/invalid.json")
     except ValueError as e:
         assert str(e) == "Invalid JSON format: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)"
-        
-def test_print_target_list():
-    # Test printing the targets
-    target_list = TargetList.from_dict(target_data)
-    print_target_list(target_list)
-    # Check the printed output manually or redirect stdout to capture it
-    # This is a placeholder as capturing printed output requires more setup
-    # assert printed_output == expected_output
     

@@ -46,28 +46,28 @@ class MockRobot:
     link_names = ["link1", "link2"]
     joint_names = ["joint1", "joint2"]
 
-test_link_aliases = ["link_pos", "link_rot"]
-test_joint_aliases = ["joint_vel", "joint_acc"]
+test_link_aliases = ["pos", "rot"]
+test_joint_aliases = ["vel", "acc"]
 
 test_state_names = []
 for l_name in MockRobot.link_names:
     for al in test_link_aliases:
-        test_state_names.append(l_name + "_" + al)
+        test_state_names.append(l_name + "_link_" + al)
 
 for j_name in MockRobot.joint_names:
     for al in test_joint_aliases:
-        test_state_names.append(j_name + "_" + al)
+        test_state_names.append(j_name + "_joint_" + al)
 
 # Test data for RobotState
 test_robot_data = {
-    "link1_pos": [1., 2., 3.],
-    "link1_rot": [4., 5., 6.],
-    "link2_pos": [7., 8., 9.],
-    "link2_rot": [10., 11., 12.],
-    "joint1_vel": [13., 14., 15.],
-    "joint1_acc": [16., 17., 18.],
-    "joint2_vel": [19., 20., 21.],
-    "joint2_acc": [22., 23., 24.]
+    "link1_link_pos": [1., 2., 3.],
+    "link1_link_rot": [4., 5., 6.],
+    "link2_link_pos": [7., 8., 9.],
+    "link2_link_rot": [10., 11., 12.],
+    "joint1_joint_vel": [13., 14., 15.],
+    "joint1_joint_acc": [16., 17., 18.],
+    "joint2_joint_vel": [19., 20., 21.],
+    "joint2_joint_acc": [22., 23., 24.]
 }
 
 # Test RobotState initialization
@@ -77,6 +77,7 @@ def test_robot_state_init():
     # Check if the state_df is initialized correctly
     assert isinstance(state.state_df, RobotDF)
     assert state.state_df.df.shape[0] == 0
+    print(state.state_df.df.columns)
     assert state.state_df.df.columns == test_state_names
 
 # Test RobotState DataFrame extraction
@@ -96,10 +97,10 @@ def test_robot_state_link_state_vec():
     # Test link state vector extraction
     link_name = "link1"
     type = "pos"
-    vec = state.state_vec(state.df(), link_name, type)
-    assert np.array_equal(vec, test_robot_data[link_name + "_" + type])
+    vec = state.state_vec(state.df(), link_name, "link", type)
+    assert np.array_equal(vec, test_robot_data[link_name + "_link_" + type])
     # Test joint state vector extraction
     joint_name = "joint2"
     type = "vel"
-    vec = state.state_vec(state.df(), joint_name, type)
-    assert np.array_equal(vec, test_robot_data[joint_name + "_" + type])
+    vec = state.state_vec(state.df(), joint_name, "joint", type)
+    assert np.array_equal(vec, test_robot_data[joint_name + "_joint_" + type])
