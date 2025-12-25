@@ -2,9 +2,9 @@ from os import link
 import numpy as np
 from mathrobo import SE3wrench, CMVector
 
-from ..basic.robot import RobotStruct
-from ..basic.state import dim_to_dof
-from ..basic.state_dict import extract_dict_total_link_cmvec
+from ..robot import RobotStruct
+from ..state import dim_to_dof
+from ..state_dict import extract_dict_total_link_cmvec
 
 from .basic import total_factorial_mat, total_factorial_mat_inv
 from .basic import total_link_cmtm_wrench_var_x_arb_vec, total_joint_cmtm_wrench_inv_var_x_arb_vec

@@ -7,10 +7,10 @@ import jax.numpy as jnp
 
 from mathrobo import SE3
 
-from ..basic.robot import RobotStruct
-from ..basic.motion import RobotMotions
-from ..kinematics.base import convert_joint_to_data
-from ..kinematics.kinematics_jax import joint_rel_frame
+from ..core.robot import RobotStruct
+from ..core.motion import RobotMotions
+from ..core.kinematics.base import convert_joint_to_data
+from ..core.kinematics.kinematics_jax import joint_rel_frame
 
 from typing import NamedTuple
 

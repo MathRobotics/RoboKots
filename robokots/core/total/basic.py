@@ -1,8 +1,8 @@
 import numpy as np
 from mathrobo import Factorial, CMVector
-from ..basic.robot import RobotStruct
-from ..basic.state import dim_to_dof
-from ..basic.state_dict import state_dict_to_cmtm, state_dict_to_cmtm_wrench
+from ..robot import RobotStruct
+from ..state import dim_to_dof
+from ..state_dict import state_dict_to_cmtm, state_dict_to_cmtm_wrench
 
 def total_factorial_mat(num : int, order : int, submat_dim : int = 6) -> np.ndarray:
     '''

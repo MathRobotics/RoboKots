@@ -7,7 +7,7 @@ import numpy as np
 from mathrobo import Factorial, CMVector
 from mathrobo import SO3wrench, SE3wrench, CMTM
 
-from ..basic.state import dim_to_dof
+from ..state import dim_to_dof
 from .dynamics import link_momentum_cmvec
 
 def inertia_diag_mat(inertia : np.ndarray, order : int = 1) -> np.ndarray:

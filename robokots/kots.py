@@ -7,13 +7,13 @@ from typing import List, Dict, Any
 
 from robokots.outward import outward_state
 
-from .basic.motion import RobotMotions
-from .basic.state_df import RobotState
-from .basic.state import StateType
-from .basic.state_dict import state_dict_to_links_pos, print_state_dict
-from .basic.robot import RobotStruct
-from .basic.target import TargetList
-from .basic.robot_drow import show_robot, show_robot_traj, RobotColor, show_link_points
+from .core.motion import RobotMotions
+from .core.state_df import RobotState
+from .core.state import StateType
+from .core.state_dict import state_dict_to_links_pos, print_state_dict
+from .core.robot import RobotStruct
+from .core.target import TargetList
+from .core.robot_drow import show_robot, show_robot_traj, RobotColor, show_link_points
 
 from .robot_io import *
 from .outward.outward import kinematics as outward_kinematics

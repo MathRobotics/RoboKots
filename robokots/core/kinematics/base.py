@@ -2,8 +2,8 @@ import numpy as np
 
 from mathrobo import SE3
 
-from ..basic.robot import JointStruct
-from ..basic.robot import LinkStruct
+from ..robot import JointStruct
+from ..robot import LinkStruct
 
 from dataclasses import dataclass
 

@@ -8,19 +8,19 @@ import numpy as np
 from mathrobo import CMVector, Factorial
 from mathrobo import SO3, SE3, CMTM, SE3wrench, numerical_difference, build_integrator
 
-from ..basic.robot import RobotStruct
-from ..basic.motion import RobotMotions
-from ..basic.state_dict import state_dict_to_cmtm, state_dict_to_cmtm_wrench, state_dict_to_cmvec, state_dict_to_rel_cmtm_wrench
-from ..basic.state_dict import extract_dict_link_info, extract_dict_info, vecs_to_state_dict, cmtm_to_state_list, state_dict_to_frame, state_dict_to_vecs
-from ..basic.state import data_type_to_sub_func, data_type_dof, StateType
+from ..core.robot import RobotStruct
+from ..core.motion import RobotMotions
+from ..core.state_dict import state_dict_to_cmtm, state_dict_to_cmtm_wrench, state_dict_to_cmvec, state_dict_to_rel_cmtm_wrench
+from ..core.state_dict import extract_dict_link_info, extract_dict_info, vecs_to_state_dict, cmtm_to_state_list, state_dict_to_frame, state_dict_to_vecs
+from ..core.state import data_type_to_sub_func, data_type_dof, StateType
 
-from ..kinematics.base import convert_joint_to_data, convert_link_to_data
-from ..kinematics.kinematics import joint_local_cmtm, joint_rel_cmtm, joint_rel_frame
-from ..kinematics.kinematics_matrix import joint_select_diag_mat
-from ..kinematics.kinematics_soft_link import soft_link_local_cmtm, calc_link_local_point_frame
+from ..core.kinematics.base import convert_joint_to_data, convert_link_to_data
+from ..core.kinematics.kinematics import joint_local_cmtm, joint_rel_cmtm, joint_rel_frame
+from ..core.kinematics.kinematics_matrix import joint_select_diag_mat
+from ..core.kinematics.kinematics_soft_link import soft_link_local_cmtm, calc_link_local_point_frame
 
-from ..dynamics.base import spatial_inertia
-from ..dynamics.dynamics import link_dynamics, joint_dynamics, link_momentum_cmvec, link_force_cmvec, link_dynamics_cmvec, joint_dynamics_cmvec
+from ..core.dynamics.base import spatial_inertia
+from ..core.dynamics.dynamics import link_dynamics, joint_dynamics, link_momentum_cmvec, link_force_cmvec, link_dynamics_cmvec, joint_dynamics_cmvec
 
 from .outward_state import outward_state
 

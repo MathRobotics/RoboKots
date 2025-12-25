@@ -1,9 +1,9 @@
 from mathrobo import CMTM, SE3, SE3wrench
 
-from ..basic.robot import RobotStruct
-from ..basic.state import StateType, data_type_dof
+from ..core.robot import RobotStruct
+from ..core.state import StateType, data_type_dof
 
-from ..basic.state_dict import *
+from ..core.state_dict import *
 
 def outward_state_dof(robot : RobotStruct, state_type : StateType, dim : int = 3) -> int:
     if "torque" in state_type.data_type:

@@ -1,9 +1,9 @@
 import numpy as np
 from mathrobo import SE3wrench, CMVector
 
-from ..basic.robot import RobotStruct
-from ..basic.state import dim_to_dof
-from ..basic.state_dict import extract_dict_total_link_cmvec, state_dict_to_cmtm, state_dict_to_cmvec, state_dict_to_cmtm_wrench
+from ..robot import RobotStruct
+from ..state import dim_to_dof
+from ..state_dict import extract_dict_total_link_cmvec, state_dict_to_cmtm, state_dict_to_cmvec, state_dict_to_cmtm_wrench
 from ..dynamics.base import spatial_inertia
 from ..dynamics.dynamics_matrix import link_sp_vel_to_link_force_grad_mat, partial_link_sp_vel_to_force_grad_mat, partial_momentum_to_force_grad_mat
 from .basic import total_factorial_mat, total_factorial_mat_inv
