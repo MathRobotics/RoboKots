@@ -13,8 +13,8 @@ from ..core.kinematics.base import convert_joint_to_data, convert_link_to_data
 from ..core.kinematics.kinematics import part_link_jacob, part_link_cmtm_tan_jacob
 from ..core.kinematics.kinematics_soft_link import part_soft_link_jacob, part_soft_link_cmtm_tan_jacob, calc_local_tan_mat
 
-from .outward import kinematics as outward_kinematics, outward_function
-from .outward import dynamics as outward_dynamics
+from .state_builder import kinematics as outward_kinematics, outward_function
+from .state_builder import dynamics as outward_dynamics
 from robokots.core import state
 
 def __target_link_part_joint_jacob(target_link : LinkStruct, joint : JointStruct, rel_frame : SE3) -> np.ndarray:

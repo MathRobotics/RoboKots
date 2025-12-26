@@ -16,9 +16,9 @@ from .core.target import TargetList
 from .core.robot_drow import show_robot, show_robot_traj, RobotColor, show_link_points
 
 from .robot_io import *
-from .outward.outward import kinematics as outward_kinematics
-from .outward.outward import dynamics_cmtm as outward_dynamics
-from .outward.outward import link_diff_kinematics_numerical, calc_link_total_point_frame, diff_outward_numerical
+from .outward.state_builder import kinematics as outward_kinematics
+from .outward.state_builder import dynamics_cmtm as outward_dynamics
+from .outward.state_builder import link_diff_kinematics_numerical, calc_link_total_point_frame, diff_outward_numerical
 from .outward.state_accessors import get_value
 from .outward.outward_gradient import jacobian_numerical
 from .outward.outward_total_gradient import outward_jacobian

@@ -2,8 +2,6 @@ import numpy as np
 
 import mathrobo as mr
 from robokots.kots import *
-from robokots.outward import outward_gradient
-from robokots.outward import outward
 
 def main():
     kots = Kots.from_json_file("../model/sample_robot.json")
