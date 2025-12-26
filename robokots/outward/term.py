@@ -1,5 +1,97 @@
 from __future__ import annotations
 from dataclasses import dataclass
+from typing import Protocol, List, Tuple
+import numpy as np
+
+Array = np.ndarray
+
+# ---------------------------
+# Variable block (x)
+# ---------------------------
+@dataclass
+class Variable:
+    name: str
+    x: Array  # shape (n,)
+
+    def dim(self) -> int:
+        return int(self.x.size)
+
+
+def pack(vars: List[Variable]) -> Array:
+    return np.concatenate([v.x.reshape(-1) for v in vars], axis=0)
+
+
+class Quantity(Protocol):
+    """Any physical quantity y(x) with Jacobian dy/dx."""
+    name: str
+    out_dim: int
+    vars: List[Variable]
+
+    def value(self) -> Array:
+        """y: (m,)"""
+        ...
+
+    def jacobian(self) -> Array:
+        """J: (m, n_total)"""
+        ...
+
+# ---------------------------
+# Residual interface
+# r(x) and J(x)
+# ---------------------------
+class Residual(Protocol):
+    name: str
+    vars: List[Variable]
+    m: int  # residual dimension
+
+    def evaluate(self) -> Tuple[Array, Array]:
+        """
+        Returns:
+            r: (m,)
+            J: (m, n_total)  where n_total = sum(var.dim())
+        """
+        ...
+
+
+# ---------------------------
+# Cost (loss) interface
+# Apply weights / robustification to r, J
+# ---------------------------
+class Cost(Protocol):
+    name: str
+
+    def weight(self, r: Array) -> float:
+        """Return scalar weight w >= 0 applied to r and J (sqrt form)."""
+        ...
+
+    def apply(self, r: Array, J: Array) -> Tuple[Array, Array]:
+        w = self.weight(r)
+        sw = np.sqrt(w)
+        return sw * r, sw * J
+
+from dataclasses import dataclass
+from typing import Tuple
+import numpy as np
+
+from .interface import Quantity
+
+Array = np.ndarray
+
+@dataclass
+class VectorSquaredSumResidual:
+    """
+    Minimize ||v(x)||^2 by returning residual r=v and Jacobian J=dv/dx.
+    """
+    name: str
+    quantity: "Quantity"   # value()->(m,), jacobian()->(m,N)
+
+    def evaluate(self) -> Tuple[Array, Array]:
+        r = self.quantity.value().reshape(-1)      # (m,)
+        J = self.quantity.jacobian()               # (m,N)
+        return r, J
+    
+from __future__ import annotations
+from dataclasses import dataclass
 from typing import Protocol, Tuple, Optional
 import numpy as np
 
@@ -86,3 +178,4 @@ class HuberCost:
         w = 1.0 if nr <= self.delta else (self.delta / nr)
         sw = float(np.sqrt(w))
         return sw * r, sw * J
+

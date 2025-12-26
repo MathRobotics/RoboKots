@@ -2,7 +2,7 @@ import numpy as np
 
 import mathrobo as mr
 from robokots.kots import *
-from robokots.core.kinematics.kinematics_jax import *
+from robokots.core.models.kinematics.kinematics_jax import *
 
 METHOD = "poly"
 kots = Kots.from_json_file("./test_model/sample_robot.json")

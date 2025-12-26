@@ -4,16 +4,16 @@ import numpy as np
 
 from mathrobo import SO3, SE3, CMTM, numerical_grad
 
-from ..core.robot import RobotStruct, LinkStruct, JointStruct
-from ..core.motion import RobotMotions
-from ..core.state import keys_order, keys_time_order, data_type_dof, data_type_to_sub_func, StateType
+from robokots.core.robot import RobotStruct, LinkStruct, JointStruct
+from robokots.core.motion import RobotMotions
+from robokots.core.state import keys_order, keys_time_order, data_type_dof, data_type_to_sub_func, StateType
 
-from ..core.state_dict import state_dict_to_rel_frame, state_dict_to_rel_cmtm, state_dict_to_cmtm, extract_dict_link_info
-from ..core.kinematics.base import convert_joint_to_data, convert_link_to_data
-from ..core.kinematics.kinematics import part_link_jacob, part_link_cmtm_tan_jacob
-from ..core.kinematics.kinematics_soft_link import part_soft_link_jacob, part_soft_link_cmtm_tan_jacob, calc_local_tan_mat
+from robokots.core.state_dict import state_dict_to_rel_frame, state_dict_to_rel_cmtm, state_dict_to_cmtm, extract_dict_link_info
+from robokots.core.models.kinematics.base import convert_joint_to_data, convert_link_to_data
+from robokots.core.models.kinematics.kinematics import part_link_jacob, part_link_cmtm_tan_jacob
+from robokots.core.models.kinematics.kinematics_soft_link import part_soft_link_jacob, part_soft_link_cmtm_tan_jacob, calc_local_tan_mat
 
-from .state_builder import compute_outward_value
+from robokots.outward.values import compute_outward_value
 
 def __target_link_part_joint_jacob(target_link : LinkStruct, joint : JointStruct, rel_frame : SE3) -> np.ndarray:
   if target_link.id == joint.child_link_id:

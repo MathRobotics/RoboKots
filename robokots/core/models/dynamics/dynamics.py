@@ -9,7 +9,7 @@ import numpy as np
 from mathrobo import CMVector, Factorial
 from mathrobo import SE3, SE3wrench, CMTM
 
-from ..robot import JointStruct
+from robokots.core import JointStruct
 
 def link_momentum(inertia : np.ndarray, veloc : np.ndarray) -> np.ndarray:
     """

@@ -5,14 +5,14 @@
 
 import numpy as np
 
-from ..core.robot import RobotStruct
-from ..core.state import StateType, dim_to_dof
-from ..core.state import keys_kinematics, keys_momentum, keys_force, keys_torque
+from robokots.core import RobotStruct
+from robokots.core.state import StateType, dim_to_dof
+from robokots.core.state import keys_kinematics, keys_momentum, keys_force, keys_torque
 
-from ..core.total.total_kinematics_grad_mat import total_coord_to_link_vel_grad_mat
-from ..core.total.total_dynamics_grad_mat import total_coord_to_link_momentum_grad_mat, total_coord_to_joint_momentum_grad_mat
-from ..core.total.total_dynamics_grad_mat import total_coord_to_world_link_momentum_grad_mat, total_coord_to_world_joint_momentum_grad_mat
-from ..core.total.total_dynamics_grad_mat import total_coord_to_link_force_grad_mat, total_coord_to_joint_force_grad_mat, total_coord_to_joint_torque_grad_mat
+from robokots.core.models.whole_body.total_kinematics_grad_mat import total_coord_to_link_vel_grad_mat
+from robokots.core.models.whole_body.total_dynamics_grad_mat import total_coord_to_link_momentum_grad_mat, total_coord_to_joint_momentum_grad_mat
+from robokots.core.models.whole_body.total_dynamics_grad_mat import total_coord_to_world_link_momentum_grad_mat, total_coord_to_world_joint_momentum_grad_mat
+from robokots.core.models.whole_body.total_dynamics_grad_mat import total_coord_to_link_force_grad_mat, total_coord_to_joint_force_grad_mat, total_coord_to_joint_torque_grad_mat
 
 def link_jacobian(robot : RobotStruct, state : dict, link_name_list : list[str], order : int = 3, dim : int = 3) -> np.ndarray:
     links = robot.link_list(link_name_list)
@@ -119,8 +119,8 @@ def outward_kinematics_jacobian(robot : RobotStruct, state : dict, state_type_li
     else:
         return np.vstack(jacob_list)
 
-from ..core.total.total_kinematics_grad_mat import total_coord_to_link_tan_vel_grad_mat
-from ..core.total.total_partial_grad_mat import *
+from robokots.core.models.whole_body.total_kinematics_grad_mat import total_coord_to_link_tan_vel_grad_mat
+from robokots.core.models.whole_body.total_partial_grad_mat import *
 
 def outward_jacobian(robot : RobotStruct, state : dict, state_type_list : list[StateType], max_time_order = None, dim : int = 3, list_output : bool = False) -> np.ndarray:
     if StateType.is_list_all_in_kinematics(state_type_list):

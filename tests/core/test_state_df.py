@@ -1,7 +1,7 @@
 
 import numpy as np
 
-from robokots.core.state_df import RobotDF, RobotState
+from robokots.core.state_table import RobotDF, RobotState
 
 '''
 Test data for RobotDF

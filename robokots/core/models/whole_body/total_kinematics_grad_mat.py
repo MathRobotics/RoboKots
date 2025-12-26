@@ -1,8 +1,8 @@
 import numpy as np
 
-from ..robot import RobotStruct
-from ..state import dim_to_dof
-from ..state_dict import state_dict_to_cmtm, state_dict_to_rel_cmtm
+from robokots.core import RobotStruct
+from robokots.core.state import dim_to_dof
+from robokots.core.state_dict import state_dict_to_cmtm, state_dict_to_rel_cmtm
 from ..kinematics.kinematics_matrix import joint_select_diag_mat
 
 from .total_kinematics_mat import total_coord_arrange

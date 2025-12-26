@@ -5,22 +5,25 @@
 import numpy as np
 from typing import List, Dict, Any
 
-from robokots.outward import get_value
-
 from .core.motion import RobotMotions
-from .core.state_df import RobotState
+from .core.state_table import RobotState
 from .core.state import StateType
 from .core.state_dict import state_dict_to_links_pos, print_state_dict
 from .core.robot import RobotStruct
 from .core.target import TargetList
-from .core.robot_drow import show_robot, show_robot_traj, RobotColor, show_link_points
+from .core.viz import show_robot, show_robot_traj, RobotColor, show_link_points
 
 from .robot_io import *
-from .outward.state_builder import build_kinematics_state, build_dynamics_cmtm_state
-from .outward.state_builder import link_diff_kinematics_numerical, calc_link_total_point_frame, diff_outward_numerical
-from .outward.state_accessors import get_value
-from .outward.outward_gradient import jacobian_numerical
-from .outward.outward_total_gradient import outward_jacobian
+from .outward import (
+    build_kinematics_state,
+    build_dynamics_cmtm_state,
+    get_value,
+    link_diff_kinematics_numerical,
+    diff_outward_numerical,
+    jacobian_numerical,
+    outward_jacobian,
+    calc_link_total_point_frame,
+)
 
 default_order = 3 
 default_dim = 3
