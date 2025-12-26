@@ -5,14 +5,14 @@ from ..core.state import StateType, data_type_dof
 
 from ..core.state_dict import *
 
-def outward_state_dof(robot : RobotStruct, state_type : StateType, dim : int = 3) -> int:
+def get_dof(robot : RobotStruct, state_type : StateType, dim : int = 3) -> int:
     if "torque" in state_type.data_type:
         joint = robot.joint_list([state_type.owner_name])[0]
         return joint.dof
     else:
         return data_type_dof(state_type.data_type, dim = dim)
 
-def outward_state(robot : RobotStruct, state_dict : dict, state_type : StateType):
+def get_value(robot : RobotStruct, state_dict : dict, state_type : StateType):
     if state_type.owner_type == "link":
         link_name = state_type.owner_name
     elif state_type.owner_type == "joint":
@@ -54,7 +54,7 @@ def outward_state(robot : RobotStruct, state_dict : dict, state_type : StateType
     else:
         return np.array(state_dict[state_type.alliance])
 
-def outward_state_cmvec(robot : RobotStruct, state_dict : dict, state_type : StateType, order : int) -> CMVector:
+def get_cmvec(robot : RobotStruct, state_dict : dict, state_type : StateType, order : int) -> CMVector:
     vec = state_dict_to_cmvec(state_dict, state_type.owner_name, state_type.owner_type, state_type.data_type, state_type.key_order)
     if state_type.frame_name == "world":
         if state_type.owner_type == "link":
@@ -66,14 +66,14 @@ def outward_state_cmvec(robot : RobotStruct, state_dict : dict, state_type : Sta
         vec = CMTM.change_elemclass(cmtm_wrench, SE3wrench).mat_adj() @ vec.cm_vec()
     return vec
 
-def outward_total_state_cmvec(robot : RobotStruct, state_dict : dict, owner_type : str, data_type : str, frame_name : None, order : int) -> CMVector:
+def get_total_cmvec(robot : RobotStruct, state_dict : dict, owner_type : str, data_type : str, frame_name : None, order : int) -> CMVector:
     if owner_type == "link":
         name_list = robot.link_names
     elif owner_type == "joint":
         name_list = robot.joint_names
 
     for i, name in enumerate(name_list):
-        vec = outward_state_cmvec(robot, state_dict, StateType(owner_type, name, data_type, frame_name), order)
+        vec = get_cmvec(robot, state_dict, StateType(owner_type, name, data_type, frame_name), order)
         if i == 0:
             total_vec = np.zeros((len(name_list), vec._len))
         total_vec[i] = vec.cm_vec()
