@@ -22,7 +22,7 @@ from ..core.kinematics.kinematics_soft_link import soft_link_local_cmtm, calc_li
 from ..core.dynamics.base import spatial_inertia
 from ..core.dynamics.dynamics import link_dynamics, joint_dynamics, link_momentum_cmvec, link_force_cmvec, link_dynamics_cmvec, joint_dynamics_cmvec
 
-from .outward_state import outward_state
+from .state_accessors import get_value
 
 def kinematics(robot : RobotStruct, motions, order = 3) -> dict:
   '''
@@ -211,7 +211,7 @@ def outward_function(robot : RobotStruct, motions, state_type : StateType, input
     state_dict = dynamics_cmtm(robot, motion, max(state_type.time_order-2,0))
   else:
     state_dict = kinematics(robot, motion, state_type.time_order)
-  return outward_state(robot, state_dict, state_type)
+  return get_value(robot, state_dict, state_type)
 
 def link_diff_kinematics_numerical(robot : RobotStruct, motions, link_name_list : list[str],  data_type : str, order = 3, \
                                     eps = 1e-8, update_method = None, update_direction = None) -> np.ndarray:

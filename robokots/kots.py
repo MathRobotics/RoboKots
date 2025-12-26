@@ -5,7 +5,7 @@
 import numpy as np
 from typing import List, Dict, Any
 
-from robokots.outward import outward_state
+from robokots.outward import get_value
 
 from .core.motion import RobotMotions
 from .core.state_df import RobotState
@@ -19,7 +19,7 @@ from .robot_io import *
 from .outward.outward import kinematics as outward_kinematics
 from .outward.outward import dynamics_cmtm as outward_dynamics
 from .outward.outward import link_diff_kinematics_numerical, calc_link_total_point_frame, diff_outward_numerical
-from .outward.outward_state import outward_state
+from .outward.state_accessors import get_value
 from .outward.outward_gradient import jacobian_numerical
 from .outward.outward_total_gradient import outward_jacobian
 
@@ -190,10 +190,10 @@ class Kots():
     return self.state_.df()
 
   def state_info(self, state_type : StateType):
-    return outward_state(self.robot_, self.state_dict_, state_type)
+    return get_value(self.robot_, self.state_dict_, state_type)
 
   def state_info_list(self, state_type_list : List[StateType], list_output : bool = False) -> List[np.ndarray]:
-    state_list = [outward_state(self.robot_, self.state_dict_, st) for st in state_type_list]
+    state_list = [get_value(self.robot_, self.state_dict_, st) for st in state_type_list]
     if list_output:
         return state_list
     else:
