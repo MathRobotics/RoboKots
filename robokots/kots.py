@@ -16,8 +16,7 @@ from .core.target import TargetList
 from .core.robot_drow import show_robot, show_robot_traj, RobotColor, show_link_points
 
 from .robot_io import *
-from .outward.state_builder import kinematics as outward_kinematics
-from .outward.state_builder import dynamics_cmtm as outward_dynamics
+from .outward.state_builder import build_kinematics_state, build_dynamics_cmtm_state
 from .outward.state_builder import link_diff_kinematics_numerical, calc_link_total_point_frame, diff_outward_numerical
 from .outward.state_accessors import get_value
 from .outward.outward_gradient import jacobian_numerical
@@ -208,7 +207,7 @@ class Kots():
   def kinematics(self, order = None):
     if order is None:
       order = self.order_
-    self.state_dict_ = outward_kinematics(self.robot_, self.motion(order), order)
+    self.state_dict_ = build_kinematics_state(self.robot_, self.motion(order), order)
 
   # ToDo: change function name
   def kinematics_point(self, s : float = 0.0):
@@ -217,7 +216,7 @@ class Kots():
   def dynamics(self, order = None):
     if order is None:
       order = self.order_
-    self.state_dict_ = outward_dynamics(self.robot_, self.motion(order), order-2)
+    self.state_dict_ = build_dynamics_cmtm_state(self.robot_, self.motion(order), order-2)
 
   def set_state_df(self):
     self.state_.import_state(self.state_dict_)

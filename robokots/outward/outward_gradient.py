@@ -13,9 +13,7 @@ from ..core.kinematics.base import convert_joint_to_data, convert_link_to_data
 from ..core.kinematics.kinematics import part_link_jacob, part_link_cmtm_tan_jacob
 from ..core.kinematics.kinematics_soft_link import part_soft_link_jacob, part_soft_link_cmtm_tan_jacob, calc_local_tan_mat
 
-from .state_builder import kinematics as outward_kinematics, outward_function
-from .state_builder import dynamics as outward_dynamics
-from robokots.core import state
+from .state_builder import compute_outward_value
 
 def __target_link_part_joint_jacob(target_link : LinkStruct, joint : JointStruct, rel_frame : SE3) -> np.ndarray:
   if target_link.id == joint.child_link_id:
@@ -148,8 +146,8 @@ def link_cmtm_jacobian(robot : RobotStruct, motions : RobotMotions, state : dict
   return jacobs
 
 def jacobian_numerical(robot : RobotStruct, motions : RobotMotions, state_type : StateType, input_motion_order = None) -> np.ndarray:
-  def outward_func(x):
-    return outward_function(robot, x, state_type, input_order = input_motion_order)
+  def func(x):
+    return compute_outward_value(robot, x, state_type, input_order = input_motion_order)
 
   if input_motion_order is None:
     motion = np.zeros(robot.dof * state_type.time_order)
@@ -168,5 +166,5 @@ def jacobian_numerical(robot : RobotStruct, motions : RobotMotions, state_type :
 
   return numerical_grad(
             x = motion, 
-            func = outward_func, 
+            func = func, 
             sub_func = data_type_to_sub_func(state_type.data_type))

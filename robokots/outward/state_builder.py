@@ -192,7 +192,7 @@ def build_dynamics_cmtm_state(robot : RobotStruct, motions, dynamics_order = 1) 
     
   return state_dict
 
-def outward_function(robot : RobotStruct, motions, state_type : StateType, input_order = None) -> dict:
+def compute_outward_value(robot : RobotStruct, motions, state_type : StateType, input_order = None) -> dict:
   motion = np.zeros(robot.dof * state_type.time_order)
 
   if input_order is None:
@@ -270,7 +270,7 @@ def diff_outward_numerical(robot : RobotStruct, motions, state_type : StateType,
     for joint in robot.joints:
       m[joint.dof_index*state_type.time_order:joint.dof_index*state_type.time_order+joint.dof*state_type.time_order] = \
         x[RobotMotions.owner_vec_index(joint.dof, joint.dof_index, order, state_type.time_order)]
-    return outward_function(robot, m, state_type)
+    return compute_outward_value(robot, m, state_type)
 
   sub_func = data_type_to_sub_func(state_type.data_type)
 
