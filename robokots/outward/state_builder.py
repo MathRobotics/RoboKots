@@ -24,7 +24,7 @@ from ..core.dynamics.dynamics import link_dynamics, joint_dynamics, link_momentu
 
 from .state_accessors import get_value
 
-def kinematics(robot : RobotStruct, motions, order = 3) -> dict:
+def build_kinematics_state(robot : RobotStruct, motions, order = 3) -> dict:
   '''
   Forward kinematics computation
   Args:
@@ -88,8 +88,8 @@ def calc_link_total_point_frame(robot : RobotStruct, motions : RobotMotions, sta
       return calc_link_local_point_frame(l, coord, p_link_frame, point - base)
 
 # specific 3d space (magic number 6)
-def dynamics(robot : RobotStruct, joint_motions) -> dict:  
-  state_dict = kinematics(robot, joint_motions, 3)
+def build_dynamics_state(robot : RobotStruct, joint_motions) -> dict:  
+  state_dict = build_kinematics_state(robot, joint_motions, 3)
 
   world_name = robot.links[robot.joints[0].parent_link_id].name
   state_dict.update([(world_name + "_link_force" , [0.,0.,0.,0.,0.,0.])])
@@ -121,8 +121,8 @@ def dynamics(robot : RobotStruct, joint_motions) -> dict:
     
   return state_dict
 
-def dynamics_cmtm(robot : RobotStruct, motions, dynamics_order = 1) -> dict:
-  state_dict = kinematics(robot, motions, dynamics_order + 2)
+def build_dynamics_cmtm_state(robot : RobotStruct, motions, dynamics_order = 1) -> dict:
+  state_dict = build_kinematics_state(robot, motions, dynamics_order + 2)
   momentum_dict = {}
 
   for joint in reversed(robot.joints):
@@ -208,9 +208,9 @@ def outward_function(robot : RobotStruct, motions, state_type : StateType, input
         motion[link.dof_index*time_order:link.dof_index*time_order+link.dof*time_order] = m.flatten()
 
   if state_type.is_dynamics:
-    state_dict = dynamics_cmtm(robot, motion, max(state_type.time_order-2,0))
+    state_dict = build_dynamics_cmtm_state(robot, motion, max(state_type.time_order-2,0))
   else:
-    state_dict = kinematics(robot, motion, state_type.time_order)
+    state_dict = build_kinematics_state(robot, motion, state_type.time_order)
   return get_value(robot, state_dict, state_type)
 
 def link_diff_kinematics_numerical(robot : RobotStruct, motions, link_name_list : list[str],  data_type : str, order = 3, \
@@ -235,7 +235,7 @@ def link_diff_kinematics_numerical(robot : RobotStruct, motions, link_name_list 
 
   for i in range(len(link_name_list)):
     def kinematics_func(x):
-      state = kinematics(robot, x, order)
+      state = build_kinematics_state(robot, x, order)
       y = extract_dict_link_info(state, data_type, link_name_list[i])
       return y
 
