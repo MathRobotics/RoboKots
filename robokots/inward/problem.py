@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import List, Tuple, Optional, Protocol
 import numpy as np
 
-from .interface import Residual, Cost
+from robokots.outward.term import Residual, Cost
 
 Array = np.ndarray
 
