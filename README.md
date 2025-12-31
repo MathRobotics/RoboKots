@@ -2,11 +2,6 @@
 
 Utilities based on the Kots framework for robotic system modeling, motion planning and optimization.
 
-Install Kots
-```
-pip install git+https://github.com/MathRobotics/Kots
-```
-
 Clone RoboKots
 ```
 git clone https://github.com/MathRobotics/RoboKots
