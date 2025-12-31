@@ -32,6 +32,18 @@ def solve_inverse_kinematics(target_pos: np.ndarray, max_iters: int = 20) -> Non
         # Retrieve the analytic Jacobian (derivative of link position w.r.t. joint angles)
         jacobian = kots.jacobian(state_type)
 
+        # The Jacobian returned by Kots stacks joint derivatives column-wise; if the
+        # rows do not line up with the residual dimension, transpose so that the
+        # least-squares solve is well-posed.
+        if jacobian.shape[0] != residual.shape[0] and jacobian.shape[1] == residual.shape[0]:
+            jacobian = jacobian.T
+
+        if jacobian.shape[0] != residual.shape[0]:
+            raise ValueError(
+                "Jacobian shape is incompatible with residual: "
+                f"J={jacobian.shape}, residual={residual.shape}"
+            )
+
         # Compute the Gauss-Newton update
         dq, *_ = np.linalg.lstsq(jacobian, -residual, rcond=None)
         if np.linalg.norm(dq) < 1e-10:
