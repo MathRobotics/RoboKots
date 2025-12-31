@@ -13,91 +13,124 @@ from pathlib import Path
 
 import numpy as np
 
-ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
-# Import the inward optimization primitives and outward residual/cost helpers.
-# These imports are intentionally explicit to keep the example clear and to
-# avoid pulling in optional dependencies that a heavy wildcard import might
-# trigger.
 from robokots.inward.problem import Problem
-from robokots.inward.variables import VariablePack
 from robokots.outward.term import (
+    VariablePack,
     L2Cost,
     ScalarWeightCost,
     Variable,
     VectorSquaredSumResidual,
 )
+class TwoVarLinearQuantity:
+    """
+    m=2 の Quantity 例:
+        y1 = x + 2y - 1
+        y2 = x -  y - 0.2
+    """
 
-
-class ScalarTargetQuantity:
-    """Quantity that measures the difference between a variable and a target."""
-
-    def __init__(self, variable: Variable, target: float, name: str):
+    def __init__(self, x: Variable, y: Variable, name: str = "two_var_linear"):
         self.name = name
-        self.out_dim = 1
-        self.vars = [variable]
-        self._variable = variable
-        self._target = float(target)
+        self.out_dim = 2
+        self.vars = [x, y]
+        self._x = x
+        self._y = y
 
     def value(self) -> np.ndarray:
-        return np.array([self._variable.x[0] - self._target], dtype=float)
+        x = float(self._x.x[0])
+        y = float(self._y.x[0])
+        return np.array(
+            [
+                x + 2.0 * y - 1.0,
+                x - 1.0 * y - 0.2,
+            ],
+            dtype=float,
+        )
 
-    def jacobian(self) -> np.ndarray:
-        return np.array([[1.0]], dtype=float)
+    def jacobian_blocks(self):
+        # dy/dx (2x1), dy/dy (2x1)
+        Jx = np.array([[1.0], [1.0]], dtype=float)
+        Jy = np.array([[2.0], [-1.0]], dtype=float)
+        return [Jx, Jy]
 
 
-def solve_linearized_step(problem: Problem, variables: VariablePack) -> np.ndarray:
-    """
-    Solve a single Gauss-Newton step for the given problem.
+def solve_gauss_newton(problem: Problem, variables: VariablePack, max_iters: int = 10) -> None:
+    """最小の GN ループ（line searchなし）"""
+    for k in range(max_iters):
+        r_all, J_all = problem.linearize()
+        cost = float(r_all @ r_all)
 
-    Returns the delta vector that was applied to the variables.
-    """
+        print(f"[iter {k}] x_all={variables.get()}  cost={cost:.6g}")
+        # 収束判定（残差が十分小さい）
+        if np.linalg.norm(r_all) < 1e-10:
+            break
 
-    # Linearize all residuals into a stacked residual vector r and Jacobian J.
-    # For a Gauss-Newton update, we solve the normal equations J^T J dx = -J^T r.
+        lhs = J_all.T @ J_all
+        rhs = -J_all.T @ r_all
+        dx, *_ = np.linalg.lstsq(lhs, rhs, rcond=None)
 
-    r_all, J_all = problem.linearize()
-    lhs = J_all.T @ J_all
-    rhs = -J_all.T @ r_all
-    dx, *_ = np.linalg.lstsq(lhs, rhs, rcond=None)
-    variables.apply_dx(dx)
-    return dx
+        if np.linalg.norm(dx) < 1e-12:
+            break
+
+        variables.apply_dx(dx)
 
 
 def main() -> None:
-    # Define the decision variable and initial guess.
-    offset = Variable(name="joint_offset", x=np.array([0.5], dtype=float))
-    variables = VariablePack([offset])
+    # -----------------------
+    # Variables (x, y)
+    # -----------------------
+    x = Variable(name="x", x=np.array([0.0], dtype=float))
+    y = Variable(name="y", x=np.array([0.0], dtype=float))
+    variables = VariablePack([x, y])
 
-    # Create two quantities: one pulling the variable toward a target value and
-    # another that softly keeps it close to zero.
-    target_quantity = ScalarTargetQuantity(offset, target=2.0, name="hit_target")
-    prior_quantity = ScalarTargetQuantity(offset, target=0.0, name="stay_near_zero")
+    # -----------------------
+    # Quantity -> Residual
+    # -----------------------
+    q = TwoVarLinearQuantity(x, y, name="two_var_linear")
+    residual = VectorSquaredSumResidual("fit_two_equations", q)
 
-    # Wrap the quantities as residuals with different weights.
-    hit_target = VectorSquaredSumResidual("hit_target", target_quantity)
-    stay_small = VectorSquaredSumResidual("stay_near_zero", prior_quantity)
+    # ついでに "弱いprior" も足してみる（任意）
+    # x と y を 0 に寄せる（ただし弱く）
+    class PriorQuantity:
+        def __init__(self, v: Variable, name: str):
+            self.name = name
+            self.out_dim = 1
+            self.vars = [v]
+            self._v = v
 
-    # Build the least-squares problem using two terms: the main target cost
-    # and a softer regularization cost to discourage large deviations.
+        def value(self):
+            return np.array([float(self._v.x[0]) - 0.0], dtype=float)
+
+        def jacobian_blocks(self):
+            return [np.array([[1.0]], dtype=float)]
+
+    prior_x = VectorSquaredSumResidual("prior_x", PriorQuantity(x, "prior_x"))
+    prior_y = VectorSquaredSumResidual("prior_y", PriorQuantity(y, "prior_y"))
+
+    # -----------------------
+    # Problem
+    # -----------------------
     problem = Problem(
+        variables=variables,
         terms=[
-            (hit_target, L2Cost()),
-            (stay_small, ScalarWeightCost(w=0.1)),
-        ]
+            (residual, L2Cost()),
+            (prior_x, ScalarWeightCost(w=1e-3)),
+            (prior_y, ScalarWeightCost(w=1e-3)),
+        ],
     )
 
-    print("Initial variable:", variables.get())
+    print("Initial:", variables.get())
     print("Initial cost:", problem.cost_value())
 
-    # Apply a single Gauss-Newton step to improve the variable estimate.
-    dx = solve_linearized_step(problem, variables)
+    solve_gauss_newton(problem, variables, max_iters=10)
 
-    print("Applied delta:", dx)
-    print("Updated variable:", variables.get())
+    print("Final:", variables.get())
     print("Final cost:", problem.cost_value())
+
+    # 解の確認（この線形系は一意解になる）
+    # y2 = x - y - 0.2 = 0 -> x = y + 0.2
+    # y1 = x + 2y - 1 = 0 -> (y+0.2) + 2y = 1 -> 3y = 0.8 -> y = 0.266666...
+    # x = 0.466666...
+    print("Expected approx: x≈0.4666667, y≈0.2666667")
 
 
 if __name__ == "__main__":
