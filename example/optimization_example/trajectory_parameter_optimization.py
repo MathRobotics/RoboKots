@@ -6,23 +6,8 @@ measurements ``y_target(t_i)`` by minimizing the squared error between the
 polynomial and the desired trajectory. The coefficients of the polynomial are
 exposed as a ``Variable`` so that the inward/outward utilities can assemble the
 least-squares system and perform Gauss-Newton iterations.
-
-Run the script from the repository root with either ``python
-example/optimization_example/trajectory_parameter_optimization.py`` or ``python
--m example.optimization_example.trajectory_parameter_optimization``. The script
-adds the repository root to ``sys.path`` when executed as a file so that the
-``robokots`` package can be imported without additional setup.
 """
-from pathlib import Path
-import sys
-
 import numpy as np
-
-# Allow running the script directly (``python example/...``) by ensuring the
-# repository root is on ``sys.path`` before importing ``robokots``.
-REPO_ROOT = Path(__file__).resolve().parents[2]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
 
 from robokots.inward.problem import Problem
 from robokots.outward.term import L2Cost, Variable, VariablePack, VectorSquaredSumResidual
