@@ -17,6 +17,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+# Import the inward optimization primitives and outward residual/cost helpers.
+# These imports are intentionally explicit to keep the example clear and to
+# avoid pulling in optional dependencies that a heavy wildcard import might
+# trigger.
 from robokots.inward.problem import Problem
 from robokots.inward.variables import VariablePack
 from robokots.outward.term import (
@@ -51,6 +55,9 @@ def solve_linearized_step(problem: Problem, variables: VariablePack) -> np.ndarr
     Returns the delta vector that was applied to the variables.
     """
 
+    # Linearize all residuals into a stacked residual vector r and Jacobian J.
+    # For a Gauss-Newton update, we solve the normal equations J^T J dx = -J^T r.
+
     r_all, J_all = problem.linearize()
     lhs = J_all.T @ J_all
     rhs = -J_all.T @ r_all
@@ -73,6 +80,8 @@ def main() -> None:
     hit_target = VectorSquaredSumResidual("hit_target", target_quantity)
     stay_small = VectorSquaredSumResidual("stay_near_zero", prior_quantity)
 
+    # Build the least-squares problem using two terms: the main target cost
+    # and a softer regularization cost to discourage large deviations.
     problem = Problem(
         terms=[
             (hit_target, L2Cost()),
@@ -83,6 +92,7 @@ def main() -> None:
     print("Initial variable:", variables.get())
     print("Initial cost:", problem.cost_value())
 
+    # Apply a single Gauss-Newton step to improve the variable estimate.
     dx = solve_linearized_step(problem, variables)
 
     print("Applied delta:", dx)
