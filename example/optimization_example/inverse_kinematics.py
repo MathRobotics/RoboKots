@@ -57,7 +57,7 @@ class EndEffectorPositionQuantity:
         J_full = self._kots.jacobian(self._state_type)
         desired_rows = self.out_dim
         if J_full.shape[0] >= desired_rows:
-            J_full = J_full[:desired_rows, :]
+            J_full = J_full[3:3+desired_rows, :]
         if J_full.shape[0] != desired_rows and J_full.shape[1] == desired_rows:
             J_full = J_full.T
         if J_full.shape[0] != desired_rows:
