@@ -1,24 +1,13 @@
-# outward/__init__.py
-from .api import (
-    build_kinematics_state,
-    build_dynamics_cmtm_state,
-    get_value,
-    compute_outward_value,
-    link_diff_kinematics_numerical,
-    diff_outward_numerical,
-    outward_jacobian,
-    jacobian_numerical,
-    calc_link_total_point_frame,
-)
+"""Outward computations for RoboKots.
+
+Submodules are not imported automatically to keep optional dependencies light.
+Import the specific pieces you need, such as ``robokots.outward.term``.
+"""
 
 __all__ = [
-    "build_kinematics_state",
-    "build_dynamics_cmtm_state",
-    "get_value",
-    "compute_outward_value",
-    "link_diff_kinematics_numerical",
-    "diff_outward_numerical",
-    "outward_jacobian",
-    "jacobian_numerical",
-    "calc_link_total_point_frame",
+    "api",
+    "diff",
+    "state",
+    "term",
+    "values",
 ]

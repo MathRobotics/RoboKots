@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import List
 import numpy as np
 
-from ..outward.interface import Variable
+from ..outward.term import Variable
 
 Array = np.ndarray
 
