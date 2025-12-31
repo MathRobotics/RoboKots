@@ -32,9 +32,17 @@ def solve_inverse_kinematics(target_pos: np.ndarray, max_iters: int = 20) -> Non
         # Retrieve the analytic Jacobian (derivative of link position w.r.t. joint angles)
         jacobian = kots.jacobian(state_type)
 
-        # The Jacobian returned by Kots stacks joint derivatives column-wise; if the
-        # rows do not line up with the residual dimension, transpose so that the
-        # least-squares solve is well-posed.
+        # The kinematics API returns both translational and rotational terms stacked
+        # vertically. Only the translational (x, y, z) rows are relevant for a
+        # position-only residual, so keep the top rows that match the residual
+        # dimension. This covers the common 6xN Jacobian output (position + rotation)
+        # as well as 3xN outputs.
+        desired_rows = residual.shape[0]
+        if jacobian.shape[0] >= desired_rows:
+            jacobian = jacobian[:desired_rows, :]
+
+        # If the library returns derivatives stacked column-wise instead, transpose
+        # to align rows with the residual dimension.
         if jacobian.shape[0] != residual.shape[0] and jacobian.shape[1] == residual.shape[0]:
             jacobian = jacobian.T
 
