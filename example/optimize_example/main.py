@@ -23,7 +23,7 @@ from robokots.outward.term import (
 )
 class TwoVarLinearQuantity:
     """
-    m=2 の Quantity 例:
+    Example of a Quantity with m=2:
         y1 = x + 2y - 1
         y2 = x -  y - 0.2
     """
@@ -54,13 +54,13 @@ class TwoVarLinearQuantity:
 
 
 def solve_gauss_newton(problem: Problem, variables: VariablePack, max_iters: int = 10) -> None:
-    """最小の GN ループ（line searchなし）"""
+    """Minimal GN loop (no line search)."""
     for k in range(max_iters):
         r_all, J_all = problem.linearize()
         cost = float(r_all @ r_all)
 
         print(f"[iter {k}] x_all={variables.get()}  cost={cost:.6g}")
-        # 収束判定（残差が十分小さい）
+        # convergence check (residual is small enough)
         if np.linalg.norm(r_all) < 1e-10:
             break
 
@@ -88,8 +88,8 @@ def main() -> None:
     q = TwoVarLinearQuantity(x, y, name="two_var_linear")
     residual = VectorSquaredSumResidual("fit_two_equations", q)
 
-    # ついでに "弱いprior" も足してみる（任意）
-    # x と y を 0 に寄せる（ただし弱く）
+    # also add a "weak prior" (optional)
+    # pull x and y toward 0 (weakly)
     class PriorQuantity:
         def __init__(self, v: Variable, name: str):
             self.name = name
@@ -126,7 +126,7 @@ def main() -> None:
     print("Final:", variables.get())
     print("Final cost:", problem.cost_value())
 
-    # 解の確認（この線形系は一意解になる）
+    # check solution (this linear system has a unique solution)
     # y2 = x - y - 0.2 = 0 -> x = y + 0.2
     # y1 = x + 2y - 1 = 0 -> (y+0.2) + 2y = 1 -> 3y = 0.8 -> y = 0.266666...
     # x = 0.466666...

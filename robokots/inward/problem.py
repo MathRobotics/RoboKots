@@ -6,7 +6,7 @@ import numpy as np
 from robokots.outward.term import VariablePack, Residual, Cost
 
 Array = np.ndarray
-# - VariablePack: .n_total, .slices を持つ
+# - VariablePack: has .n_total, .slices
 # - Residual: .name, .vars, .evaluate() -> (r, blocks)
 # - Cost: .apply(r, blocks) -> (r2, blocks2)
 
