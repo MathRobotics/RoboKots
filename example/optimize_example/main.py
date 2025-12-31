@@ -6,11 +6,6 @@ while also staying close to a soft prior.  It uses the inward ``Problem`` and
 ``VariablePack`` helpers together with the residual and cost utilities from the
 ``outward`` module to form and solve a small least-squares problem.
 """
-from __future__ import annotations
-
-import sys
-from pathlib import Path
-
 import numpy as np
 
 from robokots.inward.problem import Problem
