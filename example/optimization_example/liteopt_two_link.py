@@ -48,7 +48,7 @@ class EndEffectorError(term.Quantity):
         q = np.asarray(self._joint_var.x, dtype=float).reshape(-1)
         _update_motion(q)
         # One block per variable; here we only have the joint variable.
-        return [KOTS.jacobian(STATE_TYPE)]
+        return [KOTS.jacobian(STATE_TYPE)[3:6, :]]
 
 
 def _update_motion(q: np.ndarray) -> None:
