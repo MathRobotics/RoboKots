@@ -6,7 +6,7 @@
 import numpy as np
 
 from robokots.core import RobotStruct
-from robokots.core.state import StateType, dim_to_dof
+from robokots.core.state import StateType, dim_to_dof, data_type_dof, data_type_offset
 from robokots.core.state import keys_kinematics, keys_momentum, keys_force, keys_torque
 
 from robokots.core.models.whole_body.total_kinematics_grad_mat import total_coord_to_link_vel_grad_mat
@@ -103,15 +103,17 @@ def outward_kinematics_jacobian(robot : RobotStruct, state : dict, state_type_li
     if max_time_order is None:
         max_time_order = StateType.max_time_order(kine_state_type_list)
     mat = total_coord_to_link_vel_grad_mat(robot, state, order=max_time_order, dim=dim)
-    dof = dim_to_dof(dim)
+    dim_dof = dim_to_dof(dim)
 
     jacob_list = []
     for st in kine_state_type_list:
         link = robot.link(st.owner_name)
         if link is None:
             raise ValueError(f"Invalid link name: {st.owner_name}")
-        base = link.id * dof * max_time_order
-        jacob_part = mat[base + dof*(st.time_order-1) : base + dof*st.time_order, :]
+        base = link.id * dim_dof * max_time_order
+        state_dof = data_type_dof(st.data_type, dim=dim)
+        offset = dim_dof*(st.time_order-1) + data_type_offset(st.data_type) * state_dof
+        jacob_part = mat[base + offset : base + offset + state_dof, :]
         jacob_list.append(jacob_part)
 
     if list_output:
