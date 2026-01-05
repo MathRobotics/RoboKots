@@ -75,17 +75,10 @@ def _build_problem() -> tuple[term.VariablePack, term.Problem]:
 VARIABLES, PROBLEM = _build_problem()
 
 
-def _set_state_from_vector(x: np.ndarray) -> None:
-    x = np.asarray(x, dtype=float).reshape(-1)
-    if x.size != VARIABLES.n_total:
-        raise ValueError(f"Expected {VARIABLES.n_total} decision variables, got {x.size}")
-    VARIABLES.vars[0].x = x
-
-
 def residual(x: np.ndarray) -> np.ndarray:
     """Residual callable compatible with ``liteopt.nls``."""
 
-    _set_state_from_vector(x)
+    PROBLEM.set_from_vector(x)
     r_all, _ = PROBLEM.linearize()
     return r_all
 
@@ -93,7 +86,7 @@ def residual(x: np.ndarray) -> np.ndarray:
 def jacobian(x: np.ndarray) -> np.ndarray:
     """Jacobian callable compatible with ``liteopt.nls``."""
 
-    _set_state_from_vector(x)
+    PROBLEM.set_from_vector(x)
     _, J_all = PROBLEM.linearize()
     return J_all
 
@@ -102,6 +95,8 @@ def main() -> None:
     # Start from a neutral joint guess of the correct dimension
     x0 = np.zeros(KOTS.dof(), dtype=float)
 
+    import timeit
+    start_time = timeit.default_timer()
     x_star, cost, iters, rnorm, dxnorm, converged = liteopt.nls(
         residual,
         jacobian,
@@ -110,6 +105,8 @@ def main() -> None:
         tol_r=1e-10,
         tol_dx=1e-10,
     )
+    end_time = timeit.default_timer()
+    print(f"Optimization took {end_time - start_time:.4f} seconds.")
 
     _update_motion(np.asarray(x_star))
     end_effector = KOTS.state_info(STATE_TYPE)
@@ -123,7 +120,10 @@ def main() -> None:
     print("End-effector:", end_effector)
     print("Target:", TARGET_POSITION)
 
+    start_time = timeit.default_timer()
     x_star = KOTS.inverse_kinematics([STATE_TYPE], [TARGET_POSITION], x0)
+    end_time = timeit.default_timer()
+    print(f"IK Optimization took {end_time - start_time:.4f} seconds.")
 
     print("IK Solution (rad):", x_star)
 
