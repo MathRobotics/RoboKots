@@ -7,6 +7,7 @@ import re
 import math
 class RobotMotions:
   motions : np.ndarray = np.array([])
+  _revision : int = 0
   ALLOWED_ALIASES = frozenset(["coord", "veloc", "accel"])
 
   ACCEL_DIFF_PATTERN = re.compile(r"^accel_diff\d+$")
@@ -24,6 +25,12 @@ class RobotMotions:
     self.dof = robot_dof
     self.motion_num = len(self.aliases) 
     self.motions = np.zeros(self.dof * self.motion_num)
+
+  def revision(self) -> int:
+    return self._revision
+  
+  def increment_revision(self) -> None:
+    self._revision += 1
 
   def set_aliases(self, aliases_ = ["coord", "veloc", "accel"]):
     for alias in aliases_:

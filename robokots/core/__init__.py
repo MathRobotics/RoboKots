@@ -26,6 +26,8 @@ _lazy_attributes: Dict[str, str] = {
     "cmtm_to_state_list": "robokots.core.state_dict",
     "state_dict_to_frame": "robokots.core.state_dict",
     "state_dict_to_vecs": "robokots.core.state_dict",
+    # State cache utility
+    "StateCache": "robokots.core.state_cache",
 }
 
 __all__ = sorted(_lazy_attributes)

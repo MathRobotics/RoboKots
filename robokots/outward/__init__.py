@@ -14,6 +14,7 @@ _LAZY_API = {
     "build_dynamics_cmtm_state": "build_dynamics_cmtm_state",
     "get_value": "get_value",
     "compute_outward_value": "compute_outward_value",
+    "update_outward_state": "update_outward_state",
     "link_diff_kinematics_numerical": "link_diff_kinematics_numerical",
     "diff_outward_numerical": "diff_outward_numerical",
     "outward_jacobian": "outward_jacobian",

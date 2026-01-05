@@ -8,6 +8,7 @@ from typing import List, Dict, Any
 from .core.motion import RobotMotions
 from .core.state_table import RobotState
 from .core.state import StateType
+from .core.state_cache import StateCache
 from .core.state_dict import state_dict_to_links_pos, print_state_dict
 from .core.robot import RobotStruct
 from .core.target import TargetList
@@ -23,6 +24,8 @@ from .outward import (
     jacobian_numerical,
     outward_jacobian,
     calc_link_total_point_frame,
+    update_outward_state,
+    term,
 )
 
 from .inward.inward import inverse_kinematics
@@ -80,6 +83,7 @@ class Kots():
     self.motions_ = RobotMotions(robot.dof, m_aliases)
     self.state_ = RobotState(robot.link_names, robot.joint_names, l_aliases, j_aliases)
     self.state_dict_ = {}
+    self.state_cache_ = None
     self.order_ = order
     self.dim_ = dim
     self.lib_ = lib
@@ -133,6 +137,7 @@ class Kots():
     
   def import_motions(self, vecs : np.ndarray):
     self.motions_.set_motion(vecs)
+    self.motions_.increment_revision()
 
   def motion(self, order : int = None):
     if order is None:
@@ -222,6 +227,15 @@ class Kots():
     if order is None:
       order = self.order_
     self.state_dict_ = build_dynamics_cmtm_state(self.robot_, self.motion(order), order-2)
+
+  def update_state_dict(self, order : int = None, is_dynamics: bool = False) -> dict:
+    if order is None:
+      order = self.order_
+
+    motion_var = term.Variable(name="motion", x=self.motion(order))
+    variables = term.VariablePack([motion_var], revision=self.motions_.revision())
+    
+    return update_outward_state(self.robot_, variables, self.state_cache_, is_dynamics, order)
 
   def set_state_df(self):
     self.state_.import_state(self.state_dict_)

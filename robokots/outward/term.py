@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol, Sequence, Tuple, List
+from typing import Protocol, Sequence, Tuple, Optional, List
 import numpy as np
 
 Array = np.ndarray
@@ -35,6 +35,7 @@ def total_dim(vars: Sequence[Variable]) -> int:
 @dataclass
 class VariablePack:
     vars: Sequence[Variable]
+    revision: int = 0  # optional revision number for caching
 
     def __post_init__(self) -> None:
         # name collision is a common source of silent bugs
@@ -82,6 +83,75 @@ class Quantity(Protocol):
         """
         ...
 
+@dataclass
+class CachedQuantity:
+    """
+    Wrap any Quantity and cache both:
+      - y = value()
+      - blocks = jacobian_blocks()
+    per (variables.revision, variables.get()).
+
+    Key behavior:
+      - If solver calls value() then jacobian_blocks() for the same x,
+        underlying forward is executed only once.
+      - If multiple residuals share the SAME CachedQuantity instance,
+        the cache is shared too.
+    """
+    base: "Quantity"
+    variables: "VariablePack"
+
+    # passthrough fields
+    name: str = ""
+    out_dim: int = 0
+    vars: Sequence["Variable"] = ()
+
+    # cache
+    _last_revision: Optional[int] = None
+    _last_x: Optional[Array] = None
+    _cached_value: Optional[Array] = None
+    _cached_blocks: Optional[List[Array]] = None
+
+    def __post_init__(self) -> None:
+        self.name = getattr(self.base, "name", "CachedQuantity")
+        self.out_dim = int(getattr(self.base, "out_dim"))
+        self.vars = getattr(self.base, "vars")
+
+    def _cache_key_matches(self) -> bool:
+        if self._last_revision is None or self._last_x is None:
+            return False
+        x = self.variables.get()
+        return (
+            int(self.variables.revision) == int(self._last_revision)
+            and x.shape == self._last_x.shape
+            and np.array_equal(x, self._last_x)
+        )
+
+    def _evaluate_both(self) -> None:
+        """
+        Evaluate both value and jacobian_blocks exactly once.
+        Important: call base.value() and base.jacobian_blocks() back-to-back
+        after state update is implicitly done inside base (or via its own caching).
+        """
+        v = np.asarray(self.base.value(), dtype=float).reshape(-1)
+        blocks = [np.asarray(B, dtype=float) for B in self.base.jacobian_blocks()]
+
+        self._cached_value = v
+        self._cached_blocks = blocks
+        self._last_revision = int(self.variables.revision)
+        self._last_x = self.variables.get().copy()
+
+    def ensure(self) -> None:
+        if self._cache_key_matches():
+            return
+        self._evaluate_both()
+
+    def value(self) -> Array:
+        self.ensure()
+        return self._cached_value  # type: ignore[return-value]
+
+    def jacobian_blocks(self) -> Sequence[Array]:
+        self.ensure()
+        return self._cached_blocks  # type: ignore[return-value]
 
 # ============================================================
 # Residual: r(x) and its *block* Jacobians
@@ -323,7 +393,47 @@ class Problem:
     variables: VariablePack
     terms: Sequence[Tuple[Residual, Cost]]  # [(residual, cost), ...]
 
+    _last_x: Array | None = None
+    _last_revision: int | None = None
+    _last_r: Array | None = None
+    _last_J: Array | None = None
+
+    _last_set_x: Array | None = None
+
+    def set_from_vector(self, x: Array) -> None:
+        x = np.asarray(x, dtype=float).reshape(-1)
+        if x.size != self.variables.n_total:
+            raise ValueError(f"set_from_vector: expected {self.variables.n_total}, got {x.size}")
+
+        # Same x => do nothing (NO assignment, NO revision bump)
+        if self._last_set_x is not None and np.array_equal(x, self._last_set_x):
+            return
+
+        # Scatter x into each Variable by slices
+        for v in self.variables.vars:
+            s, e = self.variables.slices[v.name]
+            expected = e - s
+            if v.dim() != expected:
+                raise ValueError(
+                    f"set_from_vector: variable '{v.name}' dim changed. "
+                    f"slices expects {expected}, actual {v.dim()}"
+                )
+            v.x = x[s:e].copy()   # copy: avoid aliasing x buffer
+
+        self.variables.revision += 1
+        self._last_set_x = x.copy()
+
     def linearize(self) -> Tuple[Array, Array]:
+        x = self.variables.get()
+        rev = int(self.variables.revision)
+        if (
+            self._last_x is not None
+            and self._last_revision == rev
+            and x.shape == self._last_x.shape
+            and np.array_equal(x, self._last_x)
+        ):
+            return self._last_r, self._last_J
+
         r_list: List[Array] = []
         J_list: List[Array] = []
 
@@ -351,6 +461,12 @@ class Problem:
 
         r_all = np.concatenate(r_list, axis=0) if r_list else np.zeros((0,), dtype=float)
         J_all = np.vstack(J_list) if J_list else np.zeros((0, n_total), dtype=float)
+
+        self._last_x = x.copy()
+        self._last_revision = rev
+        self._last_r = r_all
+        self._last_J = J_all
+
         return r_all, J_all
 
     def cost_value(self) -> float:

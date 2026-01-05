@@ -20,6 +20,7 @@ from ..core.motion import RobotMotions
 from ..core.state_dict import state_dict_to_cmtm, state_dict_to_cmtm_wrench, state_dict_to_cmvec, state_dict_to_rel_cmtm_wrench
 from ..core.state_dict import vecs_to_state_dict, cmtm_to_state_list, state_dict_to_frame
 from ..core.state import data_type_dof, StateType
+from ..core.state_cache import StateCache
 
 from ..core.models.kinematics.base import convert_joint_to_data, convert_link_to_data
 from ..core.models.kinematics.kinematics import joint_local_cmtm, joint_rel_cmtm, joint_rel_frame
