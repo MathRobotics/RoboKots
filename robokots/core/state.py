@@ -269,6 +269,14 @@ def data_type_to_sub_func(data_type : str):
         return None
     else:
         raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'jerk', 'frame' or 'cmtm'.")
+    
+def data_type_offset(data_type : str):
+    if data_type == "pos":
+        return 1
+    elif data_type == "rot":
+        return 0
+    else:
+        return 0
 
 def data_type_dof(data_type : str, order = None, dim = 3):
     if data_type == "pos" or data_type == "rot":
