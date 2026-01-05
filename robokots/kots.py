@@ -25,6 +25,8 @@ from .outward import (
     calc_link_total_point_frame,
 )
 
+from .inward.inward import inverse_kinematics
+
 default_order = 3 
 default_dim = 3
 class Kots():
@@ -269,6 +271,10 @@ class Kots():
       raise ValueError("target is not set")
     
     return self.jacobian(self.target_._targets, numerical=numerical, list_output=list_output)
+  
+  def inverse_kinematics(self, target_type : List[StateType], target_value : List[np.ndarray],
+                    q_init : np.ndarray, opt_func : None = None) -> np.ndarray:
+    return inverse_kinematics(self.robot_, target_type, target_value, q_init, opt_func)
 
   def show_robot(self, save = False, ax = None, color : RobotColor = None):
     conectivity = np.zeros((self.robot_.joint_num, 2), dtype='int64')
