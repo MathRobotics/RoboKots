@@ -48,7 +48,7 @@ class EndEffectorError(term.Quantity):
         q = np.asarray(self._joint_var.x, dtype=float).reshape(-1)
         _update_motion(q)
         # One block per variable; here we only have the joint variable.
-        return [KOTS.jacobian(STATE_TYPE)[3:6, :]]
+        return [KOTS.jacobian(STATE_TYPE)]
 
 
 def _update_motion(q: np.ndarray) -> None:
@@ -122,6 +122,10 @@ def main() -> None:
     print("Solution (rad):", x_star)
     print("End-effector:", end_effector)
     print("Target:", TARGET_POSITION)
+
+    x_star = KOTS.inverse_kinematics([STATE_TYPE], [TARGET_POSITION], x0)
+
+    print("IK Solution (rad):", x_star)
 
 
 if __name__ == "__main__":
