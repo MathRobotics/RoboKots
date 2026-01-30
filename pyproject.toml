@@ -30,9 +30,14 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest>=8.4.2"]
+liteopt =["liteopt>=0.1.6"]
 
 [project.urls]
 Homepage = "https://github.com/MathRobotics/RoboKots"
 
 [tool.uv.sources]
 mathrobo = { git = "https://github.com/MathRobotics/MathRobo.git", rev = "develop" }
+
+[tool.pytest.ini_options]
+addopts = "-m 'not slow'"
+markers = ["slow: slow tests (numerical differentiation, heavy jacobian checks)"]

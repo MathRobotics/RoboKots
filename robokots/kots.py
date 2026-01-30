@@ -5,23 +5,30 @@
 import numpy as np
 from typing import List, Dict, Any
 
-from robokots.outward import outward_state
-
-from .basic.motion import RobotMotions
-from .basic.state_df import RobotState
-from .basic.state import StateType
-from .basic.state_dict import state_dict_to_links_pos, print_state_dict
-from .basic.robot import RobotStruct
-from .basic.target import TargetList, RobotNames
-from .basic.robot_drow import show_robot, show_robot_traj, RobotColor, show_link_points
+from .core.motion import RobotMotions
+from .core.state_table import RobotState
+from .core.state import StateType
+from .core.state_cache import StateCache
+from .core.state_dict import state_dict_to_links_pos, print_state_dict
+from .core.robot import RobotStruct
+from .core.target import TargetList
+from .core.viz import show_robot, show_robot_traj, RobotColor, show_link_points
 
 from .robot_io import *
-from .outward.outward import kinematics as outward_kinematics
-from .outward.outward import dynamics_cmtm as outward_dynamics
-from .outward.outward import link_diff_kinematics_numerical, calc_link_total_point_frame, diff_outward_numerical
-from .outward.outward_state import outward_state
-from .outward.outward_gradient import jacobian_numerical
-from .outward.outward_total_gradient import outward_jacobian
+from .outward import (
+    build_kinematics_state,
+    build_dynamics_cmtm_state,
+    get_value,
+    link_diff_kinematics_numerical,
+    diff_outward_numerical,
+    jacobian_numerical,
+    outward_jacobian,
+    calc_link_total_point_frame,
+    update_outward_state,
+    term,
+)
+
+from .inward.inward import inverse_kinematics
 
 default_order = 3 
 default_dim = 3
@@ -76,6 +83,7 @@ class Kots():
     self.motions_ = RobotMotions(robot.dof, m_aliases)
     self.state_ = RobotState(robot.link_names, robot.joint_names, l_aliases, j_aliases)
     self.state_dict_ = {}
+    self.state_cache_ = None
     self.order_ = order
     self.dim_ = dim
     self.lib_ = lib
@@ -129,6 +137,7 @@ class Kots():
     
   def import_motions(self, vecs : np.ndarray):
     self.motions_.set_motion(vecs)
+    self.motions_.increment_revision()
 
   def motion(self, order : int = None):
     if order is None:
@@ -190,10 +199,10 @@ class Kots():
     return self.state_.df()
 
   def state_info(self, state_type : StateType):
-    return outward_state(self.robot_, self.state_dict_, state_type)
+    return get_value(self.robot_, self.state_dict_, state_type)
 
   def state_info_list(self, state_type_list : List[StateType], list_output : bool = False) -> List[np.ndarray]:
-    state_list = [outward_state(self.robot_, self.state_dict_, st) for st in state_type_list]
+    state_list = [get_value(self.robot_, self.state_dict_, st) for st in state_type_list]
     if list_output:
         return state_list
     else:
@@ -208,7 +217,7 @@ class Kots():
   def kinematics(self, order = None):
     if order is None:
       order = self.order_
-    self.state_dict_ = outward_kinematics(self.robot_, self.motion(order), order)
+    self.state_dict_ = build_kinematics_state(self.robot_, self.motion(order), order)
 
   # ToDo: change function name
   def kinematics_point(self, s : float = 0.0):
@@ -217,7 +226,16 @@ class Kots():
   def dynamics(self, order = None):
     if order is None:
       order = self.order_
-    self.state_dict_ = outward_dynamics(self.robot_, self.motion(order), order-2)
+    self.state_dict_ = build_dynamics_cmtm_state(self.robot_, self.motion(order), order-2)
+
+  def update_state_dict(self, order : int = None, is_dynamics: bool = False) -> dict:
+    if order is None:
+      order = self.order_
+
+    motion_var = term.Variable(name="motion", x=self.motion(order))
+    variables = term.VariablePack([motion_var], revision=self.motions_.revision())
+    
+    return update_outward_state(self.robot_, variables, self.state_cache_, is_dynamics, order)
 
   def set_state_df(self):
     self.state_.import_state(self.state_dict_)
@@ -233,7 +251,7 @@ class Kots():
   def link_diff_kinematics_numerical(self, link_name_list : list[str], data_type = "vel", order = None, eps = 1e-8, update_method = "poly", update_direction = None):
     if order is None:
       order = self.order_
-
+    
     motion = self.motion(order)
 
     return link_diff_kinematics_numerical(self.robot_, motion, link_name_list, data_type, order, eps, update_method, update_direction)
@@ -243,7 +261,7 @@ class Kots():
       order = self.order_
 
     motion = self.motion(order)
-
+    
     return diff_outward_numerical(self.robot_, motion, state_type, order, eps, update_method, update_direction)
 
   def jacobian(self, state_type, numerical : bool = False, list_output : bool = False):
@@ -267,6 +285,10 @@ class Kots():
       raise ValueError("target is not set")
     
     return self.jacobian(self.target_._targets, numerical=numerical, list_output=list_output)
+  
+  def inverse_kinematics(self, target_type : List[StateType], target_value : List[np.ndarray],
+                    q_init : np.ndarray, opt_func : None = None) -> np.ndarray:
+    return inverse_kinematics(self.robot_, target_type, target_value, q_init, opt_func)
 
   def show_robot(self, save = False, ax = None, color : RobotColor = None):
     conectivity = np.zeros((self.robot_.joint_num, 2), dtype='int64')
