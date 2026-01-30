@@ -12,6 +12,7 @@ import numpy as np
 
 from robokots.core.state import StateType
 from robokots.inward.problem import Problem
+from robokots.inward.opt import solve_gauss_newton
 from robokots.kots import Kots
 from robokots.outward.term import (
     L2Cost,
@@ -56,39 +57,12 @@ class EndEffectorPositionQuantity:
         # with ``vars`` ordering, so return a single block for ``q_var``.
         J_full = self._kots.jacobian(self._state_type)
         desired_rows = self.out_dim
-        if J_full.shape[0] >= desired_rows:
-            J_full = J_full[3:3+desired_rows, :]
-        if J_full.shape[0] != desired_rows and J_full.shape[1] == desired_rows:
-            J_full = J_full.T
         if J_full.shape[0] != desired_rows:
             raise ValueError(
                 "Jacobian shape is incompatible with residual: "
                 f"J={J_full.shape}, residual=({desired_rows},)"
             )
         return [J_full]
-
-
-def solve_gauss_newton(problem: Problem, variables: VariablePack, max_iters: int = 20) -> None:
-    """Minimal Gauss-Newton loop that operates on an inward Problem."""
-
-    for k in range(max_iters):
-        r_all, J_all = problem.linearize()
-        cost = float(r_all @ r_all)
-
-        print(f"[iter {k}] q={variables.get()}  cost={cost:.6g}")
-
-        if np.linalg.norm(r_all) < 1e-10:
-            break
-
-        lhs = J_all.T @ J_all
-        rhs = -J_all.T @ r_all
-        dx, *_ = np.linalg.lstsq(lhs, rhs, rcond=None)
-
-        if np.linalg.norm(dx) < 1e-12:
-            break
-
-        variables.apply_dx(dx)
-
 
 def main() -> None:
     # Target position at x=2.2[m], y=0.3[m]

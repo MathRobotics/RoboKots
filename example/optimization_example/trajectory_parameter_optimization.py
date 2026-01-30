@@ -11,6 +11,7 @@ import numpy as np
 
 from robokots.inward.problem import Problem
 from robokots.outward.term import L2Cost, Variable, VariablePack, VectorSquaredSumResidual
+from robokots.inward.opt import solve_gauss_newton
 
 
 def _polynomial_basis(times: np.ndarray, order: int) -> np.ndarray:
@@ -54,27 +55,6 @@ class PolynomialTrajectoryQuantity:
     def jacobian_blocks(self):
         # Only one variable; the Jacobian is the basis matrix itself.
         return [self._basis]
-
-
-def solve_gauss_newton(problem: Problem, variables: VariablePack, max_iters: int = 15) -> None:
-    """Run a basic Gauss-Newton loop to minimize the stacked residuals."""
-
-    for k in range(max_iters):
-        r_all, J_all = problem.linearize()
-        cost = float(r_all @ r_all)
-        print(f"[iter {k:02d}] coeffs={variables.get()}  cost={cost:.6f}")
-
-        grad = J_all.T @ r_all
-        if np.linalg.norm(grad) < 1e-10:
-            break
-
-        lhs = J_all.T @ J_all
-        rhs = -grad
-        dx, *_ = np.linalg.lstsq(lhs, rhs, rcond=None)
-        if np.linalg.norm(dx) < 1e-12:
-            break
-
-        variables.apply_dx(dx)
 
 
 def main() -> None:

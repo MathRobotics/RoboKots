@@ -9,6 +9,7 @@ while also staying close to a soft prior.  It uses the inward ``Problem`` and
 import numpy as np
 
 from robokots.inward.problem import Problem
+from robokots.inward.opt import solve_gauss_newton
 from robokots.outward.term import (
     VariablePack,
     L2Cost,
@@ -46,27 +47,6 @@ class TwoVarLinearQuantity:
         Jx = np.array([[1.0], [1.0]], dtype=float)
         Jy = np.array([[2.0], [-1.0]], dtype=float)
         return [Jx, Jy]
-
-
-def solve_gauss_newton(problem: Problem, variables: VariablePack, max_iters: int = 10) -> None:
-    """Minimal GN loop (no line search)."""
-    for k in range(max_iters):
-        r_all, J_all = problem.linearize()
-        cost = float(r_all @ r_all)
-
-        print(f"[iter {k}] x_all={variables.get()}  cost={cost:.6g}")
-        # convergence check (residual is small enough)
-        if np.linalg.norm(r_all) < 1e-10:
-            break
-
-        lhs = J_all.T @ J_all
-        rhs = -J_all.T @ r_all
-        dx, *_ = np.linalg.lstsq(lhs, rhs, rcond=None)
-
-        if np.linalg.norm(dx) < 1e-12:
-            break
-
-        variables.apply_dx(dx)
 
 
 def main() -> None:
