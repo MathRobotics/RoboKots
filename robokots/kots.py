@@ -12,7 +12,7 @@ from .basic.state_df import RobotState
 from .basic.state import StateType
 from .basic.state_dict import state_dict_to_links_pos, print_state_dict
 from .basic.robot import RobotStruct
-from .basic.target import TargetList
+from .basic.target import TargetList, RobotNames
 from .basic.robot_drow import show_robot, show_robot_traj, RobotColor, show_link_points
 
 from .robot_io import *
@@ -90,18 +90,18 @@ class Kots():
 
   @staticmethod
   def from_json_file(model_file_name : str, order=default_order, dim=default_dim, lib : str = "numpy") -> "Kots":
-    robot = load_robot_json_file(model_file_name, lib=lib)
+    robot = RobotStruct.from_dict(load_json_file(model_file_name), lib)
 
     return Kots(robot, order, dim, lib)
 
   @staticmethod
   def from_json_data(model_data : dict, order=default_order, dim=default_dim, lib : str = "numpy") -> "Kots":
-    robot = load_robot_json(model_data, lib=lib)
+    robot = RobotStruct.from_dict(model_data, lib=lib)
 
     return Kots(robot, order, dim, lib)
 
   def print_structure(self):
-    print_robot_structure(self.robot_)
+    self.robot_.print()
 
   def print_state_dict(self):
     print_state_dict(self.state_dict_)
@@ -227,7 +227,7 @@ class Kots():
       raise ValueError("target_file is empty")
     if not isinstance(target_file, str):
       raise TypeError("target_file must be a string")
-    self.target_ = load_target_json_file(target_file)
+    self.target_ = TargetList.from_dict(load_json_file(target_file), RobotNames(self.robot_.joint_names, self.robot_.link_names))
     self.set_order(self.target_._max_order)
 
   def link_diff_kinematics_numerical(self, link_name_list : list[str], data_type = "vel", order = None, eps = 1e-8, update_method = "poly", update_direction = None):

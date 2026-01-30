@@ -20,7 +20,10 @@ class StateType:
         self.time_order = keys_time_order.get(data_type, 1)
         self.key_order = keys_order.get(data_type, 1)
         self.is_dynamics = is_in_keys_dynamics([data_type])
-        self.alliance = f"{owner_name}_{owner_type}_{keys_name[data_type]}"
+        if owner_name in ["total_link", "total_joint", "total"]:
+            self.alliance = f"{owner_name}_{keys_name[data_type]}"
+        else:
+            self.alliance = f"{owner_name}_{owner_type}_{keys_name[data_type]}"
 
     def __repr__(self):
         return f"StateType(\n  owner type: {self.owner_type}\n  owner name: {self.owner_name}\n  data type: {self.data_type}\n  frame name: {self.frame_name}\n  time order: {self.time_order}\n  key order: {self.key_order}\n  is dynamics: {self.is_dynamics}\n  alliance: {self.alliance}\n)"
@@ -30,10 +33,10 @@ class StateType:
         state_type_list = []
         for dt in data_type_list:
             st = StateType(
-                owner_type,
-                owner_name,
-                dt,
-                frame_name
+                owner_type=owner_type,
+                owner_name=owner_name,
+                data_type=dt,
+                frame_name=frame_name
             )
             state_type_list.append(st)
         return state_type_list
