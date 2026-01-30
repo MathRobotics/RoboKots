@@ -64,7 +64,7 @@ def _build_problem() -> tuple[term.VariablePack, term.Problem]:
     joint_var = term.Variable(name="q", x=np.zeros(KOTS.dof(), dtype=float))
     variables = term.VariablePack([joint_var])
 
-    ee_quantity = EndEffectorError(joint_var)
+    ee_quantity = term.CachedQuantity(EndEffectorError(joint_var), variables)
     ee_residual = term.VectorSquaredSumResidual("ee_error", ee_quantity)
     ee_cost = term.L2Cost()
 
