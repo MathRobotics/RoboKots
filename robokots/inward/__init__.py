@@ -8,4 +8,5 @@ directly, for example ``from robokots.inward import problem``.
 __all__ = [
     "inward",
     "problem",
+    "opt",
 ]

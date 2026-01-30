@@ -29,6 +29,7 @@ from .outward import (
 )
 
 from .inward.inward import inverse_kinematics
+from .inward.opt import solve_gauss_newton
 
 default_order = 3 
 default_dim = 3
