@@ -5,9 +5,6 @@
 import json
 from typing import Dict
 
-from .core.robot import RobotStruct
-from .core.target import TargetList
-
 def load_json_file(file_path: str) -> Dict:
     try:
         with open(file_path, 'r', encoding='utf-8') as file:
