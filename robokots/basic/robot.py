@@ -111,6 +111,9 @@ class RobotStruct:
     
   @staticmethod
   def from_dict(data: Dict, lib: str = "numpy") -> "RobotStruct":  
+    if not isinstance(data, dict):
+        raise ValueError("Input data must be a dictionary.")
+    
     joints = []
     links = []
 
