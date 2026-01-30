@@ -27,16 +27,7 @@ def inverse_kinematics(robot : RobotStruct, target_type : List[StateType], targe
             """Update the RoboKots model with a new joint configuration."""
             self.state_dict_ = build_kinematics_state(robot, q, order=1)
 
-            # self.state_dict_ = update_outward_state(
-            #     robot,
-            #     motions=self._motion_var,
-            #     state_cache=None,
-            #     is_dynamics=False,
-            #     order=max(t.time_order for t in target_type),
-            # )
-
         def value(self) -> np.ndarray:
-            # self._update_state(self._motion_var)
             q = np.asarray(self._motion_var.x, dtype=float).reshape(-1)
             self._update_state(q)
             value = [get_value(robot, self.state_dict_, t) - v for t, v in zip(target_type, target_value)]
@@ -45,7 +36,6 @@ def inverse_kinematics(robot : RobotStruct, target_type : List[StateType], targe
         def jacobian_blocks(self) -> list[np.ndarray]:
             q = np.asarray(self._motion_var.x, dtype=float).reshape(-1)
             self._update_state(q)
-            # self._update_state(self._motion_var)
             return outward_kinematics_jacobian(robot, self.state_dict_, target_type, list_output=True)
 
     joint_var = term.Variable(name="q", x=np.zeros(robot.dof, dtype=float))
@@ -53,7 +43,7 @@ def inverse_kinematics(robot : RobotStruct, target_type : List[StateType], targe
 
     target_quantity_raw = TargetQuantity(joint_var)
     target_quantity = term.CachedQuantity(target_quantity_raw, variables)
-    # target_quantity = target_quantity_raw
+
     target_residual = term.VectorSquaredSumResidual("target_error", target_quantity)
     target_cost = term.L2Cost()
 
