@@ -8,9 +8,6 @@ def solve_gauss_newton(problem: Problem, variables: VariablePack, max_iters: int
 
     for k in range(max_iters):
         r_all, J_all = problem.linearize()
-        cost = float(r_all @ r_all)
-
-        print(f"[iter {k}] q={variables.get()}  cost={cost:.6g}")
 
         if np.linalg.norm(r_all) < 1e-10:
             break
