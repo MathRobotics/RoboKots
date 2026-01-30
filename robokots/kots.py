@@ -11,7 +11,7 @@ from .core.state import StateType
 from .core.state_cache import StateCache
 from .core.state_dict import state_dict_to_links_pos, print_state_dict
 from .core.robot import RobotStruct
-from .core.target import TargetList
+from .core.target import TargetList, RobotNames
 from .core.viz import show_robot, show_robot_traj, RobotColor, show_link_points
 
 from .robot_io import *
