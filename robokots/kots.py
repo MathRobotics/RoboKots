@@ -5,6 +5,8 @@
 import numpy as np
 from typing import List, Dict, Any
 
+from .inward import term
+
 from .core.motion import RobotMotions
 from .core.state_table import RobotState
 from .core.state import StateType
@@ -25,7 +27,6 @@ from .outward import (
     outward_jacobian,
     calc_link_total_point_frame,
     update_outward_state,
-    term,
 )
 
 from .inward.inward import inverse_kinematics

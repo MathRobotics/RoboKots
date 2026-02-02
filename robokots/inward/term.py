@@ -4,6 +4,10 @@ from dataclasses import dataclass
 from typing import Protocol, Sequence, Tuple, List, Callable, Any
 import numpy as np
 
+from typing import Protocol, Iterable
+from robokots.core.state_cache import StateKey
+
+
 Array = np.ndarray
 
 
@@ -97,6 +101,13 @@ class Expr(Protocol):
         Returns:
           r: (m,)
           blocks[i]: (m, vars[i].dim()) aligned with self.vars
+        """
+        ...
+
+    def deps(self) -> Iterable[StateKey]:
+        """
+        Returns:
+          Iterable of StateKey that this Expr depends on.
         """
         ...
 
