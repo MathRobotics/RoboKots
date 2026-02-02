@@ -1,37 +1,67 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import List, Tuple, Optional, Protocol
+from typing import List, Tuple, Optional, Protocol, Any
 import numpy as np
 
-from robokots.inward.term import VariablePack, Residual, Cost
+from robokots.inward.term import VariablePack, Cost
+from robokots.inward.term import Expr
 
 Array = np.ndarray
-# - VariablePack: has .n_total, .slices
-# - Residual: .name, .vars, .evaluate() -> (r, blocks)
-# - Cost: .apply(r, blocks) -> (r2, blocks2)
 
 @dataclass
 class Problem:
     """
-    A collection of (residual, cost) terms assembled into one stacked LS problem.
+    A collection of (expr, cost) terms assembled into one stacked LS problem.
     The ONLY place that defines the global Jacobian column order is VariablePack.
     """
-    variables: "VariablePack"
-    terms: List[Tuple["Residual", "Cost"]]
+    variables: VariablePack
+    terms: List[Tuple[Expr, Cost]]
 
-    def linearize(self) -> Tuple[Array, Array]:
+    # optional cache
+    _last_rev: int = -1
+    _last_time_rev: int = -1
+    _last_req_sig: int = 0
+    _last_r: Optional[Array] = None
+    _last_J: Optional[Array] = None
+
+    def _required_sig(self, required) -> int:
+        if required is None:
+            return 0
+        return hash(frozenset(required))
+
+    def linearize(self, *, ctx: Any = None, time: Any = None, required=None) -> Tuple[Array, Array]:
+        """
+        NOTE: This function does NOT update StateCache.
+        Solver should call state_cache.update_if_needed(pack,time,required) before linearize.
+
+        ctx: optional evaluation context passed to expr.eval(ctx)
+        time/required: only used for cache-key consistency (optional).
+        """
+        rev = int(getattr(self.variables, "revision", 0))
+        time_rev = int(getattr(time, "revision", 0)) if time is not None else 0
+        req_sig = self._required_sig(required)
+
+        if (
+            self._last_r is not None
+            and self._last_J is not None
+            and rev == self._last_rev
+            and time_rev == self._last_time_rev
+            and req_sig == self._last_req_sig
+        ):
+            return self._last_r, self._last_J
+
         rs: List[Array] = []
         Js: List[Array] = []
 
-        n_total = self.variables.n_total
+        n_total = int(self.variables.n_total)
         slices = self.variables.slices
 
         if len(self.terms) == 0:
             raise ValueError("Problem.linearize: no terms.")
 
-        for res, cost in self.terms:
-            r, blocks = res.evaluate()          # (m,), [ (m, dim(var_i)), ... ]
-            r2, blocks2 = cost.apply(r, blocks) # same structure after weighting/robust
+        for expr, cost in self.terms:
+            r, blocks = expr.eval(ctx)              # (m,), [ (m, dim(var_i)), ... ]
+            r2, blocks2 = cost.apply(r, blocks)     # same structure after weighting/robust
 
             r2 = np.asarray(r2, dtype=float).reshape(-1)
             m = int(r2.size)
@@ -39,30 +69,32 @@ class Problem:
             # Assemble global Jacobian Jg (m, n_total)
             Jg = np.zeros((m, n_total), dtype=float)
 
-            if len(blocks2) != len(res.vars):
+            if len(blocks2) != len(expr.vars):
                 raise ValueError(
-                    f"Problem.linearize: len(blocks) mismatch in term '{res.name}'. "
-                    f"blocks={len(blocks2)}, vars={len(res.vars)}"
+                    f"Problem.linearize: len(blocks) mismatch in term '{expr.name}'. "
+                    f"blocks={len(blocks2)}, vars={len(expr.vars)}"
                 )
 
-            for v, B in zip(res.vars, blocks2):
+            for v, B in zip(expr.vars, blocks2):
                 B = np.asarray(B, dtype=float)
-                if B.shape[0] != m:
+
+                if B.ndim != 2 or B.shape[0] != m:
                     raise ValueError(
-                        f"Problem.linearize: row mismatch in term '{res.name}', var '{v.name}'. "
+                        f"Problem.linearize: row mismatch in term '{expr.name}', var '{v.name}'. "
                         f"r has m={m}, block has {B.shape}."
                     )
 
                 if v.name not in slices:
                     raise ValueError(
-                        f"Problem.linearize: var '{v.name}' not found in VariablePack (term '{res.name}')."
+                        f"Problem.linearize: var '{v.name}' not found in VariablePack (term '{expr.name}')."
                     )
 
                 s, e = slices[v.name]
                 nv = e - s
+
                 if B.shape[1] != nv:
                     raise ValueError(
-                        f"Problem.linearize: col mismatch in term '{res.name}', var '{v.name}'. "
+                        f"Problem.linearize: col mismatch in term '{expr.name}', var '{v.name}'. "
                         f"expected block (m,{nv}), got {B.shape}."
                     )
 
@@ -71,10 +103,18 @@ class Problem:
             rs.append(r2)
             Js.append(Jg)
 
-        r_all = np.concatenate(rs, axis=0)
-        J_all = np.vstack(Js)
+        r_all = np.concatenate(rs, axis=0) if rs else np.zeros((0,), dtype=float)
+        J_all = np.vstack(Js) if Js else np.zeros((0, n_total), dtype=float)
+
+        # cache
+        self._last_rev = rev
+        self._last_time_rev = time_rev
+        self._last_req_sig = req_sig
+        self._last_r = r_all
+        self._last_J = J_all
+
         return r_all, J_all
 
-    def cost_value(self) -> float:
-        r_all, _ = self.linearize()
+    def cost_value(self, *, ctx: Any = None, time: Any = None, required=None) -> float:
+        r_all, _ = self.linearize(ctx=ctx, time=time, required=required)
         return float(r_all @ r_all)
