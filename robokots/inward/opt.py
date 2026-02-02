@@ -1,7 +1,7 @@
 import numpy as np
 
 from robokots.inward.problem import Problem
-from robokots.outward.term import VariablePack
+from robokots.inward.term import VariablePack
 
 def solve_gauss_newton(problem: Problem, variables: VariablePack, max_iters: int = 20) -> None:
     """Minimal Gauss-Newton loop that operates on an inward Problem."""

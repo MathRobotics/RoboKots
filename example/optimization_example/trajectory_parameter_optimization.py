@@ -10,7 +10,7 @@ least-squares system and perform Gauss-Newton iterations.
 import numpy as np
 
 from robokots.inward.problem import Problem
-from robokots.outward.term import L2Cost, Variable, VariablePack, VectorSquaredSumResidual
+from robokots.inward.term import L2Cost, Variable, VariablePack, VectorSquaredSumResidual
 from robokots.inward.opt import solve_gauss_newton
 
 

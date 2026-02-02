@@ -20,7 +20,7 @@ import numpy as np
 
 from robokots.core.state import StateType
 from robokots.kots import Kots
-from robokots.outward import term
+from robokots.inward import term
 
 
 MODEL_PATH = Path(__file__).resolve().parents[1] / "model" / "2dof_arm.json"

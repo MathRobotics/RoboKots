@@ -10,7 +10,7 @@ import numpy as np
 
 from robokots.inward.problem import Problem
 from robokots.inward.opt import solve_gauss_newton
-from robokots.outward.term import (
+from robokots.inward.term import (
     VariablePack,
     L2Cost,
     ScalarWeightCost,

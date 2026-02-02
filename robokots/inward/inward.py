@@ -7,7 +7,7 @@ import numpy as np
 from typing import List
 from robokots.core.robot import RobotStruct
 from robokots.core.state import StateType
-from robokots.outward import term
+from robokots.inward import term
 from robokots.outward.values import update_outward_state
 from robokots.outward.state import get_value, build_kinematics_state
 from robokots.outward.diff.outward_total_gradient import outward_kinematics_jacobian
