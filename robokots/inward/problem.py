@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import List, Tuple, Optional, Protocol
 import numpy as np
 
-from robokots.outward.term import VariablePack, Residual, Cost
+from robokots.inward.term import VariablePack, Residual, Cost
 
 Array = np.ndarray
 # - VariablePack: has .n_total, .slices
