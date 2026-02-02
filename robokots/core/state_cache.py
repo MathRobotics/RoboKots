@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable, Any, Optional, Protocol
+from typing import Any, Callable, Optional, Protocol, Iterable
 import numpy as np
 
 Array = np.ndarray
-
-from .state_dict import count_dict_time_order
 
 
 class PackLike(Protocol):
@@ -14,66 +12,92 @@ class PackLike(Protocol):
     def get(self) -> Array: ...
 
 
+@dataclass(frozen=True)
+class OwnerKey:
+    owner_type: str
+    owner_name: str
+
+
+@dataclass(frozen=True)
+class StateKey:
+    k: int
+    owner: OwnerKey
+    dtype: str
+    field: str
+    frame: Optional[str] = None
+    rel_frame: Optional[str] = None
+
+
 @dataclass
 class StateCache:
     """
-    Cache for expensive robot state computations (state_dict).
+    Cache for expensive state computations.
 
-    Update is triggered when:
-      - pack.revision changes, OR
-      - (optional) time.revision changes (for trajectory/time-grid problems).
+    build_state should ideally accept:
+      build_state(x_all, time=time_grid, required=required_keys) -> dict[StateKey, Any]
+
+    Backward compatible:
+      build_state(x_all) -> dict
+      build_state(x_all, time=time_grid) -> dict
     """
 
-    # Backward compatible:
-    # - allow build_state(x_all) OR build_state(x_all, time=time)
     build_state: Callable[..., dict]
 
-    state: dict = field(default_factory=dict)
+    # Latest cached state mapping
+    state: dict[StateKey, Any] = field(default_factory=dict)
 
     _rev_last: int = -1
-    _time_rev_last: int = -1 
+    _time_rev_last: int = -1
 
-    _time_order: Optional[int] = None
-    _memo: dict[tuple, Any] = field(default_factory=dict)
+    # Optional memo for *derived* heavy queries (same key space is ideal)
+    _memo: dict[StateKey, Any] = field(default_factory=dict)
+
+    _req_sig_last: int = 0
 
     def invalidate(self) -> None:
         self._rev_last = -1
         self._time_rev_last = -1
-        self._time_order = None
         self._memo.clear()
+        self.state.clear()
 
-    def update_if_needed(self, pack: PackLike, time: Any = None) -> None:
-        """
-        Update cache only if pack.revision (or time.revision) changed.
+    def _required_sig(self, required: Optional[Iterable[StateKey]]) -> int:
+        if required is None:
+            return 0
+        return hash(frozenset(required))
 
-        - pack must have .revision and .get()
-        - time is optional (e.g., TimeGrid). If provided, and has .revision,
-          we also use it as part of the cache key.
-        """
+    def update_if_needed(self, pack: PackLike, time: Any = None, required: Optional[Iterable[StateKey]] = None) -> None:
         rev = int(getattr(pack, "revision", 0))
         time_rev = int(getattr(time, "revision", 0)) if time is not None else 0
+        req_sig = self._required_sig(required)
 
-        if rev == self._rev_last and time_rev == self._time_rev_last:
+        if rev == self._rev_last and time_rev == self._time_rev_last and req_sig == self._req_sig_last:
             return
 
         x_all = np.asarray(pack.get(), dtype=float).reshape(-1)
 
-        # backward compatible call
         try:
-            st = self.build_state(x_all, time=time)
+            st = self.build_state(x_all, time=time, required=required)
         except TypeError:
-            st = self.build_state(x_all)
+            try:
+                st = self.build_state(x_all, time=time)
+            except TypeError:
+                st = self.build_state(x_all)
 
         if not isinstance(st, dict):
-            raise TypeError("StateCache.build_state must return a dict (state_dict).")
+            raise TypeError("StateCache.build_state must return a dict.")
 
-        self.state = st
+        self.state = st  # 置換（安全）
         self._rev_last = rev
         self._time_rev_last = time_rev
-        self._time_order = None
+        self._req_sig_last = req_sig
         self._memo.clear()
 
-    def time_order(self) -> int:
-        if self._time_order is None:
-            self._time_order = int(count_dict_time_order(self.state))
-        return self._time_order
+    def get(self, key: StateKey) -> Any:
+        if key in self._memo:
+            return self._memo[key]
+        if key not in self.state:
+            raise KeyError(f"StateCache: missing key: {key}")
+        return self.state[key]
+
+    def set_memo(self, key: StateKey, value: Any) -> None:
+        self._memo[key] = value
