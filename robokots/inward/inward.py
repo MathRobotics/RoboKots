@@ -4,50 +4,43 @@
 # inward computation module from state to variables
 
 import numpy as np
-from typing import List
+from typing import List, Sequence, Tuple
 from robokots.core.robot import RobotStruct
 from robokots.core.state import StateType
 from robokots.inward import term
-from robokots.outward.values import update_outward_state
 from robokots.outward.state import get_value, build_kinematics_state
 from robokots.outward.diff.outward_total_gradient import outward_kinematics_jacobian
 
 def inverse_kinematics(robot : RobotStruct, target_type : List[StateType], target_value : List[np.ndarray],
                     q_init : np.ndarray, opt_func : None) -> np.ndarray:
-    class TargetQuantity(term.Quantity):
-        """Quantity that returns target error and block Jacobian."""
-        out_dim = 3
-        state_dict_ = {}
+    class TargetExpr:
+        """Expr that returns target error and block Jacobian."""
+        name: str
+        vars: Sequence[term.Variable]
 
         def __init__(self, motion_var: term.Variable) -> None:
-            self._motion_var = motion_var
-            self.vars = [self._motion_var]
+            self.name = "target_error"
+            self.vars = [motion_var]
 
-        def _update_state(self, q: term.Variable) -> None:
-            """Update the RoboKots model with a new joint configuration."""
-            self.state_dict_ = build_kinematics_state(robot, q, order=1)
+        def deps(self):
+            return []
 
-        def value(self) -> np.ndarray:
-            q = np.asarray(self._motion_var.x, dtype=float).reshape(-1)
-            self._update_state(q)
-            value = [get_value(robot, self.state_dict_, t) - v for t, v in zip(target_type, target_value)]
-            return np.concatenate(value)
-
-        def jacobian_blocks(self) -> list[np.ndarray]:
-            q = np.asarray(self._motion_var.x, dtype=float).reshape(-1)
-            self._update_state(q)
-            return outward_kinematics_jacobian(robot, self.state_dict_, target_type, list_output=True)
+        def eval(self, ctx: term.EvalContext) -> Tuple[np.ndarray, Sequence[np.ndarray]]:
+            q = np.asarray(self.vars[0].x, dtype=float).reshape(-1)
+            state_dict = build_kinematics_state(robot, q, order=1)
+            value = [get_value(robot, state_dict, t) - v for t, v in zip(target_type, target_value)]
+            r = np.concatenate(value)
+            J = outward_kinematics_jacobian(robot, state_dict, target_type, list_output=False)
+            return r, [J]
 
     joint_var = term.Variable(name="q", x=np.zeros(robot.dof, dtype=float))
     variables = term.VariablePack([joint_var])
 
-    target_quantity_raw = TargetQuantity(joint_var)
-    target_quantity = term.CachedQuantity(target_quantity_raw, variables)
-
-    target_residual = term.VectorSquaredSumResidual("target_error", target_quantity)
+    target_expr = TargetExpr(joint_var)
     target_cost = term.L2Cost()
 
-    problem = term.Problem(variables=variables, terms=[(target_residual, target_cost)])
+    problem = term.Problem(variables=variables, terms=[(target_expr, target_cost)])
+    ctx = term.EvalContext(pack=variables)
 
     def _set_state_from_vector(x: np.ndarray) -> None:
         x = np.asarray(x, dtype=float).reshape(-1)
@@ -59,7 +52,7 @@ def inverse_kinematics(robot : RobotStruct, target_type : List[StateType], targe
         """Residual callable"""
 
         problem.set_from_vector(x)
-        r_all, _ = problem.linearize()
+        r_all, _ = problem.linearize(ctx=ctx)
         return r_all
 
 
@@ -67,7 +60,7 @@ def inverse_kinematics(robot : RobotStruct, target_type : List[StateType], targe
         """Jacobian callable"""
 
         problem.set_from_vector(x)
-        _, J_all = problem.linearize()
+        _, J_all = problem.linearize(ctx=ctx)
         return J_all
 
     if opt_func is None:

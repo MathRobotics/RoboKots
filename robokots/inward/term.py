@@ -285,7 +285,22 @@ class Problem:
         self.variables.revision += 1
         self._last_set_x = x.copy()
 
-    def linearize(self, ctx: EvalContext) -> Tuple[Array, Array]:
+    def linearize(
+        self,
+        ctx: EvalContext | None = None,
+        *,
+        time: Any = None,
+        required: Any = None,
+    ) -> Tuple[Array, Array]:
+        """
+        Build stacked residual and Jacobian.
+
+        ctx: EvalContext for Expr evaluation (optional).
+        time/required: accepted for API compatibility; currently unused.
+        """
+        if ctx is None:
+            ctx = EvalContext(pack=self.variables)
+
         rev = int(self.variables.revision)
         ctx_rev = int(getattr(ctx, "revision", 0))
 
@@ -331,6 +346,12 @@ class Problem:
         self._last_J = J_all
         return r_all, J_all
 
-    def cost_value(self, ctx: EvalContext) -> float:
-        r_all, _ = self.linearize(ctx)
+    def cost_value(
+        self,
+        ctx: EvalContext | None = None,
+        *,
+        time: Any = None,
+        required: Any = None,
+    ) -> float:
+        r_all, _ = self.linearize(ctx=ctx, time=time, required=required)
         return float(r_all @ r_all)
