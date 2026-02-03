@@ -86,7 +86,7 @@ class StateCache:
         if not isinstance(st, dict):
             raise TypeError("StateCache.build_state must return a dict.")
 
-        self.state = st  # 置換（安全）
+        self.state = st  # Replace the state map atomically for safety.
         self._rev_last = rev
         self._time_rev_last = time_rev
         self._req_sig_last = req_sig
