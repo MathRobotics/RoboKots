@@ -14,14 +14,28 @@
   "terms": [
     {
       "expr": {
-        "type": "link_position_error",
-        "params": {
-          "link": "arm2",
-          "target": [2.2, 0.3, 0.0],
-          "name": "ee_pos_error"
+        "type": "sub",
+        "name": "ee_pos_error",
+        "a": {
+          "type": "get_state",
+          "key": {
+            "owner_type": "link",
+            "owner_name": "arm2",
+            "dtype": "frame",
+            "field": "pos"
+          },
+          "jac": {
+            "var": "q",
+            "field": "pos_J_q"
+          }
+        },
+        "b": {
+          "type": "constant",
+          "value": [2.2, 0.3, 0.0],
+          "vars": ["q"]
         }
       },
-      "cost": { "type": "l2", "params": {} }
+      "cost": { "type": "l2" }
     }
   ]
 }

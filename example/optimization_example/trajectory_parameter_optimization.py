@@ -9,8 +9,7 @@ least-squares system and perform Gauss-Newton iterations.
 """
 import numpy as np
 
-from robokots.inward.problem import Problem
-from robokots.inward.term import L2Cost, Variable, VariablePack, VectorSquaredSumResidual
+from robokots.inward import term
 from robokots.inward.opt import solve_gauss_newton
 
 
@@ -31,10 +30,10 @@ def _polynomial_basis(times: np.ndarray, order: int) -> np.ndarray:
     return np.power(times[:, None], powers[None, :])
 
 
-class PolynomialTrajectoryQuantity:
-    """Quantity that measures trajectory tracking error for a polynomial."""
+class PolynomialTrajectoryExpr:
+    """Expr that measures trajectory tracking error for a polynomial."""
 
-    def __init__(self, times: np.ndarray, target: np.ndarray, coeffs: Variable) -> None:
+    def __init__(self, times: np.ndarray, target: np.ndarray, coeffs: term.Variable) -> None:
         self.name = "polynomial_trajectory"
         self.vars = [coeffs]
 
@@ -47,14 +46,14 @@ class PolynomialTrajectoryQuantity:
         self.out_dim = int(self._times.size)
         self._coeffs = coeffs
 
-    def value(self) -> np.ndarray:
+    def deps(self):
+        return []
+
+    def eval(self, ctx: term.EvalContext):
         coeff_vec = np.asarray(self._coeffs.x, dtype=float).reshape(-1)
         predicted = self._basis @ coeff_vec
-        return predicted - self._target
-
-    def jacobian_blocks(self):
-        # Only one variable; the Jacobian is the basis matrix itself.
-        return [self._basis]
+        r = predicted - self._target
+        return r, [self._basis]
 
 
 def main() -> None:
@@ -63,13 +62,11 @@ def main() -> None:
     y_target = np.sin(1.5 * times) + 0.2 * times  # shape (25,)
 
     # Cubic coefficients are the optimization variables.
-    coeffs = Variable(name="poly_coeffs", x=np.zeros(4, dtype=float))
-    variables = VariablePack([coeffs])
+    coeffs = term.Variable(name="poly_coeffs", x=np.zeros(4, dtype=float))
+    variables = term.VariablePack([coeffs])
 
-    residual = VectorSquaredSumResidual(
-        "trajectory_tracking", PolynomialTrajectoryQuantity(times, y_target, coeffs)
-    )
-    problem = Problem(variables=variables, terms=[(residual, L2Cost())])
+    expr = PolynomialTrajectoryExpr(times, y_target, coeffs)
+    problem = term.Problem(variables=variables, terms=[(expr, term.L2Cost())])
 
     print("Initial coefficients:", variables.get())
     print("Initial cost:", problem.cost_value())

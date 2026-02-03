@@ -13,35 +13,35 @@ All heavy logic lives in the library:
 """
 from __future__ import annotations
 
-import json
+from pathlib import Path
 
-from robokots.kots import Kots
-from robokots.outward.backends import KotsBackend
 from robokots.inward.opt import solve_gauss_newton
-from robokots.inward.expr.json_builder import build_problem_from_spec
+from robokots.inward.builder import build_problem_from_project_file
+from robokots.inward.builder import prepare_problem_for_solve
 
 def main() -> None:
 
-    kots = Kots.from_json_file("../model/2dof_arm.json", order=1)
-    backend = KotsBackend(kots)
-
-    with open("task.json", "r", encoding="utf-8") as f:
-        spec = json.load(f)
-
-    # ctx should contain at least: pack, cache, time
-    problem, ctx = build_problem_from_spec(spec, backend=backend)
+    project_path = Path(__file__).with_name("project_task_file.json")
+    problem, ctx, solver = build_problem_from_project_file(project_path)
 
     print("Initial q:", ctx.pack.get())
 
-    # If your solver already updates cache internally, you can remove these two lines
-    ctx.cache.update_if_needed(ctx.pack, time=getattr(ctx, "time", None), required=None)
-    print("Initial cost:", problem.cost_value(ctx=ctx, time=getattr(ctx, "time", None), required=None))
+    required = prepare_problem_for_solve(problem, ctx)
+    print("Initial cost:", problem.cost_value(ctx=ctx, time=getattr(ctx, "time", None), required=required))
 
-    solve_gauss_newton(problem, ctx.pack, max_iters=20, ctx=ctx)
+    solve_gauss_newton(
+        problem,
+        ctx.pack,
+        max_iters=solver.max_iters,
+        tol_r=solver.tol_r,
+        tol_dx=solver.tol_dx,
+        ctx=ctx,
+        required=required,
+    )
 
-    ctx.cache.update_if_needed(ctx.pack, time=getattr(ctx, "time", None), required=None)
+    prepare_problem_for_solve(problem, ctx, required=required)
     print("Final q:", ctx.pack.get())
-    print("Final cost:", problem.cost_value(ctx=ctx, time=getattr(ctx, "time", None), required=None))
+    print("Final cost:", problem.cost_value(ctx=ctx, time=getattr(ctx, "time", None), required=required))
 
 
 if __name__ == "__main__":
