@@ -1,8 +1,7 @@
 import numpy as np
 from typing import Any, Optional, Callable
 
-from robokots.inward.problem import Problem
-from robokots.inward.term import VariablePack
+from robokots.inward.term import VariablePack, Problem
 
 
 def solve_gauss_newton(

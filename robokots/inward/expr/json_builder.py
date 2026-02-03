@@ -22,6 +22,7 @@ from robokots.inward.expr.nodes import (
     HingeExpr,
 )
 from robokots.core.state_cache import OwnerKey, StateKey, StateCache
+from robokots.core.state import StateType
 from robokots.core.time_grid import TimeGrid
 
 Array = np.ndarray
@@ -190,6 +191,39 @@ def parse_state_key(spec: dict) -> StateKey:
 # ============================================================
 # Expr builders
 # ============================================================
+def _inject_k(spec: Any, k: int) -> Any:
+    """
+    Recursively set key.k for any dict that has a "key" field.
+    Used to expand time-indexed expressions without explicitly writing k.
+    """
+    if isinstance(spec, dict):
+        out = {}
+        for key, val in spec.items():
+            if key == "key" and isinstance(val, dict):
+                key_dict = dict(val)
+                key_dict["k"] = k
+                out[key] = key_dict
+            else:
+                out[key] = _inject_k(val, k)
+        return out
+    if isinstance(spec, list):
+        return [_inject_k(v, k) for v in spec]
+    return spec
+
+
+def _stack_ks(ctx: BuilderContext, spec: dict) -> list[int]:
+    if "range" in spec:
+        r = spec["range"]
+        k0, k1 = int(r["k0"]), int(r["k1"])
+        return list(range(k0, k1 + 1))
+
+    time = getattr(ctx, "time", None)
+    if time is None or float(getattr(time, "dt", 0.0)) == 0.0:
+        return [0]
+
+    return list(time.ks())
+
+
 def build_expr(ctx: BuilderContext, spec: dict):
     # Normalize legacy spec keys for compatibility
     if "x" in spec and "base" not in spec and spec.get("type") == "hinge":
@@ -221,9 +255,19 @@ def register_default_expr_builders(registry: Registry) -> None:
     # constant: {"type":"constant","value":[...],"vars":["q"]?}
     def b_constant(ctx: BuilderContext, spec: dict):
         val = np.asarray(spec["value"], dtype=float).reshape(-1)
-        # constant doesn't depend on vars, but Expr interface might still want vars list.
-        # Here we set vars=[] by default.
-        return ConstantExpr(name=spec.get("name", "const"), value=val)
+        var_names = spec.get("vars", None)
+        if var_names is None and "var" in spec:
+            var_names = [spec["var"]]
+
+        vars_list = []
+        if var_names is not None:
+            for name in var_names:
+                v = next((v for v in ctx.pack.vars if v.name == name), None)
+                if v is None:
+                    raise ValueError(f"constant: unknown var '{name}'")
+                vars_list.append(v)
+
+        return ConstantExpr(name=spec.get("name", "const"), value=val, vars=vars_list)
 
     # get_state: {"type":"get_state","key":{...}, "shape":[m]?}
     def b_get_state(ctx: BuilderContext, spec: dict):
@@ -260,8 +304,17 @@ def register_default_expr_builders(registry: Registry) -> None:
         return SubExpr(name=spec.get("name", "sub"), a=a, b=b)
 
     # stack: {"type":"stack","parts":[{expr},{expr},...]}  (legacy: items)
+    # or:    {"type":"stack","inner":{expr}}  (auto-expand over time if available)
     def b_stack(ctx: BuilderContext, spec: dict):
-        parts = [build_expr(ctx, s) for s in spec["parts"]]
+        if "parts" in spec:
+            part_specs = spec["parts"]
+        elif "inner" in spec:
+            ks = _stack_ks(ctx, spec)
+            part_specs = [_inject_k(spec["inner"], k) for k in ks]
+        else:
+            raise ValueError("stack spec requires 'parts' or 'inner'.")
+
+        parts = [build_expr(ctx, s) for s in part_specs]
         return StackExpr(name=spec.get("name", "stack"), parts=parts)
 
     # hinge: {"type":"hinge","base":{expr}}  (inequality residual; legacy: x)
@@ -298,7 +351,11 @@ def build_problem(
     terms = []
     for t in spec.get("terms", []):
         expr_spec = t["expr"]
-        expr = build_expr(ctx, expr_spec)
+        if isinstance(expr_spec, list):
+            parts = [build_expr(ctx, s) for s in expr_spec]
+            expr = StackExpr(name=t.get("name", "stack"), parts=parts)
+        else:
+            expr = build_expr(ctx, expr_spec)
 
         cost_spec = t.get("cost", {"type": "l2"})
         cost = build_cost(registry, cost_spec)
@@ -311,7 +368,7 @@ def build_problem_from_spec(
     spec: dict,
     *,
     backend,  
-    registry: Registry,
+    registry: Registry | None = None,
     model: Any = None,
 ) -> tuple[Problem, EvalContext]:
     """
@@ -327,10 +384,9 @@ def build_problem_from_spec(
     """
 
     # --- registry ---
-    registry = Registry()
-    # ここで outward 側の register を呼ぶ想定
-    # e.g. register_default_exprs(registry)
-    # e.g. register_default_costs(registry)
+    if registry is None:
+        registry = Registry()
+        register_default_expr_builders(registry)
 
     # --- time grid ---
     time_spec = spec.get("time", None)
