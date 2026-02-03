@@ -30,7 +30,7 @@ def build_get_state(ctx, spec):
     jac_field = spec["jac"]["field"]
     key_jac = StateKey(k=k, owner=owner, dtype=dtype, field=jac_field)
 
-    return GetStateExpr(name=spec.get("name","get_state"), vars=[q], key_value=key_value, key_jac=key_jac)
+    return GetStateExpr(name=spec.get("name","get_state"), vars=[q], key_value=key_value, key_jac_q=key_jac)
 
 def build_sub(ctx, spec):
     a = ctx.registry.expr[spec["a"]["type"]](ctx, spec["a"])
@@ -50,5 +50,8 @@ def build_stack(ctx, spec):
     return StackExpr(name=spec.get("name","stack"), parts=parts)
 
 def build_hinge(ctx, spec):
-    base = ctx.registry.expr[spec["base"]["type"]](ctx, spec["base"])
+    base_spec = spec.get("base", spec.get("x"))
+    if base_spec is None:
+        raise ValueError("hinge spec requires 'base' (or legacy 'x').")
+    base = ctx.registry.expr[base_spec["type"]](ctx, base_spec)
     return HingeExpr(name=spec.get("name","hinge"), base=base)
