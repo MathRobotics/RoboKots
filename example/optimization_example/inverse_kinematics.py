@@ -2,7 +2,7 @@
 Inverse kinematics least-squares optimization demo (JSON task spec).
 
 This example is intentionally thin:
-- task.json is parsed
+- project_ik_task_file.json is parsed (which references task_ik.json)
 - library builder creates (problem, ctx)
 - solver runs GN
 
@@ -21,7 +21,7 @@ from robokots.inward.builder import prepare_problem_for_solve
 
 def main() -> None:
 
-    project_path = Path(__file__).with_name("project_task_file.json")
+    project_path = Path(__file__).with_name("project_ik_task_file.json")
     problem, ctx, solver = build_problem_from_project_file(project_path)
 
     print("Initial q:", ctx.pack.get())

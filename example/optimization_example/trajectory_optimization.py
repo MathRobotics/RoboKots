@@ -1,7 +1,7 @@
-"""Trajectory optimization example driven by project.json.
+"""Trajectory optimization example driven by project_trajectory.json.
 
 This example is intentionally thin:
-- project.json is parsed
+- project_trajectory.json is parsed
 - library builder creates (problem, ctx)
 - solver runs Gauss-Newton
 
