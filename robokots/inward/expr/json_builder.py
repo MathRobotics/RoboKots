@@ -1,5 +1,4 @@
 from __future__ import annotations
-from dataclasses import dataclass
 from typing import Any, Iterable, Optional, List, Callable
 import numpy as np
 
@@ -13,6 +12,7 @@ from robokots.inward.term import (
     HuberCost,
     EvalContext,
 )
+from robokots.inward.context import BuilderContext
 from robokots.inward.expr.registry import Registry
 from robokots.inward.expr.nodes import (
     ConstantExpr,
@@ -84,15 +84,6 @@ def make_build_state_kots(kots: Kots) -> Callable[..., dict]:
         return out
 
     return build_state
-
-
-@dataclass
-class BuilderContext:
-    pack: VariablePack
-    state_cache: StateCache
-    time: TimeGrid
-    registry: Registry
-    model: Any = None  # optional
 
 
 # ============================================================
@@ -200,6 +191,14 @@ def parse_state_key(spec: dict) -> StateKey:
 # Expr builders
 # ============================================================
 def build_expr(ctx: BuilderContext, spec: dict):
+    # Normalize legacy spec keys for compatibility
+    if "x" in spec and "base" not in spec and spec.get("type") == "hinge":
+        spec = dict(spec)
+        spec["base"] = spec.pop("x")
+    if "items" in spec and "parts" not in spec and spec.get("type") == "stack":
+        spec = dict(spec)
+        spec["parts"] = spec.pop("items")
+
     typ = spec["type"]
     fn = ctx.registry.expr.get(typ, None)
     if fn is None:
@@ -228,10 +227,31 @@ def register_default_expr_builders(registry: Registry) -> None:
 
     # get_state: {"type":"get_state","key":{...}, "shape":[m]?}
     def b_get_state(ctx: BuilderContext, spec: dict):
-        key = parse_state_key(spec["key"])
-        # GetStateExpr should read ctx.state_cache.get(key)
-        # and optionally provide Jacobian blocks from cache too (depending on your node design).
-        return GetStateExpr(name=spec.get("name", f"get_{key.field}"), key=key)
+        key_value = parse_state_key(spec["key"])
+
+        jac_spec = spec.get("jac", None)
+        if jac_spec is None:
+            raise ValueError("get_state requires 'jac' spec with field/var.")
+
+        var_name = jac_spec.get("var", "q")
+        q = next(v for v in ctx.pack.vars if v.name == var_name)
+
+        jac_field = jac_spec["field"]
+        key_jac_q = StateKey(
+            k=key_value.k,
+            owner=key_value.owner,
+            dtype=key_value.dtype,
+            field=jac_field,
+            frame=key_value.frame,
+            rel_frame=key_value.rel_frame,
+        )
+
+        return GetStateExpr(
+            name=spec.get("name", f"get_{key_value.field}"),
+            vars=[q],
+            key_value=key_value,
+            key_jac_q=key_jac_q,
+        )
 
     # sub: {"type":"sub","a":{expr}, "b":{expr}}
     def b_sub(ctx: BuilderContext, spec: dict):
@@ -239,15 +259,15 @@ def register_default_expr_builders(registry: Registry) -> None:
         b = build_expr(ctx, spec["b"])
         return SubExpr(name=spec.get("name", "sub"), a=a, b=b)
 
-    # stack: {"type":"stack","items":[{expr},{expr},...]}
+    # stack: {"type":"stack","parts":[{expr},{expr},...]}  (legacy: items)
     def b_stack(ctx: BuilderContext, spec: dict):
-        items = [build_expr(ctx, s) for s in spec["items"]]
-        return StackExpr(name=spec.get("name", "stack"), items=items)
+        parts = [build_expr(ctx, s) for s in spec["parts"]]
+        return StackExpr(name=spec.get("name", "stack"), parts=parts)
 
-    # hinge: {"type":"hinge","x":{expr}}  (inequality residual)
+    # hinge: {"type":"hinge","base":{expr}}  (inequality residual; legacy: x)
     def b_hinge(ctx: BuilderContext, spec: dict):
-        x = build_expr(ctx, spec["x"])
-        return HingeExpr(name=spec.get("name", "hinge"), x=x)
+        base = build_expr(ctx, spec["base"])
+        return HingeExpr(name=spec.get("name", "hinge"), base=base)
 
     registry.expr["constant"] = b_constant
     registry.expr["get_state"] = b_get_state

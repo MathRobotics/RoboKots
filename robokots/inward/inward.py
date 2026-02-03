@@ -42,12 +42,6 @@ def inverse_kinematics(robot : RobotStruct, target_type : List[StateType], targe
     problem = term.Problem(variables=variables, terms=[(target_expr, target_cost)])
     ctx = term.EvalContext(pack=variables)
 
-    def _set_state_from_vector(x: np.ndarray) -> None:
-        x = np.asarray(x, dtype=float).reshape(-1)
-        if x.size != variables.n_total:
-            raise ValueError(f"Expected {variables.n_total} decision variables, got {x.size}")
-        variables.vars[0].x = x
-
     def residual(x: np.ndarray) -> np.ndarray:
         """Residual callable"""
 
