@@ -10,19 +10,19 @@ from robokots.inward.term import Expr
 @dataclass
 class GetStateExpr:
     name: str
-    vars: Sequence[Variable]          # 例: [q_var]
-    key_value: StateKey               # 値のキー
-    key_jac_q: StateKey               # ヤコビアンのキー（qに対する）
-    # 将来 vars が増えるなら key_jac_map を持てばよい
+    vars: Sequence[Variable]          # Example: [q_var]
+    key_value: StateKey               # State key for the value.
+    key_jac_q: StateKey               # State key for the Jacobian (w.r.t. q).
+    # If vars grows in the future, introduce a key_jac_map for each variable.
 
     def deps(self):
         return [self.key_value, self.key_jac_q]
 
     def eval(self, ctx: EvalContext):
-        sc = ctx.state  # StateCache想定
+        sc = ctx.state  # Expected to be a StateCache.
         y = np.asarray(sc.get(self.key_value), dtype=float).reshape(-1)
         J = np.asarray(sc.get(self.key_jac_q), dtype=float)
-        # ブロック整合（vars が 1 個の最小ケース）
+        # Block alignment for the minimal single-variable case.
         if J.shape != (y.size, self.vars[0].dim()):
             raise ValueError(f"{self.name}: J shape mismatch: {J.shape} vs {(y.size, self.vars[0].dim())}")
         return y, [J]

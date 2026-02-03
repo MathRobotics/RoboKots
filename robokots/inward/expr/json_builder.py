@@ -13,6 +13,7 @@ from robokots.inward.term import (
     EvalContext,
 )
 from robokots.inward.context import BuilderContext
+from robokots.inward.trajectory import build_trajectory, Trajectory
 from robokots.inward.expr.registry import Registry
 from robokots.inward.expr.nodes import (
     ConstantExpr,
@@ -28,13 +29,16 @@ from robokots.core.time_grid import TimeGrid
 Array = np.ndarray
 
 
-def make_build_state_kots(kots: Kots) -> Callable[..., dict]:
+def make_build_state_kots(kots: Kots, *, trajectory: Optional[dict] = None) -> Callable[..., dict]:
     """
     build_state(x_all, time=None, required=None) -> dict[StateKey, Any]
 
-    required に含まれる StateKey だけ計算する（無ければ空dict/または必要最小を計算）。
-    まずは dtype="frame", field={"pos", "pos_J_q"} のみ対応（IKの最小セット）。
+    Compute only the StateKeys listed in `required` (if None, return an empty dict).
+    For now, this supports dtype="frame" with fields {"pos", "pos_J_q"} as the minimal IK set.
     """
+
+    traj_spec = trajectory or None
+    jac_fields = {"pos_J_q", "pos_J_traj", "pos_J_p"}
 
     def build_state(
         x_all: Array,
@@ -42,45 +46,113 @@ def make_build_state_kots(kots: Kots) -> Callable[..., dict]:
         time: Any = None,
         required: Optional[Iterable[StateKey]] = None,
     ) -> dict:
-        q = np.asarray(x_all, dtype=float).reshape(-1)
-        kots.import_motions(q)
-        kots.kinematics()
+        x_all = np.asarray(x_all, dtype=float).reshape(-1)
+        dof = int(kots.dof())
+        time_grid = time
+        num_steps = int(getattr(time_grid, "N", 0)) if time_grid is not None else 0
+        total_steps = num_steps + 1
+        traj: Optional[Trajectory] = None
+
+        if traj_spec is not None:
+            traj = build_trajectory(traj_spec, dof=dof, time=time_grid)
+
+        def infer_layout() -> tuple[str, int]:
+            if time_grid is None or float(getattr(time_grid, "dt", 0.0)) == 0.0:
+                return "single", dof
+
+            if x_all.size == dof:
+                return "single", dof
+
+            if x_all.size == dof * total_steps:
+                return "grid", dof * total_steps
+
+            # Placeholder for future spline support.
+            # When trajectory spec is added, use it to decode x_all.
+            raise ValueError(
+                "build_state: trajectory layout mismatch. "
+                f"Expected size {dof} (single-step) or {dof * total_steps} "
+                f"(grid: (N+1)*dof), got {x_all.size}."
+            )
+
+        if traj is not None:
+            total_dim = traj.num_params()
+            if x_all.size != total_dim:
+                raise ValueError(
+                    "build_state: trajectory parameter size mismatch. "
+                    f"Expected {total_dim}, got {x_all.size}."
+                )
+            layout = "traj"
+        else:
+            layout, total_dim = infer_layout()
+
+        def q_at(k: int) -> Array:
+            if layout == "traj":
+                return traj.q_at(x_all, k)
+            if layout == "single":
+                return x_all
+            if k < 0 or k >= total_steps:
+                raise ValueError(f"build_state: k={k} is out of range [0, {total_steps-1}]")
+            start = k * dof
+            return x_all[start : start + dof]
+
+        def embed_jac(J: Array, k: int) -> Array:
+            if layout == "traj":
+                dqdp = traj.dqdp_at(x_all, k)
+                return J @ dqdp
+            if layout == "single":
+                return J
+            full = np.zeros((J.shape[0], total_dim), dtype=float)
+            start = k * dof
+            full[:, start : start + dof] = J
+            return full
 
         out: dict[StateKey, Any] = {}
 
         if required is None:
-            # required が無い場合は「何も返さない」だと GetStateExpr が困るので、
-            # 最小限の互換のために、ここは空にせず「呼ばれる側が required を必ず渡す」運用を推奨。
-            # ただし安全策として、何もできないので out を返す。
+            # When `required` is missing, returning an empty dict keeps behavior explicit.
+            # Callers should pass `required` whenever GetStateExpr is used.
             return out
 
-        # required から link ごとに必要項目を整理
-        need_by_link: dict[str, set[str]] = {}
+        # Group required keys by time index and link name.
+        need_by_k_link: dict[int, dict[str, list[StateKey]]] = {}
         for key in required:
             if key.owner.owner_type != "link":
                 continue
             if key.dtype != "frame":
                 continue
             link = key.owner.owner_name
-            need_by_link.setdefault(link, set()).add(key.field)
+            need_by_k_link.setdefault(int(key.k), {}).setdefault(link, []).append(key)
 
-        for link, fields in need_by_link.items():
-            # pos が欲しい or pos_J_q が欲しいなら StateType("link", link, "pos") でまとめて計算
-            if ("pos" in fields) or ("pos_J_q" in fields):
+        for k, link_map in need_by_k_link.items():
+            q = q_at(k)
+            kots.import_motions(q)
+            kots.kinematics()
+
+            for link, keys in link_map.items():
+                fields = {key.field for key in keys}
+                need_pos = "pos" in fields
+                need_jac = any(field in jac_fields for field in fields)
+
+                if not (need_pos or need_jac):
+                    continue
+
+                # If position or its Jacobian is requested, compute StateType("link", link, "pos") once.
                 st = StateType("link", link, "pos")
                 pos = np.asarray(kots.state_info(st), dtype=float).reshape(-1)
-                J = np.asarray(kots.jacobian(st), dtype=float)
+                J = np.asarray(kots.jacobian(st), dtype=float) if need_jac else None
 
                 owner = OwnerKey(owner_type="link", owner_name=link)
 
-                # k は IK では 0 固定（軌道になったら k を回す）
-                key_pos = StateKey(k=0, owner=owner, dtype="frame", field="pos")
-                key_J   = StateKey(k=0, owner=owner, dtype="frame", field="pos_J_q")
-
-                if "pos" in fields:
-                    out[key_pos] = pos
-                if "pos_J_q" in fields:
-                    out[key_J] = J
+                for key in keys:
+                    if key.field == "pos":
+                        out[key] = pos
+                        continue
+                    if key.field in jac_fields:
+                        if J is None:
+                            raise ValueError("build_state: Jacobian requested but not computed.")
+                        out[key] = embed_jac(J, k)
+                        continue
+                    raise ValueError(f"build_state: unsupported field '{key.field}'")
 
         return out
 
@@ -468,5 +540,5 @@ def linearize_with_context(problem: Problem, ctx: EvalContext, *, required: Opti
       - call problem.linearize(ctx=..., time=..., required=...)
     """
     req = prepare_problem_for_solve(problem, ctx, required=required)
-    # Problem.linearize should accept these kwargs in your Expr版実装
+    # Problem.linearize should accept these kwargs in your Expr implementation.
     return problem.linearize(ctx=ctx, time=ctx.time, required=req)

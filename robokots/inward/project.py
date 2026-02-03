@@ -160,7 +160,8 @@ def build_problem_from_project(project: dict, *, base_dir: str | None = None):
     order = int(model.get("order", 1))
 
     kots = Kots.from_json_file(model_path, order=order)
-    backend = SimpleNamespace(build_state=json_builder.make_build_state_kots(kots))
+    trajectory = project.get("trajectory", None)
+    backend = SimpleNamespace(build_state=json_builder.make_build_state_kots(kots, trajectory=trajectory))
 
     spec = project_to_spec(project)
     problem, ctx = json_builder.build_problem_from_spec(spec, backend=backend)
