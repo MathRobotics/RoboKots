@@ -40,5 +40,6 @@ __all__ = [
     "state",
     "term",
     "values",
+    "backends",
     *_LAZY_API.keys(),
 ]

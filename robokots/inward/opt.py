@@ -11,7 +11,6 @@ def solve_gauss_newton(
     max_iters: int = 20,
     *,
     ctx: Any = None,
-    time: Any = None,
     required: Any = None,
     tol_r: float = 1e-10,
     tol_dx: float = 1e-12,
@@ -31,11 +30,11 @@ def solve_gauss_newton(
         # 1) Update state cache once per evaluation point (if available)
         if ctx is not None and hasattr(ctx, "cache"):
             # ctx.cache is StateCache-like; update_if_needed(pack, time, required)
-            ctx.cache.update_if_needed(variables, time=time, required=required)
+            ctx.cache.update_if_needed(variables, time=ctx.time, required=required)
 
         # 2) Linearize
         try:
-            r_all, J_all = problem.linearize(ctx=ctx, time=time, required=required)
+            r_all, J_all = problem.linearize(ctx=ctx, time=ctx.time, required=required)
         except TypeError:
             # Backward compat if Problem.linearize() has no kwargs yet
             r_all, J_all = problem.linearize()

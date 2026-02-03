@@ -21,3 +21,32 @@ class TimeGrid:
             self.dt = float(dt); changed = True
         if changed:
             self.revision += 1
+
+
+    @classmethod
+    def single_time(cls) -> "TimeGrid":
+        return cls(N=1, dt=0.0, revision=0)
+
+    @classmethod
+    def from_spec(cls, spec: dict) -> "TimeGrid":
+        """
+        Build TimeGrid from JSON spec.
+
+        Example:
+        {
+          "time": {
+            "N": 1,
+            "dt": 0.01
+          }
+        }
+        """
+        if spec is None:
+            raise ValueError("TimeGrid spec is required")
+
+        if "N" not in spec or "dt" not in spec:
+            raise ValueError("TimeGrid spec must contain 'N' and 'dt'")
+
+        return cls(
+            N=int(spec["N"]),
+            dt=float(spec["dt"]),
+        )

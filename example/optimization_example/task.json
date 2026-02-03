@@ -4,7 +4,10 @@
     "path": "../model/2dof_arm.json",
     "order": 1
   },
-
+  "time": {
+    "N": 1,
+    "dt": 0.01
+  },
   "variables": [
     { "name": "q", "init": [0.0, 0.0] }
   ],

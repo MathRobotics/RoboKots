@@ -28,6 +28,38 @@ class GetStateExpr:
         return y, [J]
 
 @dataclass
+class ConstantExpr:
+    """
+    Constant residual vector.
+
+    - value: constant vector (m,)
+    - vars: usually [] (no decision variables)
+      But you can also pass through a vars list if your pipeline expects
+      all Expr nodes to share the same vars list (less recommended).
+
+    Jacobian blocks are zeros for each variable in `vars`.
+    """
+    name: str
+    value: np.ndarray
+    vars: Sequence[Variable] = ()
+
+    @property
+    def m(self) -> int:
+        return int(np.asarray(self.value).size)
+
+    def deps(self):
+        return []
+
+    def eval(self, ctx: EvalContext):
+        y = np.asarray(self.value, dtype=float).reshape(-1)
+
+        # Zero blocks aligned with `vars`
+        blocks = []
+        for v in self.vars:
+            blocks.append(np.zeros((y.size, v.dim()), dtype=float))
+        return y, blocks
+
+@dataclass
 class SubExpr:
     name: str
     a: Expr
@@ -35,7 +67,6 @@ class SubExpr:
 
     @property
     def vars(self):
-        # ここは「同じvarsを前提」にして簡単化（後でmerge可能）
         return self.a.vars
 
     def deps(self):
@@ -83,6 +114,20 @@ class StackExpr:
     
 @dataclass
 class HingeExpr:
+    """
+    Hinge (ReLU) expression.
+
+    Given a base expression h(x), produces:
+        r_i = max(0, h_i)
+
+    Jacobian:
+        dr_i/dx = dh_i/dx   if h_i > 0
+                  0         otherwise
+
+    Typical use:
+      - inequality constraint: h(x) <= 0
+      - soft barrier / penalty
+    """
     name: str
     base: Expr
 
@@ -90,13 +135,34 @@ class HingeExpr:
     def vars(self):
         return self.base.vars
 
+    @property
+    def m(self) -> int:
+        return self.base.m
+
     def deps(self):
         return self.base.deps()
 
     def eval(self, ctx: EvalContext):
         h, blocks = self.base.eval(ctx)
-        h = np.asarray(h, float).reshape(-1)
-        active = (h > 0.0).astype(float)
+
+        h = np.asarray(h, dtype=float).reshape(-1)
+        m = h.size
+
+        # Active set mask
+        active = (h > 0.0).astype(float)  # (m,)
+
+        # Residual
         r = np.maximum(0.0, h)
-        blocks2 = [active[:, None] * np.asarray(B, float) for B in blocks]
+
+        # Jacobian blocks: inactive rows are zeroed
+        blocks2 = []
+        for B in blocks:
+            B = np.asarray(B, dtype=float)
+            if B.shape[0] != m:
+                raise ValueError(
+                    f"{self.name}: block row mismatch: "
+                    f"h has {m}, block has {B.shape}"
+                )
+            blocks2.append(active[:, None] * B)
+
         return r, blocks2
