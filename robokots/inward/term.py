@@ -259,6 +259,8 @@ class Problem:
 
     _last_revision: int | None = None
     _last_ctx_revision: int | None = None
+    _last_time_revision: int | None = None
+    _last_required_sig: int | None = None
     _last_r: Array | None = None
     _last_J: Array | None = None
 
@@ -303,10 +305,14 @@ class Problem:
 
         rev = int(self.variables.revision)
         ctx_rev = int(getattr(ctx, "revision", 0))
+        time_rev = int(getattr(time, "revision", 0)) if time is not None else 0
+        req_sig = hash(frozenset(required)) if required is not None else 0
 
         if (
             self._last_revision == rev
             and self._last_ctx_revision == ctx_rev
+            and self._last_time_revision == time_rev
+            and self._last_required_sig == req_sig
             and self._last_r is not None
             and self._last_J is not None
         ):
@@ -342,6 +348,8 @@ class Problem:
 
         self._last_revision = rev
         self._last_ctx_revision = ctx_rev
+        self._last_time_revision = time_rev
+        self._last_required_sig = req_sig
         self._last_r = r_all
         self._last_J = J_all
         return r_all, J_all
