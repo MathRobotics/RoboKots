@@ -1,81 +1,48 @@
-"""Trajectory parameter optimization example using polynomial coefficients.
+"""Trajectory optimization example driven by project.json.
 
-This script shows how to treat the parameters of a motion trajectory as
-decision variables. A cubic polynomial trajectory ``p(t)`` is fit to sampled
-measurements ``y_target(t_i)`` by minimizing the squared error between the
-polynomial and the desired trajectory. The coefficients of the polynomial are
-exposed as a ``Variable`` so that the inward/outward utilities can assemble the
-least-squares system and perform Gauss-Newton iterations.
+This example is intentionally thin:
+- project.json is parsed
+- library builder creates (problem, ctx)
+- solver runs Gauss-Newton
+
+All heavy logic lives in the library:
+- StateCache.build_state (Kots backend)
+- Expr nodes (cache readers)
+- JSON -> Problem builder (inward/)
 """
-import numpy as np
+from pathlib import Path
+import sys
 
-from robokots.inward import term
+ROOT_DIR = Path(__file__).resolve().parents[2]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from robokots.inward.builder import build_problem_from_project_file, prepare_problem_for_solve
 from robokots.inward.opt import solve_gauss_newton
 
 
-def _polynomial_basis(times: np.ndarray, order: int) -> np.ndarray:
-    """Return a Vandermonde-style basis matrix up to ``order`` terms.
-
-    Args:
-        times: Sampling times, shape ``(N,)``.
-        order: Number of coefficients (polynomial degree is ``order-1``).
-
-    Returns:
-        Basis matrix with shape ``(N, order)`` where column ``k`` corresponds to
-        ``t**k``.
-    """
-
-    times = np.asarray(times, dtype=float).reshape(-1)
-    powers = np.arange(order, dtype=float)
-    return np.power(times[:, None], powers[None, :])
-
-
-class PolynomialTrajectoryExpr:
-    """Expr that measures trajectory tracking error for a polynomial."""
-
-    def __init__(self, times: np.ndarray, target: np.ndarray, coeffs: term.Variable) -> None:
-        self.name = "polynomial_trajectory"
-        self.vars = [coeffs]
-
-        self._times = np.asarray(times, dtype=float).reshape(-1)
-        self._target = np.asarray(target, dtype=float).reshape(-1)
-        if self._times.shape != self._target.shape:
-            raise ValueError("times and target must have the same shape")
-
-        self._basis = _polynomial_basis(self._times, coeffs.dim())
-        self.out_dim = int(self._times.size)
-        self._coeffs = coeffs
-
-    def deps(self):
-        return []
-
-    def eval(self, ctx: term.EvalContext):
-        coeff_vec = np.asarray(self._coeffs.x, dtype=float).reshape(-1)
-        predicted = self._basis @ coeff_vec
-        r = predicted - self._target
-        return r, [self._basis]
-
-
 def main() -> None:
-    # Create synthetic measurements from a known smooth trajectory.
-    times = np.linspace(0.0, 2.0, num=25)
-    y_target = np.sin(1.5 * times) + 0.2 * times  # shape (25,)
+    project_path = Path(__file__).with_name("project_trajectory.json")
+    problem, ctx, solver = build_problem_from_project_file(project_path)
 
-    # Cubic coefficients are the optimization variables.
-    coeffs = term.Variable(name="poly_coeffs", x=np.zeros(4, dtype=float))
-    variables = term.VariablePack([coeffs])
+    print("Initial traj:", ctx.pack.get())
 
-    expr = PolynomialTrajectoryExpr(times, y_target, coeffs)
-    problem = term.Problem(variables=variables, terms=[(expr, term.L2Cost())])
+    required = prepare_problem_for_solve(problem, ctx)
+    print("Initial cost:", problem.cost_value(ctx=ctx, time=getattr(ctx, "time", None), required=required))
 
-    print("Initial coefficients:", variables.get())
-    print("Initial cost:", problem.cost_value())
+    solve_gauss_newton(
+        problem,
+        ctx.pack,
+        max_iters=solver.max_iters,
+        tol_r=solver.tol_r,
+        tol_dx=solver.tol_dx,
+        ctx=ctx,
+        required=required,
+    )
 
-    solve_gauss_newton(problem, variables, max_iters=15)
-
-    print("\nOptimized coefficients:", variables.get())
-    y_fit = _polynomial_basis(times, coeffs.dim()) @ variables.get()
-    print("Final RMSE:", np.sqrt(np.mean((y_fit - y_target) ** 2)))
+    prepare_problem_for_solve(problem, ctx, required=required)
+    print("Final traj:", ctx.pack.get())
+    print("Final cost:", problem.cost_value(ctx=ctx, time=getattr(ctx, "time", None), required=required))
 
 
 if __name__ == "__main__":
