@@ -37,16 +37,45 @@ def build_sub(ctx, spec):
     b = ctx.registry.expr[spec["b"]["type"]](ctx, spec["b"])
     return SubExpr(name=spec.get("name","sub"), a=a, b=b)
 
+def _inject_k(spec, k: int):
+    if isinstance(spec, dict):
+        out = {}
+        for key, val in spec.items():
+            if key == "key" and isinstance(val, dict):
+                key_dict = dict(val)
+                key_dict["k"] = k
+                out[key] = key_dict
+            else:
+                out[key] = _inject_k(val, k)
+        return out
+    if isinstance(spec, list):
+        return [_inject_k(v, k) for v in spec]
+    return spec
+
+
+def _stack_ks(ctx, spec):
+    if "range" in spec:
+        r = spec["range"]
+        k0, k1 = int(r["k0"]), int(r["k1"])
+        return list(range(k0, k1 + 1))
+
+    time = getattr(ctx, "time", None)
+    if time is None or float(getattr(time, "dt", 0.0)) == 0.0:
+        return [0]
+
+    return list(time.ks())
+
+
 def build_stack(ctx, spec):
-    r = spec["range"]
-    k0, k1 = int(r["k0"]), int(r["k1"])
-    inner = spec["inner"]
-    parts = []
-    for k in range(k0, k1 + 1):
-        inner_k = dict(inner)
-        inner_k.setdefault("key", dict(inner.get("key", {})))
-        inner_k["key"]["k"] = k # override k
-        parts.append(ctx.registry.expr[inner_k["type"]](ctx, inner_k))
+    if "parts" in spec:
+        part_specs = spec["parts"]
+    elif "inner" in spec:
+        ks = _stack_ks(ctx, spec)
+        part_specs = [_inject_k(spec["inner"], k) for k in ks]
+    else:
+        raise ValueError("stack spec requires 'parts' or 'inner'.")
+
+    parts = [ctx.registry.expr[p["type"]](ctx, p) for p in part_specs]
     return StackExpr(name=spec.get("name","stack"), parts=parts)
 
 def build_hinge(ctx, spec):
