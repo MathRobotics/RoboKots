@@ -1,11 +1,10 @@
 {
   "targets":[
     {
-      "data_type": ["frame", "vel", "acc", "jerk", "snap"],
+      "data_type": ["vel", "acc", "jerk","snap","momentum","force","force_diff1","force_diff2","force_diff3"],
       "owner_type": "link",
-      "owner_name": "arm3",
       "frame_name": "world",
-      "frame" : [0,0,0]
+      "owner_name": "arm3"
     }
   ]
 }

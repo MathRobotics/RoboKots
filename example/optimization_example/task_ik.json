@@ -1,0 +1,41 @@
+{
+  "model": {
+    "type": "kots_json",
+    "path": "../model/2dof_arm.json",
+    "order": 1
+  },
+  "time": {
+    "N": 1,
+    "dt": 0.01
+  },
+  "variables": [
+    { "name": "q", "init": [0.0, 0.0] }
+  ],
+  "terms": [
+    {
+      "expr": {
+        "type": "sub",
+        "name": "ee_pos_error",
+        "a": {
+          "type": "get_state",
+          "key": {
+            "owner_type": "link",
+            "owner_name": "arm2",
+            "dtype": "frame",
+            "field": "pos"
+          },
+          "jac": {
+            "var": "q",
+            "field": "pos_J_q"
+          }
+        },
+        "b": {
+          "type": "constant",
+          "value": [2.2, 0.3, 0.0],
+          "vars": ["q"]
+        }
+      },
+      "cost": { "type": "l2" }
+    }
+  ]
+}

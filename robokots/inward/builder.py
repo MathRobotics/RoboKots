@@ -1,20 +1,38 @@
-from robokots.inward.context import BuilderContext
-from robokots.inward.context import Registry
-from robokots.inward.problem import Problem
+"""
+Public builder API: re-export json_builder functions.
+"""
 
-def build_problem(spec: dict, ctx: BuilderContext, reg: Registry) -> Problem:
-    # quantities
-    qmap = {}
-    for qspec in spec.get("quantities", []):
-        qmap[qspec["id"]] = reg.quantity[qspec["type"]](ctx, qspec.get("params", {}))
+from robokots.inward.expr import json_builder
+from robokots.inward import project as project_builder
 
-    # terms
-    terms = []
-    for t in spec.get("terms", []):
-        rspec = t["residual"]
-        cspec = t["cost"]
-        residual = reg.residual[rspec["type"]](ctx, rspec, qmap)
-        cost = reg.cost[cspec["type"]](cspec.get("params", {}))
-        terms.append((residual, cost))
+build_problem = json_builder.build_problem
+build_problem_from_spec = json_builder.build_problem_from_spec
+build_variable = json_builder.build_variable
+build_cost = json_builder.build_cost
+register_default_expr_builders = json_builder.register_default_expr_builders
+build_expr = json_builder.build_expr
+collect_required = json_builder.collect_required
+make_eval_context = json_builder.make_eval_context
+prepare_problem_for_solve = json_builder.prepare_problem_for_solve
+linearize_with_context = json_builder.linearize_with_context
+load_project = project_builder.load_project
+project_to_spec = project_builder.project_to_spec
+build_problem_from_project = project_builder.build_problem_from_project
+build_problem_from_project_file = project_builder.build_problem_from_project_file
 
-    return Problem(variables=ctx.pack, terms=terms)
+__all__ = [
+    "build_problem",
+    "build_problem_from_spec",
+    "build_variable",
+    "build_cost",
+    "register_default_expr_builders",
+    "build_expr",
+    "collect_required",
+    "make_eval_context",
+    "prepare_problem_for_solve",
+    "linearize_with_context",
+    "load_project",
+    "project_to_spec",
+    "build_problem_from_project",
+    "build_problem_from_project_file",
+]

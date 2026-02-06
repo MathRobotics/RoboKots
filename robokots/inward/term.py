@@ -259,6 +259,8 @@ class Problem:
 
     _last_revision: int | None = None
     _last_ctx_revision: int | None = None
+    _last_time_revision: int | None = None
+    _last_required_sig: int | None = None
     _last_r: Array | None = None
     _last_J: Array | None = None
 
@@ -285,13 +287,32 @@ class Problem:
         self.variables.revision += 1
         self._last_set_x = x.copy()
 
-    def linearize(self, ctx: EvalContext) -> Tuple[Array, Array]:
+    def linearize(
+        self,
+        ctx: EvalContext | None = None,
+        *,
+        time: Any = None,
+        required: Any = None,
+    ) -> Tuple[Array, Array]:
+        """
+        Build stacked residual and Jacobian.
+
+        ctx: EvalContext for Expr evaluation (optional).
+        time/required: accepted for API compatibility; currently unused.
+        """
+        if ctx is None:
+            ctx = EvalContext(pack=self.variables)
+
         rev = int(self.variables.revision)
         ctx_rev = int(getattr(ctx, "revision", 0))
+        time_rev = int(getattr(time, "revision", 0)) if time is not None else 0
+        req_sig = hash(frozenset(required)) if required is not None else 0
 
         if (
             self._last_revision == rev
             and self._last_ctx_revision == ctx_rev
+            and self._last_time_revision == time_rev
+            and self._last_required_sig == req_sig
             and self._last_r is not None
             and self._last_J is not None
         ):
@@ -327,10 +348,18 @@ class Problem:
 
         self._last_revision = rev
         self._last_ctx_revision = ctx_rev
+        self._last_time_revision = time_rev
+        self._last_required_sig = req_sig
         self._last_r = r_all
         self._last_J = J_all
         return r_all, J_all
 
-    def cost_value(self, ctx: EvalContext) -> float:
-        r_all, _ = self.linearize(ctx)
+    def cost_value(
+        self,
+        ctx: EvalContext | None = None,
+        *,
+        time: Any = None,
+        required: Any = None,
+    ) -> float:
+        r_all, _ = self.linearize(ctx=ctx, time=time, required=required)
         return float(r_all @ r_all)

@@ -1,30 +1,31 @@
-"""
-Inverse kinematics least-squares optimization demo (JSON task spec).
+"""Trajectory optimization example driven by project_trajectory.json.
 
 This example is intentionally thin:
-- project_ik_task_file.json is parsed (which references task_ik.json)
+- project_trajectory.json is parsed
 - library builder creates (problem, ctx)
-- solver runs GN
+- solver runs Gauss-Newton
 
 All heavy logic lives in the library:
-- StateCache.build_state (Kots/Pinocchio backend) in outward/
-- Expr nodes in outward/ (cache readers)
-- JSON -> Problem builder in inward/
+- StateCache.build_state (Kots backend)
+- Expr nodes (cache readers)
+- JSON -> Problem builder (inward/)
 """
-from __future__ import annotations
-
 from pathlib import Path
+import sys
 
+ROOT_DIR = Path(__file__).resolve().parents[2]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from robokots.inward.builder import build_problem_from_project_file, prepare_problem_for_solve
 from robokots.inward.opt import solve_gauss_newton
-from robokots.inward.builder import build_problem_from_project_file
-from robokots.inward.builder import prepare_problem_for_solve
+
 
 def main() -> None:
-
-    project_path = Path(__file__).with_name("project_ik_task_file.json")
+    project_path = Path(__file__).with_name("project_trajectory.json")
     problem, ctx, solver = build_problem_from_project_file(project_path)
 
-    print("Initial q:", ctx.pack.get())
+    print("Initial traj:", ctx.pack.get())
 
     required = prepare_problem_for_solve(problem, ctx)
     print("Initial cost:", problem.cost_value(ctx=ctx, time=getattr(ctx, "time", None), required=required))
@@ -40,7 +41,7 @@ def main() -> None:
     )
 
     prepare_problem_for_solve(problem, ctx, required=required)
-    print("Final q:", ctx.pack.get())
+    print("Final traj:", ctx.pack.get())
     print("Final cost:", problem.cost_value(ctx=ctx, time=getattr(ctx, "time", None), required=required))
 
 

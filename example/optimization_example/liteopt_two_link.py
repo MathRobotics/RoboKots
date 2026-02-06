@@ -1,9 +1,9 @@
 """LiteOpt inverse-kinematics example that uses RoboKots utilities.
 
 This script solves for joint angles of the provided 2-DOF arm model using
-``liteopt.nls``. Residuals and Jacobians come directly from RoboKots'
-``Quantity`` and ``Residual`` plumbing so we can keep least-squares assembly
-in one place while still passing plain callables to LiteOpt.
+``liteopt.nls``. Residuals and Jacobians come from RoboKots' ``Expr`` interface
+so we can keep least-squares assembly in one place while still passing plain
+callables to LiteOpt.
 
 Run from the repository root so imports resolve correctly:
 
@@ -29,26 +29,24 @@ TARGET_POSITION = np.array([2.2, 0.3, 0.0], dtype=float)
 KOTS = Kots.from_json_file(str(MODEL_PATH), order=1)
 
 
-class EndEffectorError(term.Quantity):
-    """Quantity that returns end-effector position error and block Jacobian."""
+class EndEffectorError:
+    """Expr that returns end-effector position error and block Jacobian."""
 
     name = "end_effector_error"
-    out_dim = 3
 
     def __init__(self, joint_var: term.Variable) -> None:
         self._joint_var = joint_var
         self.vars = [joint_var]
 
-    def value(self) -> np.ndarray:
-        q = np.asarray(self._joint_var.x, dtype=float).reshape(-1)
-        _update_motion(q)
-        return KOTS.state_info(STATE_TYPE) - TARGET_POSITION
+    def deps(self):
+        return []
 
-    def jacobian_blocks(self) -> list[np.ndarray]:
+    def eval(self, ctx: term.EvalContext):
         q = np.asarray(self._joint_var.x, dtype=float).reshape(-1)
         _update_motion(q)
-        # One block per variable; here we only have the joint variable.
-        return [KOTS.jacobian(STATE_TYPE)]
+        r = KOTS.state_info(STATE_TYPE) - TARGET_POSITION
+        J = KOTS.jacobian(STATE_TYPE)
+        return r, [J]
 
 
 def _update_motion(q: np.ndarray) -> None:
@@ -64,11 +62,10 @@ def _build_problem() -> tuple[term.VariablePack, term.Problem]:
     joint_var = term.Variable(name="q", x=np.zeros(KOTS.dof(), dtype=float))
     variables = term.VariablePack([joint_var])
 
-    ee_quantity = term.CachedQuantity(EndEffectorError(joint_var), variables)
-    ee_residual = term.VectorSquaredSumResidual("ee_error", ee_quantity)
+    ee_expr = EndEffectorError(joint_var)
     ee_cost = term.L2Cost()
 
-    problem = term.Problem(variables=variables, terms=[(ee_residual, ee_cost)])
+    problem = term.Problem(variables=variables, terms=[(ee_expr, ee_cost)])
     return variables, problem
 
 

@@ -1,5 +1,4 @@
 from __future__ import annotations
-from dataclasses import dataclass
 from typing import Any, Iterable, Optional, List, Callable
 import numpy as np
 
@@ -13,6 +12,8 @@ from robokots.inward.term import (
     HuberCost,
     EvalContext,
 )
+from robokots.inward.context import BuilderContext
+from robokots.inward.trajectory import build_trajectory, Trajectory
 from robokots.inward.expr.registry import Registry
 from robokots.inward.expr.nodes import (
     ConstantExpr,
@@ -22,18 +23,22 @@ from robokots.inward.expr.nodes import (
     HingeExpr,
 )
 from robokots.core.state_cache import OwnerKey, StateKey, StateCache
+from robokots.core.state import StateType
 from robokots.core.time_grid import TimeGrid
 
 Array = np.ndarray
 
 
-def make_build_state_kots(kots: Kots) -> Callable[..., dict]:
+def make_build_state_kots(kots: Kots, *, trajectory: Optional[dict] = None) -> Callable[..., dict]:
     """
     build_state(x_all, time=None, required=None) -> dict[StateKey, Any]
 
-    required に含まれる StateKey だけ計算する（無ければ空dict/または必要最小を計算）。
-    まずは dtype="frame", field={"pos", "pos_J_q"} のみ対応（IKの最小セット）。
+    Compute only the StateKeys listed in `required` (if None, return an empty dict).
+    For now, this supports dtype="frame" with fields {"pos", "pos_J_q"} as the minimal IK set.
     """
+
+    traj_spec = trajectory or None
+    jac_fields = {"pos_J_q", "pos_J_traj", "pos_J_p"}
 
     def build_state(
         x_all: Array,
@@ -41,58 +46,117 @@ def make_build_state_kots(kots: Kots) -> Callable[..., dict]:
         time: Any = None,
         required: Optional[Iterable[StateKey]] = None,
     ) -> dict:
-        q = np.asarray(x_all, dtype=float).reshape(-1)
-        kots.import_motions(q)
-        kots.kinematics()
+        x_all = np.asarray(x_all, dtype=float).reshape(-1)
+        dof = int(kots.dof())
+        time_grid = time
+        num_steps = int(getattr(time_grid, "N", 0)) if time_grid is not None else 0
+        total_steps = num_steps + 1
+        traj: Optional[Trajectory] = None
+
+        if traj_spec is not None:
+            traj = build_trajectory(traj_spec, dof=dof, time=time_grid)
+
+        def infer_layout() -> tuple[str, int]:
+            if time_grid is None or float(getattr(time_grid, "dt", 0.0)) == 0.0:
+                return "single", dof
+
+            if x_all.size == dof:
+                return "single", dof
+
+            if x_all.size == dof * total_steps:
+                return "grid", dof * total_steps
+
+            # Placeholder for future spline support.
+            # When trajectory spec is added, use it to decode x_all.
+            raise ValueError(
+                "build_state: trajectory layout mismatch. "
+                f"Expected size {dof} (single-step) or {dof * total_steps} "
+                f"(grid: (N+1)*dof), got {x_all.size}."
+            )
+
+        if traj is not None:
+            total_dim = traj.num_params()
+            if x_all.size != total_dim:
+                raise ValueError(
+                    "build_state: trajectory parameter size mismatch. "
+                    f"Expected {total_dim}, got {x_all.size}."
+                )
+            layout = "traj"
+        else:
+            layout, total_dim = infer_layout()
+
+        def q_at(k: int) -> Array:
+            if layout == "traj":
+                return traj.q_at(x_all, k)
+            if layout == "single":
+                return x_all
+            if k < 0 or k >= total_steps:
+                raise ValueError(f"build_state: k={k} is out of range [0, {total_steps-1}]")
+            start = k * dof
+            return x_all[start : start + dof]
+
+        def embed_jac(J: Array, k: int) -> Array:
+            if layout == "traj":
+                dqdp = traj.dqdp_at(x_all, k)
+                return J @ dqdp
+            if layout == "single":
+                return J
+            full = np.zeros((J.shape[0], total_dim), dtype=float)
+            start = k * dof
+            full[:, start : start + dof] = J
+            return full
 
         out: dict[StateKey, Any] = {}
 
         if required is None:
-            # required が無い場合は「何も返さない」だと GetStateExpr が困るので、
-            # 最小限の互換のために、ここは空にせず「呼ばれる側が required を必ず渡す」運用を推奨。
-            # ただし安全策として、何もできないので out を返す。
+            # When `required` is missing, returning an empty dict keeps behavior explicit.
+            # Callers should pass `required` whenever GetStateExpr is used.
             return out
 
-        # required から link ごとに必要項目を整理
-        need_by_link: dict[str, set[str]] = {}
+        # Group required keys by time index and link name.
+        need_by_k_link: dict[int, dict[str, list[StateKey]]] = {}
         for key in required:
             if key.owner.owner_type != "link":
                 continue
             if key.dtype != "frame":
                 continue
             link = key.owner.owner_name
-            need_by_link.setdefault(link, set()).add(key.field)
+            need_by_k_link.setdefault(int(key.k), {}).setdefault(link, []).append(key)
 
-        for link, fields in need_by_link.items():
-            # pos が欲しい or pos_J_q が欲しいなら StateType("link", link, "pos") でまとめて計算
-            if ("pos" in fields) or ("pos_J_q" in fields):
+        for k, link_map in need_by_k_link.items():
+            q = q_at(k)
+            kots.import_motions(q)
+            kots.kinematics()
+
+            for link, keys in link_map.items():
+                fields = {key.field for key in keys}
+                need_pos = "pos" in fields
+                need_jac = any(field in jac_fields for field in fields)
+
+                if not (need_pos or need_jac):
+                    continue
+
+                # If position or its Jacobian is requested, compute StateType("link", link, "pos") once.
                 st = StateType("link", link, "pos")
                 pos = np.asarray(kots.state_info(st), dtype=float).reshape(-1)
-                J = np.asarray(kots.jacobian(st), dtype=float)
+                J = np.asarray(kots.jacobian(st), dtype=float) if need_jac else None
 
                 owner = OwnerKey(owner_type="link", owner_name=link)
 
-                # k は IK では 0 固定（軌道になったら k を回す）
-                key_pos = StateKey(k=0, owner=owner, dtype="frame", field="pos")
-                key_J   = StateKey(k=0, owner=owner, dtype="frame", field="pos_J_q")
-
-                if "pos" in fields:
-                    out[key_pos] = pos
-                if "pos_J_q" in fields:
-                    out[key_J] = J
+                for key in keys:
+                    if key.field == "pos":
+                        out[key] = pos
+                        continue
+                    if key.field in jac_fields:
+                        if J is None:
+                            raise ValueError("build_state: Jacobian requested but not computed.")
+                        out[key] = embed_jac(J, k)
+                        continue
+                    raise ValueError(f"build_state: unsupported field '{key.field}'")
 
         return out
 
     return build_state
-
-
-@dataclass
-class BuilderContext:
-    pack: VariablePack
-    state_cache: StateCache
-    time: TimeGrid
-    registry: Registry
-    model: Any = None  # optional
 
 
 # ============================================================
@@ -199,7 +263,48 @@ def parse_state_key(spec: dict) -> StateKey:
 # ============================================================
 # Expr builders
 # ============================================================
+def _inject_k(spec: Any, k: int) -> Any:
+    """
+    Recursively set key.k for any dict that has a "key" field.
+    Used to expand time-indexed expressions without explicitly writing k.
+    """
+    if isinstance(spec, dict):
+        out = {}
+        for key, val in spec.items():
+            if key == "key" and isinstance(val, dict):
+                key_dict = dict(val)
+                key_dict["k"] = k
+                out[key] = key_dict
+            else:
+                out[key] = _inject_k(val, k)
+        return out
+    if isinstance(spec, list):
+        return [_inject_k(v, k) for v in spec]
+    return spec
+
+
+def _stack_ks(ctx: BuilderContext, spec: dict) -> list[int]:
+    if "range" in spec:
+        r = spec["range"]
+        k0, k1 = int(r["k0"]), int(r["k1"])
+        return list(range(k0, k1 + 1))
+
+    time = getattr(ctx, "time", None)
+    if time is None or float(getattr(time, "dt", 0.0)) == 0.0:
+        return [0]
+
+    return list(time.ks())
+
+
 def build_expr(ctx: BuilderContext, spec: dict):
+    # Normalize legacy spec keys for compatibility
+    if "x" in spec and "base" not in spec and spec.get("type") == "hinge":
+        spec = dict(spec)
+        spec["base"] = spec.pop("x")
+    if "items" in spec and "parts" not in spec and spec.get("type") == "stack":
+        spec = dict(spec)
+        spec["parts"] = spec.pop("items")
+
     typ = spec["type"]
     fn = ctx.registry.expr.get(typ, None)
     if fn is None:
@@ -222,16 +327,47 @@ def register_default_expr_builders(registry: Registry) -> None:
     # constant: {"type":"constant","value":[...],"vars":["q"]?}
     def b_constant(ctx: BuilderContext, spec: dict):
         val = np.asarray(spec["value"], dtype=float).reshape(-1)
-        # constant doesn't depend on vars, but Expr interface might still want vars list.
-        # Here we set vars=[] by default.
-        return ConstantExpr(name=spec.get("name", "const"), value=val)
+        var_names = spec.get("vars", None)
+        if var_names is None and "var" in spec:
+            var_names = [spec["var"]]
+
+        vars_list = []
+        if var_names is not None:
+            for name in var_names:
+                v = next((v for v in ctx.pack.vars if v.name == name), None)
+                if v is None:
+                    raise ValueError(f"constant: unknown var '{name}'")
+                vars_list.append(v)
+
+        return ConstantExpr(name=spec.get("name", "const"), value=val, vars=vars_list)
 
     # get_state: {"type":"get_state","key":{...}, "shape":[m]?}
     def b_get_state(ctx: BuilderContext, spec: dict):
-        key = parse_state_key(spec["key"])
-        # GetStateExpr should read ctx.state_cache.get(key)
-        # and optionally provide Jacobian blocks from cache too (depending on your node design).
-        return GetStateExpr(name=spec.get("name", f"get_{key.field}"), key=key)
+        key_value = parse_state_key(spec["key"])
+
+        jac_spec = spec.get("jac", None)
+        if jac_spec is None:
+            raise ValueError("get_state requires 'jac' spec with field/var.")
+
+        var_name = jac_spec.get("var", "q")
+        q = next(v for v in ctx.pack.vars if v.name == var_name)
+
+        jac_field = jac_spec["field"]
+        key_jac_q = StateKey(
+            k=key_value.k,
+            owner=key_value.owner,
+            dtype=key_value.dtype,
+            field=jac_field,
+            frame=key_value.frame,
+            rel_frame=key_value.rel_frame,
+        )
+
+        return GetStateExpr(
+            name=spec.get("name", f"get_{key_value.field}"),
+            vars=[q],
+            key_value=key_value,
+            key_jac_q=key_jac_q,
+        )
 
     # sub: {"type":"sub","a":{expr}, "b":{expr}}
     def b_sub(ctx: BuilderContext, spec: dict):
@@ -239,15 +375,24 @@ def register_default_expr_builders(registry: Registry) -> None:
         b = build_expr(ctx, spec["b"])
         return SubExpr(name=spec.get("name", "sub"), a=a, b=b)
 
-    # stack: {"type":"stack","items":[{expr},{expr},...]}
+    # stack: {"type":"stack","parts":[{expr},{expr},...]}  (legacy: items)
+    # or:    {"type":"stack","inner":{expr}}  (auto-expand over time if available)
     def b_stack(ctx: BuilderContext, spec: dict):
-        items = [build_expr(ctx, s) for s in spec["items"]]
-        return StackExpr(name=spec.get("name", "stack"), items=items)
+        if "parts" in spec:
+            part_specs = spec["parts"]
+        elif "inner" in spec:
+            ks = _stack_ks(ctx, spec)
+            part_specs = [_inject_k(spec["inner"], k) for k in ks]
+        else:
+            raise ValueError("stack spec requires 'parts' or 'inner'.")
 
-    # hinge: {"type":"hinge","x":{expr}}  (inequality residual)
+        parts = [build_expr(ctx, s) for s in part_specs]
+        return StackExpr(name=spec.get("name", "stack"), parts=parts)
+
+    # hinge: {"type":"hinge","base":{expr}}  (inequality residual; legacy: x)
     def b_hinge(ctx: BuilderContext, spec: dict):
-        x = build_expr(ctx, spec["x"])
-        return HingeExpr(name=spec.get("name", "hinge"), x=x)
+        base = build_expr(ctx, spec["base"])
+        return HingeExpr(name=spec.get("name", "hinge"), base=base)
 
     registry.expr["constant"] = b_constant
     registry.expr["get_state"] = b_get_state
@@ -278,7 +423,11 @@ def build_problem(
     terms = []
     for t in spec.get("terms", []):
         expr_spec = t["expr"]
-        expr = build_expr(ctx, expr_spec)
+        if isinstance(expr_spec, list):
+            parts = [build_expr(ctx, s) for s in expr_spec]
+            expr = StackExpr(name=t.get("name", "stack"), parts=parts)
+        else:
+            expr = build_expr(ctx, expr_spec)
 
         cost_spec = t.get("cost", {"type": "l2"})
         cost = build_cost(registry, cost_spec)
@@ -291,7 +440,7 @@ def build_problem_from_spec(
     spec: dict,
     *,
     backend,  
-    registry: Registry,
+    registry: Registry | None = None,
     model: Any = None,
 ) -> tuple[Problem, EvalContext]:
     """
@@ -307,10 +456,9 @@ def build_problem_from_spec(
     """
 
     # --- registry ---
-    registry = Registry()
-    # ここで outward 側の register を呼ぶ想定
-    # e.g. register_default_exprs(registry)
-    # e.g. register_default_costs(registry)
+    if registry is None:
+        registry = Registry()
+        register_default_expr_builders(registry)
 
     # --- time grid ---
     time_spec = spec.get("time", None)
@@ -392,5 +540,5 @@ def linearize_with_context(problem: Problem, ctx: EvalContext, *, required: Opti
       - call problem.linearize(ctx=..., time=..., required=...)
     """
     req = prepare_problem_for_solve(problem, ctx, required=required)
-    # Problem.linearize should accept these kwargs in your Expr版実装
+    # Problem.linearize should accept these kwargs in your Expr implementation.
     return problem.linearize(ctx=ctx, time=ctx.time, required=req)
