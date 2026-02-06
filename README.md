@@ -24,3 +24,5 @@ pip install .
   to optimize polynomial trajectory parameters using inward/outward least-squares
   utilities. Run with ``python -m example.optimization_example.trajectory_parameter_optimization``
   from the repository root so imports resolve without manual path changes.
+* `example/polars_example/main.py`: Demonstrates how to export state to JSONL and
+  use Polars to do fast, columnar analytics (feature extraction and filtering).
