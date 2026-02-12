@@ -20,12 +20,12 @@ classifiers = [
 ]
 dependencies = [
     "jax>=0.4.30",
-    "mathrobo",
     "matplotlib>=3.9.4",
     "numpy>=2.0.2",
     "scipy>=1.13.1",
     "sympy>=1.14.0",
     "polars>=1.34.0",
+    "mathrobo>=0.0.1",
 ]
 
 [project.optional-dependencies]
@@ -34,9 +34,6 @@ liteopt =["liteopt>=0.1.6"]
 
 [project.urls]
 Homepage = "https://github.com/MathRobotics/RoboKots"
-
-[tool.uv.sources]
-mathrobo = { git = "https://github.com/MathRobotics/MathRobo.git", rev = "develop" }
 
 [tool.pytest.ini_options]
 addopts = "-m 'not slow'"
