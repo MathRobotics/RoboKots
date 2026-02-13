@@ -16,6 +16,41 @@ def _make_kots(order: int = 3) -> Kots:
     return Kots.from_json_file(str(MODEL_PATH), order=order)
 
 
+def test_from_urdf_file(tmp_path: Path):
+    urdf = """<?xml version="1.0"?>
+<robot name="urdf_robot">
+  <link name="base"/>
+  <link name="slider"/>
+  <link name="tool"/>
+  <joint name="j1" type="revolute">
+    <parent link="base"/>
+    <child link="slider"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+  <joint name="j2" type="prismatic">
+    <parent link="slider"/>
+    <child link="tool"/>
+    <origin xyz="1 0 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+  </joint>
+</robot>
+"""
+    urdf_path = tmp_path / "robot.urdf"
+    urdf_path.write_text(urdf, encoding="utf-8")
+
+    kots = Kots.from_urdf_file(str(urdf_path), order=2)
+    assert kots.dof() == 2
+    assert "world" in kots.link_name_list()
+    assert {"j1", "j2"}.issubset(set(kots.joint_name_list()))
+
+    motion = np.array([0.2, 0.05, 0.1, 0.0], dtype=float)
+    kots.import_motions(motion)
+    kots.kinematics()
+    frame = kots.state_info(StateType(data_type="frame", owner_type="link", owner_name="tool"))
+    assert isinstance(frame, mr.SE3)
+
+
 def test_kinematics():
     kots = _make_kots(order=3)
     motion = np.random.rand(kots.order() * kots.dof())

@@ -41,6 +41,15 @@ def test_joint_struct_init():
     assert isinstance(joint.origin, SE3)
     assert np.allclose(joint.origin.mat(), origin.mat())
 
+
+def test_joint_struct_prismatic_init():
+    origin = SE3.rand()
+    joint = JointStruct(0, "joint_p", "prismatic", np.array((0, 1, 0)), 0, 1, origin)
+
+    assert joint.type == "prismatic"
+    assert joint.dof == 1
+    assert np.allclose(joint.select_mat, np.array([[0], [0], [0], [0], [1], [0]]))
+
 def test_joint_set_dof_index():
     # Create a mock joint
     joint = JointStruct(0, "joint1", "revolute", np.array((1,0,0)), 0, 1, SE3())
