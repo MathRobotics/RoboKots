@@ -4,7 +4,7 @@ Submodules are not imported automatically to keep optional dependencies light. A
 small set of public APIs is exposed lazily for compatibility with existing
 imports such as ``from robokots.outward import build_kinematics_state``. Other
 symbols can be accessed by importing the desired submodule directly, e.g.
-``robokots.outward.term``.
+``robokots.outward.state``.
 """
 
 from importlib import import_module
@@ -38,7 +38,6 @@ __all__ = [
     "api",
     "diff",
     "state",
-    "term",
     "values",
     "backends",
     *_LAZY_API.keys(),

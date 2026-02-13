@@ -7,10 +7,10 @@ import jax.numpy as jnp
 
 from mathrobo import SE3
 
-from ..core.robot import RobotStruct
-from ..core.motion import RobotMotions
-from ..core.kinematics.base import convert_joint_to_data
-from ..core.kinematics.kinematics_jax import joint_rel_frame
+from ...core.robot import RobotStruct
+from ...core.motion import RobotMotions
+from ...core.models.kinematics.base import convert_joint_to_data
+from ...core.models.kinematics.kinematics_jax import joint_rel_frame
 
 from typing import NamedTuple
 
@@ -32,8 +32,6 @@ def kinematics_jax(robot : RobotStruct, motions : RobotMotions):
         joint_data = convert_joint_to_data(joint)
 
         joint_motions = motions.joint_motions(joint.dof, joint.dof_index, order=1)
-        print(f"joint dof: {joint.dof}, joint dof_index: {joint.dof_index}")
-        print(f"joint_motions shape: {joint_motions.shape}")
         pidx = state.names.index(parent.name)
 
         p_link_frame = state.state[pidx]
@@ -41,7 +39,7 @@ def kinematics_jax(robot : RobotStruct, motions : RobotMotions):
 
         link_frame = p_link_frame @ joint_frame
         n_ = state.names + (child.name,)
-        s_  = jnp.concatenate([state.state, link_frame.mat()], axis=0)
+        s_ = jnp.concatenate([state.state, link_frame.mat()[None, :, :]], axis=0)
 
         state = KState(names=n_, state=s_)
 

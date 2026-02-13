@@ -5,8 +5,6 @@
 import numpy as np
 from typing import List, Dict, Any
 
-from .inward import term
-
 from .core.motion import RobotMotions
 from .core.state_table import RobotState
 from .core.state import StateType
@@ -28,9 +26,6 @@ from .outward import (
     calc_link_total_point_frame,
     update_outward_state,
 )
-
-from .inward.inward import inverse_kinematics
-from .inward.opt import solve_gauss_newton
 
 default_order = 3 
 default_dim = 3
@@ -234,10 +229,17 @@ class Kots():
     if order is None:
       order = self.order_
 
-    motion_var = term.Variable(name="motion", x=self.motion(order))
-    variables = term.VariablePack([motion_var], revision=self.motions_.revision())
-    
-    return update_outward_state(self.robot_, variables, self.state_cache_, is_dynamics, order)
+    class _MotionPack:
+      def __init__(self, x: np.ndarray, revision: int):
+        self._x = np.asarray(x, dtype=float).reshape(-1)
+        self.revision = int(revision)
+
+      def get(self) -> np.ndarray:
+        return self._x
+
+    motion_pack = _MotionPack(self.motion(order), self.motions_.revision())
+
+    return update_outward_state(self.robot_, motion_pack, self.state_cache_, is_dynamics, order)
 
   def set_state_df(self):
     self.state_.import_state(self.state_dict_)
@@ -290,7 +292,9 @@ class Kots():
   
   def inverse_kinematics(self, target_type : List[StateType], target_value : List[np.ndarray],
                     q_init : np.ndarray, opt_func : None = None) -> np.ndarray:
-    return inverse_kinematics(self.robot_, target_type, target_value, q_init, opt_func)
+    raise NotImplementedError(
+      "inward module was removed. inverse_kinematics is no longer available in robokots."
+    )
 
   def show_robot(self, save = False, ax = None, color : RobotColor = None):
     conectivity = np.zeros((self.robot_.joint_num, 2), dtype='int64')
