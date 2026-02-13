@@ -105,6 +105,18 @@ class Kots():
 
     return Kots(robot, order, dim, lib)
 
+  @staticmethod
+  def from_urdf_file(
+      urdf_file_name: str,
+      order=default_order,
+      dim=default_dim,
+      lib: str = "numpy",
+      add_world_link: bool = True,
+  ) -> "Kots":
+    model_data = load_urdf_file(urdf_file_name, add_world_link=add_world_link)
+    robot = RobotStruct.from_dict(model_data, lib=lib)
+    return Kots(robot, order, dim, lib)
+
   def print_structure(self):
     self.robot_.print()
 

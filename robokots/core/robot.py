@@ -302,6 +302,8 @@ class JointStruct:
     def _joint_dof(type: str) -> int:
         if type == "revolute":
             return 1
+        elif type == "prismatic":
+            return 1
         elif type == "fix":
             return 0
         else:
@@ -325,6 +327,12 @@ class JointStruct:
                 mat = mat.at[0:3, 0].set(axis)
             elif lib == "numpy":
                 mat[0:3, 0] = axis
+            return mat
+        elif type == "prismatic":
+            if lib == "jax":
+                mat = mat.at[3:6, 0].set(axis)
+            elif lib == "numpy":
+                mat[3:6, 0] = axis
             return mat
         else:
             raise warnings.warn(f"Unsupported joint type: {type}", UserWarning)

@@ -23,3 +23,12 @@ Run an example from the repository root:
 ```bash
 python -m example.simple_example.main
 ```
+
+## URDF Input
+
+You can load URDF directly and reuse the same pipeline:
+```python
+from robokots.kots import Kots
+
+kots = Kots.from_urdf_file("robot.urdf", order=3)
+```
