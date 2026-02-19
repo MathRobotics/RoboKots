@@ -79,7 +79,7 @@ def total_world_joint_cmtm(r : RobotStruct, state : dict, order : int = 1, dim :
     mat = np.zeros((r.joint_num * n_, r.joint_num * n_))
 
     for i, joint in enumerate(r.joints):
-        cmtm = state_dict_to_cmtm(state, r.links[joint.child_linkz_id].name, "link", order)
+        cmtm = state_dict_to_cmtm(state, r.links[joint.child_link_id].name, "link", order)
         mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = cmtm.mat_adj()
     return mat
 

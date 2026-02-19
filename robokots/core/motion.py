@@ -33,15 +33,17 @@ class RobotMotions:
     self._revision += 1
 
   def set_aliases(self, aliases_ = ["coord", "veloc", "accel"]):
-    for alias in aliases_:
-      if alias not in self.ALLOWED_ALIASES and not self.ACCEL_DIFF_PATTERN.match(alias):
-        raise ValueError(f"Invalid alias: {alias}")
-    self.aliases = aliases_
-    
-  def set_aliases(self, aliases_ = ["coord", "veloc", "accel"]):
-    if not set(aliases_).issubset(self.ALLOWED_ALIASES):
-      raise ValueError(f"Invalid alias: {set(aliases_) - self.ALLOWED_ALIASES}")
-    self.aliases = aliases_
+    invalid = {a for a in aliases_
+               if a not in self.ALLOWED_ALIASES and not self.ACCEL_DIFF_PATTERN.match(a)}
+    if invalid:
+      raise ValueError(f"Invalid alias: {invalid}")
+    self.aliases = list(aliases_)
+    self.motion_num = len(self.aliases)
+    new_motions = np.zeros(self.dof * self.motion_num)
+    copy_len = min(new_motions.size, self.motions.size)
+    if copy_len > 0:
+      new_motions[:copy_len] = self.motions[:copy_len]
+    self.motions = new_motions
     
   def set_motion(self, vecs):
     self.motions = vecs

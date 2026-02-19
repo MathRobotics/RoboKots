@@ -1,10 +1,3 @@
-from mathrobo import CMTM, SE3, SE3wrench
-
-from ..core.robot import RobotStruct
-from ..core.state import StateType, data_type_dof
-
-from ..core.state_dict import *
-
 #!/usr/bin/env python3.9
 # -*- coding: utf-8 -*-
 # 2024.12.13 Created by T.Ishigaki
@@ -12,15 +5,19 @@ from ..core.state_dict import *
 
 import numpy as np
 
-from mathrobo import CMVector, Factorial
-from mathrobo import SO3, SE3, CMTM, SE3wrench
+from mathrobo import CMVector, CMTM, Factorial, SE3, SE3wrench
 
 from ..core.robot import RobotStruct
 from ..core.motion import RobotMotions
-from ..core.state_dict import state_dict_to_cmtm, state_dict_to_cmtm_wrench, state_dict_to_cmvec, state_dict_to_rel_cmtm_wrench
-from ..core.state_dict import vecs_to_state_dict, cmtm_to_state_list, state_dict_to_frame
+from ..core.state_dict import (
+    cmtm_to_state_list,
+    state_dict_to_cmtm,
+    state_dict_to_cmtm_wrench,
+    state_dict_to_cmvec,
+    state_dict_to_frame,
+    vecs_to_state_dict,
+)
 from ..core.state import data_type_dof, StateType
-from ..core.state_cache import StateCache
 
 from ..core.models.kinematics.base import convert_joint_to_data, convert_link_to_data
 from ..core.models.kinematics.kinematics import joint_local_cmtm, joint_rel_cmtm, joint_rel_frame
@@ -28,7 +25,12 @@ from ..core.models.kinematics.kinematics_matrix import joint_select_diag_mat
 from ..core.models.kinematics.kinematics_soft_link import soft_link_local_cmtm, calc_link_local_point_frame
 
 from ..core.models.dynamics.base import spatial_inertia
-from ..core.models.dynamics.dynamics import link_dynamics, joint_dynamics, link_momentum_cmvec, link_force_cmvec, link_dynamics_cmvec, joint_dynamics_cmvec
+from ..core.models.dynamics.dynamics import (
+    joint_dynamics,
+    link_dynamics,
+    link_force_cmvec,
+    link_momentum_cmvec,
+)
 
 def get_dof(robot : RobotStruct, state_type : StateType, dim : int = 3) -> int:
     if "torque" in state_type.data_type:
@@ -104,6 +106,58 @@ def get_total_cmvec(robot : RobotStruct, state_dict : dict, owner_type : str, da
         total_vec[i] = vec.cm_vec()
     return total_vec.flatten()
 
+
+def _truncate_link_cmtm_order(link_cmtm: CMTM, order: int) -> CMTM:
+  if order < 1:
+    raise ValueError(f"Invalid order: {order}. Must be >= 1.")
+  if order > link_cmtm._n:
+    raise ValueError(f"Invalid order: {order}. Must be <= source order {link_cmtm._n}.")
+  if order == link_cmtm._n:
+    return link_cmtm
+  return CMTM[SE3](SE3.set_mat(link_cmtm.elem_mat()), link_cmtm.vecs()[: order - 1])
+
+
+def _build_kinematics_state_with_cmtm(robot: RobotStruct, motions, order: int = 3):
+  motion = np.asarray(motions, dtype=float).reshape(-1)
+  if robot.dof * order > motion.size:
+    raise ValueError(f"Invalid motion length: {motion.size}. Must be {robot.dof * order}.")
+
+  state_dict = {}
+  link_cmtm_dict = {}
+  joint_cmtm_dict = {}
+
+  # The world link is the parent link of the first joint.
+  world_name = robot.links[robot.joints[0].parent_link_id].name
+  world_cmtm = CMTM.eye(SE3, order)
+  link_cmtm_dict[world_name] = world_cmtm
+  state_dict.update(cmtm_to_state_list(world_cmtm, "link", world_name))
+
+  for joint in robot.joints:
+    parent = robot.links[joint.parent_link_id]
+    child = robot.links[joint.child_link_id]
+
+    joint_data = convert_joint_to_data(joint)
+    link_data = convert_link_to_data(child)
+
+    joint_motions = motion[RobotMotions.owner_vec_index(joint.dof, joint.dof_index, order)]
+    link_motions = motion[RobotMotions.owner_vec_index(child.dof, child.dof_index, order)]
+
+    parent_cmtm = link_cmtm_dict[parent.name]
+    joint_rel = joint_rel_cmtm(joint_data, joint_motions, order)
+    link_local = soft_link_local_cmtm(link_data, link_motions, order)
+
+    child_cmtm = parent_cmtm @ joint_rel @ link_local
+    link_cmtm_dict[child.name] = child_cmtm
+    state_dict.update(cmtm_to_state_list(child_cmtm, "link", child.name))
+
+    # Keep joint local CMTM in state for Jacobian and derivative routines.
+    joint_local = joint_local_cmtm(joint_data, joint_motions, order)
+    joint_cmtm_dict[joint.name] = joint_local
+    state_dict.update(cmtm_to_state_list(joint_local, "joint", joint.name))
+
+  return state_dict, link_cmtm_dict, joint_cmtm_dict
+
+
 def build_kinematics_state(robot : RobotStruct, motions, order = 3) -> dict:
   '''
   Forward kinematics computation
@@ -113,46 +167,7 @@ def build_kinematics_state(robot : RobotStruct, motions, order = 3) -> dict:
   Returns:
     dict: state data
   '''
-  if robot.dof * order > len(motions):
-    raise ValueError(f"Invalid motion length: {len(motions)}. Must be {robot.dof * order}.")
-
-  state_dict = {}
-  cmtm_dict = {}
-
-  # Initialize CMTM for the world link
-  # The world link is the parent of the first joint
-  world_name = robot.links[robot.joints[0].parent_link_id].name
-  cmtm_dict.update([(world_name, CMTM.eye(SE3, order))])
-
-  state = cmtm_to_state_list(cmtm_dict[world_name], "link", world_name)
-  state_dict.update(state)
-
-  for joint in robot.joints:
-    parent = robot.links[joint.parent_link_id]
-    child = robot.links[joint.child_link_id]
-    
-    joint_data = convert_joint_to_data(joint)
-    link_data = convert_link_to_data(child)
-
-    joint_motions = motions[RobotMotions.owner_vec_index(joint.dof, joint.dof_index, order)]
-    link_motions = motions[RobotMotions.owner_vec_index(child.dof, child.dof_index, order)]
-
-    p_link_cmtm = cmtm_dict[parent.name]
-    joint_cmtm = joint_rel_cmtm(joint_data, joint_motions, order)
-    link_cmtm = soft_link_local_cmtm(link_data, link_motions, order)
-
-    link_cmtm = p_link_cmtm @ joint_cmtm @ link_cmtm
-    # Update CMTM for the child link
-    cmtm_dict.update([(child.name, link_cmtm)])
-
-    state = cmtm_to_state_list(link_cmtm, "link", child.name)
-    state_dict.update(state)
-    
-    #---for pre-computation
-    joint_cmtm = joint_local_cmtm(joint_data, joint_motions, order)
-    state = cmtm_to_state_list(joint_cmtm, "joint", joint.name)
-    state_dict.update(state)
-
+  state_dict, _, _ = _build_kinematics_state_with_cmtm(robot, motions, order)
   return state_dict
 
 def calc_link_total_point_frame(robot : RobotStruct, motions : RobotMotions, state : dict, point : float) -> SE3:
@@ -202,21 +217,25 @@ def build_dynamics_state(robot : RobotStruct, joint_motions) -> dict:
   return state_dict
 
 def build_dynamics_cmtm_state(robot : RobotStruct, motions, dynamics_order = 1) -> dict:
-  state_dict = build_kinematics_state(robot, motions, dynamics_order + 2)
-  momentum_dict = {}
+  state_dict, link_cmtm_dict, _ = _build_kinematics_state_with_cmtm(robot, motions, dynamics_order + 2)
+  joint_momentum_cmvec = {}
+  momentum_order = dynamics_order + 1
+  factor_mat = Factorial.mat(momentum_order, 6)
+  momentum_link_cmtm_dict = {
+    name: _truncate_link_cmtm_order(link_cmtm, momentum_order)
+    for name, link_cmtm in link_cmtm_dict.items()
+  }
 
   for joint in reversed(robot.joints):
     child = robot.links[joint.child_link_id]
     child_joint_ids = child.child_joint_ids
-    # print("child_joint_ids:", child_joint_ids)
 
     inertia = spatial_inertia(child.mass, child.inertia, child.cog)
-
-    link_cmtm = state_dict_to_cmtm(state_dict, child.name, "link", dynamics_order + 2)
+    link_cmtm = link_cmtm_dict[child.name]
 
     # calculate link momentum
     link_momentum = link_momentum_cmvec(inertia, link_cmtm.cmvecs())
-    state = vecs_to_state_dict(link_momentum.vecs(), "link", child.name, "momentum", dynamics_order+1)
+    state = vecs_to_state_dict(link_momentum.vecs(), "link", child.name, "momentum", momentum_order)
     state_dict.update(state)
 
     # calculate link force
@@ -226,24 +245,26 @@ def build_dynamics_cmtm_state(robot : RobotStruct, motions, dynamics_order = 1) 
       state_dict.update(state)
 
     # calculate joint momentum
-    joint_momentums = link_momentum.vec()
+    joint_momentums = np.asarray(link_momentum.vec(), dtype=float).copy()
     for c_id in child_joint_ids:
       c_joint = robot.joints[c_id]
       c_joint_link = robot.links[c_joint.child_link_id]
 
-      c_joint_cmtm_wrench = state_dict_to_rel_cmtm_wrench(state_dict, child.name, c_joint_link.name, "link", dynamics_order + 1)
+      c_joint_momentum = joint_momentum_cmvec.get(c_joint.name)
+      if c_joint_momentum is None:
+        raise ValueError(f"Missing child joint momentum for '{c_joint.name}'.")
 
-      c_joint_momentums = state_dict_to_cmvec(momentum_dict, c_joint.name, "joint", "momentum", dynamics_order + 1)
+      c_joint_rel_cmtm = momentum_link_cmtm_dict[child.name].inv() @ momentum_link_cmtm_dict[c_joint_link.name]
+      c_joint_cmtm_wrench = CMTM.change_elemclass(c_joint_rel_cmtm, SE3wrench)
 
-      joint_momentums += Factorial.mat(dynamics_order+1, 6) @ c_joint_cmtm_wrench.mat_adj() @ c_joint_momentums.cm_vec()
+      joint_momentums += factor_mat @ c_joint_cmtm_wrench.mat_adj() @ c_joint_momentum.cm_vec()
 
-    momentum_dict.update([(joint.name+'_joint_momentum', joint_momentums)])
-
-    state = vecs_to_state_dict(joint_momentums, "joint", joint.name, "momentum", dynamics_order+1)
+    state = vecs_to_state_dict(joint_momentums, "joint", joint.name, "momentum", momentum_order)
     state_dict.update(state)
 
     # calculate joint force and torque
     joint_momentum = CMVector(joint_momentums.reshape(-1,6))
+    joint_momentum_cmvec[joint.name] = joint_momentum
     if dynamics_order > 0:
       joint_force = link_force_cmvec(link_cmtm.cmvecs(), joint_momentum)
       state = vecs_to_state_dict(joint_force.vecs(), "joint", joint.name, "force", dynamics_order)
@@ -258,7 +279,7 @@ def build_dynamics_cmtm_state(robot : RobotStruct, motions, dynamics_order = 1) 
   # Compute for the world link
   world_link = robot.links[0]
   inertia = spatial_inertia(world_link.mass, world_link.inertia, world_link.cog)
-  link_cmtm = state_dict_to_cmtm(state_dict, world_link.name, "link", dynamics_order + 2)
+  link_cmtm = link_cmtm_dict[world_link.name]
 
   link_vel = CMVector(link_cmtm.vecs())
   link_momentum = link_momentum_cmvec(inertia, link_vel)

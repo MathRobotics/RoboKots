@@ -422,7 +422,7 @@ def extract_dict_link_info(state : dict, data_type : str, link_name : str, frame
     if frame != None:
         if frame == 'world':
             order = keys_order[data_type]
-            cmtm = state_dict_to_cmtm(state, link_name, order)
+            cmtm = state_dict_to_cmtm(state, link_name, "link", order)
             cmtm_wrench = CMTM.change_elemclass(cmtm, SE3wrench)
 
     if data_type == "rot":
@@ -430,17 +430,17 @@ def extract_dict_link_info(state : dict, data_type : str, link_name : str, frame
     elif data_type == "frame":
         return state_dict_to_frame(state, link_name)
     elif data_type == "cmtm":
-        return state_dict_to_cmtm(state, link_name)
+        return state_dict_to_cmtm(state, link_name, "link")
     elif "momentum" in data_type:
         if frame == 'world':
-            local_momentum = state_dict_to_cmvec(state, link_name, "link_momentum", order).cm_vec()
+            local_momentum = state_dict_to_cmvec(state, link_name, "link", "momentum", order).cm_vec()
             world_momentum = CMVector(( Factorial.mat(order, dim=6) @ cmtm_wrench.mat_adj() @ local_momentum).reshape(-1,6)).vecs()
             return world_momentum[-1]
         else:
             return np.array(state[link_name+"_link_"+data_type])
     elif "force" in data_type:
         if frame == 'world':
-            local_force = state_dict_to_cmvec(state, link_name, "link_force", order).cm_vec()
+            local_force = state_dict_to_cmvec(state, link_name, "link", "force", order).cm_vec()
             world_force = CMVector((Factorial.mat(order, dim=6) @ cmtm_wrench.mat_adj() @ local_force).reshape(-1,6)).vecs()
             return world_force[-1]
         else:
@@ -452,23 +452,23 @@ def extract_dict_joint_info(state : dict, data_type : str, joint_name : str, fra
     if frame != 'dummy':
         if frame == 'world':
             order = keys_order[data_type]
-            cmtm = state_dict_to_cmtm(state, joint_name, order)
+            cmtm = state_dict_to_cmtm(state, joint_name, "joint", order)
             cmtm_wrench = CMTM.change_elemclass(cmtm, SE3wrench)
             
     if data_type == "frame":
         return state_dict_to_frame(state, joint_name)
     elif data_type == "cmtm":
-        return state_dict_to_cmtm(state, joint_name)
+        return state_dict_to_cmtm(state, joint_name, "joint")
     elif "momentum" in data_type:
         if frame == 'world':
-            local_momentum = state_dict_to_cmvec(state, joint_name, "joint_momentum", order).cm_vec()
+            local_momentum = state_dict_to_cmvec(state, joint_name, "joint", "momentum", order).cm_vec()
             world_momentum = CMVector((Factorial.mat(order, dim=6) @ cmtm_wrench.mat_adj() @ local_momentum).reshape(-1,6)).vecs()
             return world_momentum[-1]
         else:
             return np.array(state[joint_name+"_joint_"+data_type])
     elif "force" in data_type:
         if frame == 'world':
-            local_force = state_dict_to_cmvec(state, joint_name, "joint_force", order).cm_vec()
+            local_force = state_dict_to_cmvec(state, joint_name, "joint", "force", order).cm_vec()
             world_force = CMVector((Factorial.mat(order, dim=6) @ cmtm_wrench.mat_adj() @ local_force).reshape(-1,6)).vecs()
             return world_force[-1]
         else:
