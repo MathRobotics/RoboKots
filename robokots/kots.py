@@ -3,7 +3,7 @@
 # 2024.12.13 Created by T.Ishigaki
 
 import numpy as np
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Tuple
 
 from .core.motion import RobotMotions
 from .core.state_table import RobotState
@@ -38,6 +38,7 @@ class Kots():
   order_ : int
   dim_ : int
   lib_ : str
+  state_cache_config_ : Optional[Tuple[bool, int]]
 
   def order_to_aliases(self, order: int) -> List[str]:
     m_aliases = []
@@ -81,6 +82,7 @@ class Kots():
     self.state_ = RobotState(robot.link_names, robot.joint_names, l_aliases, j_aliases)
     self.state_dict_ = {}
     self.state_cache_ = None
+    self.state_cache_config_ = None
     self.order_ = order
     self.dim_ = dim
     self.lib_ = lib
@@ -92,6 +94,8 @@ class Kots():
     self.order_ = order
     self.motions_ = RobotMotions(self.robot_.dof, m_aliases)
     self.state_ = RobotState(self.robot_.link_names, self.robot_.joint_names, l_aliases, j_aliases)
+    self.state_cache_ = None
+    self.state_cache_config_ = None
 
   @staticmethod
   def from_json_file(model_file_name : str, order=default_order, dim=default_dim, lib : str = "numpy") -> "Kots":
@@ -241,6 +245,18 @@ class Kots():
     if order is None:
       order = self.order_
 
+    cache_config = (bool(is_dynamics), int(order))
+    if self.state_cache_ is None or self.state_cache_config_ != cache_config:
+      if not is_dynamics:
+        self.state_cache_ = StateCache(
+          build_state=lambda x_all, time=None, required=None: build_kinematics_state(self.robot_, x_all, order)
+        )
+      else:
+        self.state_cache_ = StateCache(
+          build_state=lambda x_all, time=None, required=None: build_dynamics_cmtm_state(self.robot_, x_all, order-2)
+        )
+      self.state_cache_config_ = cache_config
+
     class _MotionPack:
       def __init__(self, x: np.ndarray, revision: int):
         self._x = np.asarray(x, dtype=float).reshape(-1)
@@ -251,7 +267,8 @@ class Kots():
 
     motion_pack = _MotionPack(self.motion(order), self.motions_.revision())
 
-    return update_outward_state(self.robot_, motion_pack, self.state_cache_, is_dynamics, order)
+    self.state_dict_ = update_outward_state(self.robot_, motion_pack, self.state_cache_, is_dynamics, order)
+    return self.state_dict_
 
   def set_state_df(self):
     self.state_.import_state(self.state_dict_)
