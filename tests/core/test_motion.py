@@ -50,6 +50,14 @@ def test_set_aliases():
         assert str(e) == "Invalid alias: {'invalid'}"
     else:
         assert False, "Expected ValueError not raised"
+
+
+def test_set_aliases_with_accel_diff():
+    motions = RobotMotions(test_robot_dof)
+    motions.set_aliases(["coord", "veloc", "accel", "accel_diff1"])
+    assert motions.aliases == ["coord", "veloc", "accel", "accel_diff1"]
+    assert motions.motion_num == 4
+    assert motions.motions.shape == (12,)
         
 # Test the set_motion method
 def test_set_motion():

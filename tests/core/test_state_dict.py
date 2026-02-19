@@ -111,6 +111,43 @@ def test_extract_dict_link_info():
     assert np.allclose(extract_dict_link_info(state, "vel", name), [0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
     assert np.allclose(extract_dict_link_info(state, "acc", name), [0.7, 0.8, 0.9, 1.0, 1.1, 1.2])
 
+
+def test_extract_dict_link_info_world_wrench():
+    state = {
+        "arm_link_pos": [0.0, 0.0, 0.0],
+        "arm_link_rot": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
+        "arm_link_momentum": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+        "arm_link_force": [0.7, 0.8, 0.9, 1.0, 1.1, 1.2],
+    }
+    name = "arm"
+
+    assert np.allclose(
+        extract_dict_link_info(state, "momentum", name, frame="world"),
+        [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+    )
+    assert np.allclose(
+        extract_dict_link_info(state, "force", name, frame="world"),
+        [0.7, 0.8, 0.9, 1.0, 1.1, 1.2],
+    )
+
+
+def test_extract_dict_joint_info_world_wrench():
+    state = {
+        "joint1_joint_pos": [0.0, 0.0, 0.0],
+        "joint1_joint_rot": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
+        "joint1_joint_momentum": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+        "joint1_joint_force": [6.0, 5.0, 4.0, 3.0, 2.0, 1.0],
+    }
+
+    assert np.allclose(
+        extract_dict_joint_info(state, "momentum", "joint1", frame="world"),
+        [1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+    )
+    assert np.allclose(
+        extract_dict_joint_info(state, "force", "joint1", frame="world"),
+        [6.0, 5.0, 4.0, 3.0, 2.0, 1.0],
+    )
+
 def test_extract_dict_info():
     state = {
         "arm_link_pos": [1.0, 2.0, 3.0],
