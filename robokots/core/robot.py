@@ -23,45 +23,27 @@ class RobotStruct:
     self.link_dof: int = 0
     self.link_names: List[str] = []
     self.joint_names: List[str] = []
+    self._links_by_name: Dict[str, "LinkStruct"] = {}
+    self._joints_by_name: Dict[str, "JointStruct"] = {}
     self.robot_init()
     
   def link(self, name : str) -> "LinkStruct":
-    for l in self.links:
-      if name == l.name:
-        return l
-    ValueError(f"Invalid link name: {name}")
-    return None
+    return self._links_by_name.get(name)
   
   def link_list(self, name_list : list[str]) -> List["LinkStruct"]:
-    link_list = []
-    for name in name_list:
-      link_list.append(self.link(name))
-    return link_list
+    return [self._links_by_name.get(name) for name in name_list]
   
   def is_link(self, name : str) -> bool:
-    for l in self.links:
-      if name == l.name:
-        return True
-    return False
+    return name in self._links_by_name
 
   def joint(self, name : str) -> "JointStruct":
-    for l in self.joints:
-      if name == l.name:
-        return l
-    ValueError(f"Invalid joint name: {name}")
-    return None
+    return self._joints_by_name.get(name)
   
   def joint_list(self, name_list : list[str]) -> List["JointStruct"]:
-    joint_list = []
-    for name in name_list:
-      joint_list.append(self.joint(name))
-    return joint_list
+    return [self._joints_by_name.get(name) for name in name_list]
   
   def is_joint(self, name : str) -> bool:
-    for j in self.joints:
-      if name == j.name:
-        return True
-    return False
+    return name in self._joints_by_name
 
   def robot_init(self):
     self.joint_num = len(self.joints)  
@@ -74,6 +56,8 @@ class RobotStruct:
     dof_index = 0
     
     for l in self.links:
+      l.child_joint_ids = []
+      l.parent_joint_ids = []
       l.set_dof_index(dof_index)
       dof_index += l.dof
       self.link_dof += l.dof
@@ -90,6 +74,8 @@ class RobotStruct:
     
     self.link_names = [l.name for l in self.links]
     self.joint_names = [j.name for j in self.joints]
+    self._links_by_name = {l.name: l for l in self.links}
+    self._joints_by_name = {j.name: j for j in self.joints}
     
   def route_target_link(self, target_link : "LinkStruct", link_route : List, joint_route : List):
     link_route.append(target_link.id)

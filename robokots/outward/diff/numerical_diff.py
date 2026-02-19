@@ -9,6 +9,26 @@ from robokots.core.state_dict import extract_dict_link_info
 from robokots.outward.state import build_kinematics_state
 from robokots.outward.values import compute_outward_value
 
+
+def _make_lifted_update_func(robot_dof: int, order: int, update_method=None):
+  method = "poly" if update_method is None else update_method
+  eye = np.eye(robot_dof)
+  lifted_cache = {}
+
+  def update_func(x_init, direct, offset):
+    key = float(offset)
+    lifted = lifted_cache.get(key)
+    if lifted is None:
+      D, d = build_integrator(1, order, key, method=method)
+      lifted = (np.kron(eye, D), np.kron(eye, d))
+      lifted_cache[key] = lifted
+
+    kron_D, kron_d = lifted
+    return kron_D @ x_init + kron_d @ direct
+
+  return update_func
+
+
 def link_diff_kinematics_numerical(robot : RobotStruct, motions, link_name_list : list[str],  data_type : str, order = 3, \
                                     eps = 1e-8, update_method = None, update_direction = None) -> np.ndarray:
   if data_type not in ["pos", "rot", "vel", "acc", "jerk", "snap", "frame", "cmtm"]:
@@ -18,16 +38,9 @@ def link_diff_kinematics_numerical(robot : RobotStruct, motions, link_name_list 
 
   diff = np.zeros((len(link_name_list), dof))
 
-  def update_func(x_init, direct, eps):
-    x_ = x_init.copy()
-    
-    if update_method is None:
-      D, d = build_integrator(1, order, eps, method="poly")
-    else:
-      D, d = build_integrator(1, order, eps, method=update_method)
-
-    x_ = np.kron(np.eye(robot.dof), D) @ x_init + np.kron(np.eye(robot.dof), d) @ direct
-    return x_
+  update_func = _make_lifted_update_func(robot.dof, order, update_method=update_method)
+  if update_direction is None:
+    update_direction = np.ones(robot.dof)
 
   for i in range(len(link_name_list)):
     def kinematics_func(x):
@@ -37,8 +50,6 @@ def link_diff_kinematics_numerical(robot : RobotStruct, motions, link_name_list 
 
     sub_func = data_type_to_sub_func(data_type)
 
-    if update_direction is None:
-      update_direction = np.ones(robot.dof)
     diff[i] = numerical_difference(motions, kinematics_func, sub_func = sub_func, update_func = update_func, direction = update_direction, eps=eps)
 
   return diff
@@ -50,16 +61,7 @@ def diff_outward_numerical(robot : RobotStruct, motions, state_type : StateType,
   if state_type.time_order > order:
     return ValueError(f"Invalid order: {order}. Must be equal or larger than state_type.time_order {state_type.time_order}.")
 
-  def update_func(x_init, direct, eps):
-    x_ = x_init.copy()
-    
-    if update_method is None:
-      D, d = build_integrator(1, order, eps, method="poly")
-    else:
-      D, d = build_integrator(1, order, eps, method=update_method)
-
-    x_ = np.kron(np.eye(robot.dof), D) @ x_init + np.kron(np.eye(robot.dof), d) @ direct
-    return x_
+  update_func = _make_lifted_update_func(robot.dof, order, update_method=update_method)
 
   def func(x):
     m = np.zeros(robot.dof * state_type.time_order)

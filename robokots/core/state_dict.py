@@ -90,18 +90,18 @@ def cmtm_to_state_list(cmtm : CMTM, owner_type : str, owner_name : str) -> list:
   mat = cmtm.elem_mat()
   pos = mat[:3,3]
   rot_vec = mat[:3,:3].ravel()
-  state.append((alias_name+"_pos" , pos.tolist()))
-  state.append((alias_name+"_rot" , rot_vec.tolist()))
+  state.append((alias_name+"_pos" , np.asarray(pos)))
+  state.append((alias_name+"_rot" , np.asarray(rot_vec)))
   if order > 1:
     veloc = cmtm.elem_vecs(0)
-    state.append((alias_name+"_vel" , veloc.tolist()))
+    state.append((alias_name+"_vel" , np.asarray(veloc)))
   if order > 2:
     accel = cmtm.elem_vecs(1)
-    state.append((alias_name+"_acc" , accel.tolist()))
+    state.append((alias_name+"_acc" , np.asarray(accel)))
   if order > 3:
     for i in range(order-keys_order["acc"]):
       vec = cmtm.elem_vecs(i+2)
-      state.append((alias_name+"_acc_diff"+str(i+1) , vec.tolist()))
+      state.append((alias_name+"_acc_diff"+str(i+1) , np.asarray(vec)))
   
   return state
 
@@ -117,6 +117,7 @@ def vecs_to_state_dict(vec : np.ndarray, owner_type : str, owner_name : str, dat
         list: state data
     '''
     state = []
+    vec = np.asarray(vec)
 
     if order > 0:
         vec_dof = vec.size // order
@@ -138,7 +139,7 @@ def vecs_to_state_dict(vec : np.ndarray, owner_type : str, owner_name : str, dat
     state = [
         (
             f"{alias_name}" if i == 0 else f"{alias_name}_diff{i}",
-            row.tolist(),
+            row,
         )
         for i, row in enumerate(vecs)
     ]
@@ -236,12 +237,12 @@ def __state_dict_to_cmtm_vecs(state : dict, owner_name : str, owner_type : str =
     vec = np.zeros((order-1, 6))
 
     if order > 1:
-        vec[0] = np.array(state[owner_name+"_"+owner_type+"_vel"])
+        vec[0] = np.asarray(state[owner_name+"_"+owner_type+"_vel"])
     if order > 2:
-        vec[1] = np.array(state[owner_name+"_"+owner_type+"_acc"])
+        vec[1] = np.asarray(state[owner_name+"_"+owner_type+"_acc"])
     if order > 3:
         for i in range(order-keys_order["acc"]):
-            vec[i+2] = np.array(state[owner_name+"_"+owner_type+"_acc_diff"+str(i+1)])
+            vec[i+2] = np.asarray(state[owner_name+"_"+owner_type+"_acc_diff"+str(i+1)])
 
     return vec
 
@@ -324,6 +325,46 @@ def state_dict_to_rel_cmtm_wrench(state : dict, base_name : str, target_name : s
     rel_cmtm = CMTM.change_elemclass(base_cmtm.inv() @ target_cmtm, SE3wrench)
     return rel_cmtm
 
+def _state_vec_base_key(owner_name: str, owner_type: str, data_type: str) -> str:
+    return f"{owner_name}_{owner_type}_{data_type}"
+
+
+def _collect_state_vecs_fast(state: dict, owner_name: str, owner_type: str, data_type: str, order: int | None = None) -> list[np.ndarray] | None:
+    base_key = _state_vec_base_key(owner_name, owner_type, data_type)
+    if base_key not in state:
+        return None
+
+    if order is None:
+        keys = [base_key]
+        idx = 1
+        while True:
+            diff_key = f"{base_key}_diff{idx}"
+            if diff_key not in state:
+                break
+            keys.append(diff_key)
+            idx += 1
+    else:
+        keys = [base_key] + [f"{base_key}_diff{i}" for i in range(1, order)]
+        if any(key not in state for key in keys):
+            return None
+
+    return [np.asarray(state[key]) for key in keys]
+
+
+def _collect_state_vecs_scan(state: dict, owner_name: str, owner_type: str, data_type: str, order: int | None = None) -> list[np.ndarray]:
+    base_key = _state_vec_base_key(owner_name, owner_type, data_type)
+    diff_re = re.compile(rf"^{re.escape(base_key)}_diff\d+$")
+    vecs = []
+
+    for key, value in state.items():
+        if key == base_key or diff_re.match(key):
+            vecs.append(np.asarray(value))
+            if order is not None and len(vecs) >= order:
+                break
+
+    return vecs
+
+
 def state_dict_to_vecs(state : dict, owner_type : str, owner_name : str, data_type : str) -> np.ndarray:
     '''
     Convert state data to vector
@@ -334,13 +375,9 @@ def state_dict_to_vecs(state : dict, owner_type : str, owner_name : str, data_ty
     Returns:
         np.ndarray: vector
     '''
-    vecs = []
-    
-    for k in state.keys():
-        if k.startswith(owner_name + "_") and k.endswith("_" + owner_type+"_"+data_type):
-            vecs.append(np.array(state[k]))
-        elif re.match(rf"{owner_name}_{owner_type}_{data_type}_diff\d+", k):
-            vecs.append(np.array(state[k]))
+    vecs = _collect_state_vecs_fast(state, owner_name, owner_type, data_type)
+    if vecs is None:
+        vecs = _collect_state_vecs_scan(state, owner_name, owner_type, data_type)
     if len(vecs) == 0:
         raise ValueError(f"Invalid name: {owner_name}, type_name: {owner_type} or data_type: {data_type}.")
 
@@ -356,20 +393,28 @@ def state_dict_to_cmvec(state : dict, owner_name : str, owner_type : str, data_t
     Returns:
         CMVector: vector
     '''
-    vecs = []
-
-    l = 0
-    for k in state.keys():
-        if k.startswith(owner_name + "_") and k.endswith("_" + owner_type + "_" + data_type):
-            vecs.append(np.array(state[k]))
-            l += 1
-        elif re.match(rf"{owner_name}_{owner_type}_{data_type}_diff\d+", k):
-            vecs.append(np.array(state[k]))
-            l += 1
-        if l >= order:
-            break
+    vecs = _collect_state_vecs_fast(state, owner_name, owner_type, data_type, order=order)
+    if vecs is None:
+        vecs = _collect_state_vecs_scan(state, owner_name, owner_type, data_type, order=order)
     if len(vecs) == 0:
         raise ValueError(f"Invalid name: {owner_name}, type_name: {owner_type} or data_type: {data_type}.")
+
+    # Backward compatibility: some internal caches keep all orders in the base key
+    # as one flattened vector (without *_diffN keys).
+    if len(vecs) == 1 and order > 1:
+        flat = np.asarray(vecs[0]).reshape(-1)
+        if flat.size % order != 0:
+            raise ValueError(
+                f"Invalid order: requested {order}, but packed vector size is {flat.size} for "
+                f"{owner_name}_{owner_type}_{data_type}."
+            )
+        return CMVector(flat.reshape(order, -1))
+
+    if len(vecs) != order:
+        raise ValueError(
+            f"Invalid order: requested {order}, but found {len(vecs)} values for "
+            f"{owner_name}_{owner_type}_{data_type}."
+        )
 
     return CMVector(np.stack(vecs).reshape(order, -1))
 

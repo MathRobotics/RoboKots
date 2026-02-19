@@ -9,11 +9,10 @@ from .state import build_kinematics_state, build_dynamics_cmtm_state
 
 
 def compute_outward_value(robot : RobotStruct, motions : np.ndarray, state_type : StateType, input_order = None) -> dict:
-  motion = np.zeros(robot.dof * state_type.time_order)
-
-  if input_order is None:
+  if input_order is None or input_order == state_type.time_order:
     motion = motions
   else:
+    motion = np.zeros(robot.dof * state_type.time_order)
     time_order = state_type.time_order
     for joint in robot.joints:
         m = motions[joint.dof_index*input_order:joint.dof_index*input_order+joint.dof*time_order]
