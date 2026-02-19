@@ -25,7 +25,7 @@ def __target_link_part_joint_jacob(target_link : LinkStruct, joint : JointStruct
 
 def __target_link_part_link_jacob(target_link : LinkStruct, link : LinkStruct, link_coord : np.ndarray, rel_frame : SE3) -> np.ndarray:
   if target_link.id == link.id:
-    mat = calc_local_tan_mat(link, link_coord)[:, link.select_indices]
+    mat = calc_local_tan_mat(link, link_coord)[:, link.select_indeces]
   else:
     link_data = convert_link_to_data(link)
     mat = part_soft_link_jacob(link_data, link_coord, rel_frame)  
@@ -64,7 +64,7 @@ def __target_link_part_link_cmtm_tan_jacob(target_link : LinkStruct, link : Link
   if target_link.id == link.id:
     tmp = calc_local_tan_mat(link, link_motion, rel_cmtm._n) @ link_cmtm.tangent_mat()
     for i in range(rel_cmtm._n):
-      mat[i*6:(i+1)*6, i*link.dof:(i+1)*link.dof] = (tmp[i*6:(i+1)*6, i*6:(i+1)*6])[:, link.select_indices]
+      mat[i*6:(i+1)*6, i*link.dof:(i+1)*link.dof] = (tmp[i*6:(i+1)*6, i*6:(i+1)*6])[:, link.select_indeces]
   else:
     link_data = convert_link_to_data(link)
     mat = part_soft_link_cmtm_tan_jacob(link_data, link_motion, rel_cmtm, link_cmtm)
@@ -116,7 +116,7 @@ def __link_cmtm_tan_jacobian(robot : RobotStruct, motions: RobotMotions, state :
   for l in link_route:
     link = robot.links[l]
     if link.dof > 0:
-      rel_cmtm = state_dict_to_rel_cmtm(state, link.name, target_link.name, order)
+      rel_cmtm = state_dict_to_rel_cmtm(state, link.name, target_link.name, "link", order)
 
       link_cmtm = state_dict_to_cmtm(state, link.name, "link", order)
       mat = __target_link_part_link_cmtm_tan_jacob(target_link, link, motions.link_motions(link.dof, link.dof_index, order), rel_cmtm, link_cmtm)
