@@ -147,6 +147,7 @@ def _build_kinematics_state_with_cmtm(robot: RobotStruct, motions, order: int = 
     link_local = soft_link_local_cmtm(link_data, link_motions, order)
 
     child_cmtm = parent_cmtm @ joint_rel @ link_local
+
     link_cmtm_dict[child.name] = child_cmtm
     state_dict.update(cmtm_to_state_list(child_cmtm, "link", child.name))
 
