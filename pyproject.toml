@@ -29,7 +29,7 @@ dependencies = [
     "scipy>=1.13.1",
     "sympy>=1.14.0",
     "polars>=1.34.0",
-    "mathrobo>=0.0.1",
+    "mathrobo>=0.0.2",
 ]
 
 [project.optional-dependencies]
