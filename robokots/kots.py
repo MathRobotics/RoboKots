@@ -257,6 +257,11 @@ class Kots():
         )
       self.state_cache_config_ = cache_config
 
+    motion_revision = self.motions_.revision()
+    if self.state_cache_.is_fresh(motion_revision):
+      self.state_dict_ = self.state_cache_.state
+      return self.state_dict_
+
     class _MotionPack:
       def __init__(self, x: np.ndarray, revision: int):
         self._x = np.asarray(x, dtype=float).reshape(-1)
@@ -265,7 +270,7 @@ class Kots():
       def get(self) -> np.ndarray:
         return self._x
 
-    motion_pack = _MotionPack(self.motion(order), self.motions_.revision())
+    motion_pack = _MotionPack(self.motion(order), motion_revision)
 
     self.state_dict_ = update_outward_state(self.robot_, motion_pack, self.state_cache_, is_dynamics, order)
     return self.state_dict_

@@ -65,6 +65,16 @@ class StateCache:
             return 0
         return hash(frozenset(required))
 
+    def is_fresh(self, revision: int, time: Any = None, required: Optional[Iterable[StateKey]] = None) -> bool:
+        """Return True when cached state matches the requested revision/signature."""
+        time_rev = int(getattr(time, "revision", 0)) if time is not None else 0
+        req_sig = self._required_sig(required)
+        return (
+            int(revision) == self._rev_last
+            and time_rev == self._time_rev_last
+            and req_sig == self._req_sig_last
+        )
+
     def update_if_needed(self, pack: PackLike, time: Any = None, required: Optional[Iterable[StateKey]] = None) -> None:
         rev = int(getattr(pack, "revision", 0))
         time_rev = int(getattr(time, "revision", 0)) if time is not None else 0
