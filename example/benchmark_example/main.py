@@ -14,6 +14,7 @@ DEFAULT_MODEL = Path(__file__).resolve().parents[1] / "model" / "sample_robot.js
 
 OPS = (
     "kinematics",
+    "kinematics_jax",
     "dynamics",
     "link_diff_numerical",
     "jacobian_analytic",
@@ -176,6 +177,9 @@ def main() -> None:
     def op_kinematics() -> None:
         kots.kinematics(order=order)
 
+    def op_kinematics_jax() -> None:
+        kots.kinematics(order=order, backend="jax")
+
     def op_dynamics() -> None:
         kots.dynamics(order=order)
 
@@ -207,6 +211,7 @@ def main() -> None:
 
     op_map: dict[str, Callable[[], None]] = {
         "kinematics": op_kinematics,
+        "kinematics_jax": op_kinematics_jax,
         "dynamics": op_dynamics,
         "link_diff_numerical": op_link_diff_numerical,
         "jacobian_analytic": op_jacobian_analytic,

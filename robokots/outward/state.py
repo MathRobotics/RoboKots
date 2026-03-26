@@ -159,7 +159,21 @@ def _build_kinematics_state_with_cmtm(robot: RobotStruct, motions, order: int = 
   return state_dict, link_cmtm_dict, joint_cmtm_dict
 
 
-def build_kinematics_state(robot : RobotStruct, motions, order = 3) -> dict:
+def _should_use_jax_kinematics(robot: RobotStruct, backend = None) -> bool:
+  if backend is not None:
+    if backend == "jax":
+      return True
+    if backend == "numpy":
+      return False
+    raise ValueError(f"Unsupported kinematics backend: {backend}. Use 'numpy' or 'jax'.")
+
+  if len(robot.links) == 0:
+    return False
+
+  return getattr(robot.links[0], "lib", "numpy") == "jax" and all(link.dof == 0 for link in robot.links)
+
+
+def build_kinematics_state(robot : RobotStruct, motions, order = 3, backend = None) -> dict:
   '''
   Forward kinematics computation
   Args:
@@ -168,8 +182,55 @@ def build_kinematics_state(robot : RobotStruct, motions, order = 3) -> dict:
   Returns:
     dict: state data
   '''
+  if _should_use_jax_kinematics(robot, backend):
+    from .diff.outward_jax import build_kinematics_state_jax
+
+    return build_kinematics_state_jax(robot, motions, order)
+
   state_dict, _, _ = _build_kinematics_state_with_cmtm(robot, motions, order)
   return state_dict
+
+def _build_kinematics_state_with_cmtm(robot: RobotStruct, motions, order: int = 3):
+  motion = np.asarray(motions, dtype=float).reshape(-1)
+  if robot.dof * order > motion.size:
+    raise ValueError(f"Invalid motion length: {motion.size}. Must be {robot.dof * order}.")
+
+  state_dict = {}
+  link_cmtm_dict = {}
+  joint_cmtm_dict = {}
+
+  # The world link is the parent link of the first joint.
+  world_name = robot.links[robot.joints[0].parent_link_id].name
+  world_cmtm = CMTM.eye(SE3, order)
+  link_cmtm_dict[world_name] = world_cmtm
+  state_dict.update(cmtm_to_state_list(world_cmtm, "link", world_name))
+
+  for joint in robot.joints:
+    parent = robot.links[joint.parent_link_id]
+    child = robot.links[joint.child_link_id]
+
+    joint_data = convert_joint_to_data(joint)
+    link_data = convert_link_to_data(child)
+
+    joint_motions = motion[RobotMotions.owner_vec_index(joint.dof, joint.dof_index, order)]
+    link_motions = motion[RobotMotions.owner_vec_index(child.dof, child.dof_index, order)]
+
+    parent_cmtm = link_cmtm_dict[parent.name]
+    joint_rel = joint_rel_cmtm(joint_data, joint_motions, order)
+    link_local = soft_link_local_cmtm(link_data, link_motions, order)
+
+    child_cmtm = parent_cmtm @ joint_rel @ link_local
+
+    link_cmtm_dict[child.name] = child_cmtm
+    state_dict.update(cmtm_to_state_list(child_cmtm, "link", child.name))
+
+    # Keep joint local CMTM in state for Jacobian and derivative routines.
+    joint_local = joint_local_cmtm(joint_data, joint_motions, order)
+    joint_cmtm_dict[joint.name] = joint_local
+    state_dict.update(cmtm_to_state_list(joint_local, "joint", joint.name))
+
+  return state_dict, link_cmtm_dict, joint_cmtm_dict
+
 
 def calc_link_total_point_frame(robot : RobotStruct, motions : RobotMotions, state : dict, point : float) -> SE3:
   base = 0.0

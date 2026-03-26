@@ -13,7 +13,7 @@ from .base import JointData
 
 # Joint-space twist calculation with proper JAX conditional
 def local_tan_vec(select_mat: jnp.ndarray, joint_vec: jnp.ndarray) -> jnp.ndarray:
-  if len(joint_vec) == 0:
+  if joint_vec.size == 0:
     return jnp.zeros(6)
   else:
     return select_mat @ joint_vec
@@ -23,21 +23,22 @@ def local_frame(select_mat: jnp.ndarray, joint_coord: jnp.ndarray) -> SE3:
     twist = local_tan_vec(select_mat, joint_coord)
     return SE3.set_mat(SE3.exp(twist, LIB='jax'), LIB='jax')
 
+
+def _motion_blocks(joint_motions: jnp.ndarray, order: int, dof: int) -> jnp.ndarray:
+    return jnp.asarray(joint_motions).reshape((order, dof))
+
 # Higher-order CMTM construction
 def local_cmtm(select_mat: jnp.ndarray, joint_motions: jnp.ndarray,
                dof: int = 1, order: int = 3) -> CMTM:
     if order < 1:
         raise ValueError(f"Invalid order: {order}. Must be >= 1.")
 
-    frame = local_frame(select_mat, joint_motions[:dof].reshape((dof,)))
-    vecs = jnp.zeros((order - 1, 6))
-    def body_fun(i, arr):
-        vec = local_tan_vec(
-            select_mat,
-            joint_motions[(i+1)*dof:(i+2)*dof].reshape((dof,))
-        )
-        return arr.at[i].set(vec)
-    vecs = jax.lax.fori_loop(0, order-1, body_fun, vecs)
+    motion = _motion_blocks(joint_motions, order, dof)
+    frame = local_frame(select_mat, motion[0])
+    if order == 1:
+        vecs = jnp.zeros((0, 6))
+    else:
+        vecs = jax.vmap(lambda x: local_tan_vec(select_mat, x))(motion[1:])
 
     return CMTM[SE3](frame, vecs)
 
@@ -62,15 +63,12 @@ def joint_rel_cmtm(joint: JointData, joint_motions: jnp.ndarray, order: int = 3)
     if order < 1:
         raise ValueError(f"Invalid order: {order}. Must be >= 1.")
     dof = joint.dof
-    frame = joint_rel_frame(joint, joint_motions[:dof].reshape((dof,)))
-    vecs = jnp.zeros((order - 1, 6))
-    def rel_body(i, arr):
-        v = local_tan_vec(
-            joint.select_mat,
-            joint_motions[(i+1)*dof:(i+2)*dof].reshape((dof,))
-        )
-        return arr.at[i].set(v)
-    vecs = jax.lax.fori_loop(0, order-1, rel_body, vecs)
+    motion = _motion_blocks(joint_motions, order, dof)
+    frame = joint_rel_frame(joint, motion[0])
+    if order == 1:
+        vecs = jnp.zeros((0, 6))
+    else:
+        vecs = jax.vmap(lambda x: local_tan_vec(joint.select_mat, x))(motion[1:])
     return CMTM[SE3](frame, vecs)
 
 # Kinematic transforms

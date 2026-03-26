@@ -227,10 +227,10 @@ class Kots():
 
     return self.state_info_list(self.target_._targets, list_output=list_output)
   
-  def kinematics(self, order = None):
+  def kinematics(self, order = None, backend : str = None):
     if order is None:
       order = self.order_
-    self.state_dict_ = build_kinematics_state(self.robot_, self.motion(order), order)
+    self.state_dict_ = build_kinematics_state(self.robot_, self.motion(order), order, backend=backend)
 
   # ToDo: change function name
   def kinematics_point(self, s : float = 0.0):
@@ -241,15 +241,16 @@ class Kots():
       order = self.order_
     self.state_dict_ = build_dynamics_cmtm_state(self.robot_, self.motion(order), order-2)
 
-  def update_state_dict(self, order : int = None, is_dynamics: bool = False) -> dict:
+  def update_state_dict(self, order : int = None, is_dynamics: bool = False, backend : str = None) -> dict:
     if order is None:
       order = self.order_
 
-    cache_config = (bool(is_dynamics), int(order))
+    kinematics_backend = None if is_dynamics else backend
+    cache_config = (bool(is_dynamics), int(order), kinematics_backend)
     if self.state_cache_ is None or self.state_cache_config_ != cache_config:
       if not is_dynamics:
         self.state_cache_ = StateCache(
-          build_state=lambda x_all, time=None, required=None: build_kinematics_state(self.robot_, x_all, order)
+          build_state=lambda x_all, time=None, required=None: build_kinematics_state(self.robot_, x_all, order, backend=kinematics_backend)
         )
       else:
         self.state_cache_ = StateCache(
