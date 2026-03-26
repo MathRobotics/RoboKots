@@ -1,10 +1,13 @@
-#!/usr/bin/env python3.9
-# -*- coding: utf-8 -*-
-# 2024.12.11 Created by T.Ishigaki
+"""RoboKots robotics library.
 
-from .basic import *
-from .kinematics import *
-from .dynamics import *
-from .outward import *
-from .inward import *
-from .robot_io import *
+The package exposes submodules ``core``, ``outward``, and
+``robot_io``. They are intentionally not imported at the top level to avoid
+pulling in optional heavy dependencies when they are not needed. Import the
+modules you need directly, for example ``from robokots.outward import api``.
+"""
+
+__all__ = [
+    "core",
+    "outward",
+    "robot_io",
+]

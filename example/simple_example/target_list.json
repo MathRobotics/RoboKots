@@ -1,8 +1,9 @@
 {
   "targets":[
     {
-      "type": ["vel", "acc", "jerk", "snap", "force"],
-      "link": "end"
+      "data_type": ["frame", "vel", "acc", "jerk", "snap"],
+      "owner_type": "link",
+      "owner_name": "end"
     }
   ]
 }

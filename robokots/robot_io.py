@@ -5,8 +5,7 @@
 import json
 from typing import Dict
 
-from .basic.robot import RobotStruct
-from .basic.target import TargetList
+from .urdf_io import load_urdf_file, urdf_root_to_model_data, urdf_xml_to_model_data
 
 def load_json_file(file_path: str) -> Dict:
     try:
@@ -23,27 +22,3 @@ def save_json_file(data: Dict, file_path: str):
             json.dump(data, file, indent=4)
     except Exception as e:
         raise IOError(f"Failed to write JSON file: {e}")
-
-def load_robot_json(data : Dict, lib: str = "numpy") -> "RobotStruct":
-    if not isinstance(data, dict):
-        raise ValueError("Input data must be a dictionary.")
-    return RobotStruct.from_dict(data, lib = lib)
-
-def load_robot_json_file(file_path: str, lib: str = "numpy") -> "RobotStruct":
-    data = load_json_file(file_path)
-    return load_robot_json(data, lib=lib)
-
-def print_robot_structure(robot : RobotStruct):
-    robot.print()
-
-def load_target_json(data: Dict) -> "TargetList":
-    if not isinstance(data, dict):
-        raise ValueError("Input data must be a dictionary.")
-    return TargetList.from_dict(data)
-        
-def load_target_json_file(file_path: str) -> "TargetList":
-    data = load_json_file(file_path)
-    return load_target_json(data)
-
-def print_target_list(t_list : TargetList):
-    t_list.print()

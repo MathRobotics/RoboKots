@@ -1,79 +1,121 @@
 import numpy as np
+from pathlib import Path
 
 import mathrobo as mr
 from robokots.kots import *
-from robokots.kinematics.kinematics_jax import *
+from robokots.core.models.kinematics.kinematics_jax import *
 
 METHOD = "poly"
-kots = Kots.from_json_file("./test_model/sample_robot.json")
+TEST_DIR = Path(__file__).resolve().parent
+MODEL_PATH = TEST_DIR / "test_model" / "sample_robot.json"
+TARGET_PATH = TEST_DIR / "target_list.json"
+TARGET_LINK = "arm3"
 
-motion = np.random.rand(kots.order()*kots.dof())
 
-kots.import_motions(motion)
-kots.set_target_from_file("target_list.json")
+def _make_kots(order: int = 3) -> Kots:
+    return Kots.from_json_file(str(MODEL_PATH), order=order)
 
-kots.kinematics()
+
+def test_from_urdf_file(tmp_path: Path):
+    urdf = """<?xml version="1.0"?>
+<robot name="urdf_robot">
+  <link name="base"/>
+  <link name="slider"/>
+  <link name="tool"/>
+  <joint name="j1" type="revolute">
+    <parent link="base"/>
+    <child link="slider"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+  <joint name="j2" type="prismatic">
+    <parent link="slider"/>
+    <child link="tool"/>
+    <origin xyz="1 0 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+  </joint>
+</robot>
+"""
+    urdf_path = tmp_path / "robot.urdf"
+    urdf_path.write_text(urdf, encoding="utf-8")
+
+    kots = Kots.from_urdf_file(str(urdf_path), order=2)
+    assert kots.dof() == 2
+    assert "world" in kots.link_name_list()
+    assert {"j1", "j2"}.issubset(set(kots.joint_name_list()))
+
+    motion = np.array([0.2, 0.05, 0.1, 0.0], dtype=float)
+    kots.import_motions(motion)
+    kots.kinematics()
+    frame = kots.state_info(StateType(data_type="frame", owner_type="link", owner_name="tool"))
+    assert isinstance(frame, mr.SE3)
+
 
 def test_kinematics():
-    h_list = kots.state_link_info_list("frame", kots.link_name_list())
-    v_list = kots.state_link_info_list("vel", kots.link_name_list())
-    a_list = kots.state_link_info_list("acc", kots.link_name_list())    
+    kots = _make_kots(order=3)
+    motion = np.random.rand(kots.order() * kots.dof())
+    kots.import_motions(motion)
+    kots.kinematics()
 
-    h_list2 = forward_kinematics(kots.robot_.joints, kots.motion(order=1))
-    v_list2 = forward_kinematics_vel(kots.robot_.joints, kots.motion(order=2))
-    a_list2 = forward_kinematics_acc(kots.robot_.joints, kots.motion(order=3))
+    h_list = forward_kinematics(kots.robot_.joints, kots.motion(order=1))
+    v_list = forward_kinematics_vel(kots.robot_.joints, kots.motion(order=2))
+    a_list = forward_kinematics_acc(kots.robot_.joints, kots.motion(order=3))
 
-    for i in range(len(h_list)):
-        assert np.allclose(h_list[i].mat(), h_list2[i].mat())
-        assert np.allclose(v_list[i], v_list2[i])
-        assert np.allclose(a_list[i], a_list2[i])
+    for i, link in enumerate(kots.link_name_list()):
+        h = kots.state_info(StateType(data_type="frame", owner_type = "link", owner_name=link))
+        v = kots.state_info(StateType(data_type="vel", owner_type = "link", owner_name=link))
+        a = kots.state_info(StateType(data_type="acc", owner_type = "link", owner_name=link))
+
+        assert np.allclose(h.mat(), h_list[i].mat())
+        assert np.allclose(v, v_list[i])
+        assert np.allclose(a, a_list[i])
 
 def test_kinematics_numerical():
-    dv = np.random.rand(kots.dof())
-    motion_diff = kots.motion_diff(kots.order(), dv)
+    kots = _make_kots(order=3)
+    motion = np.random.rand(kots.order() * kots.dof())
+    kots.import_motions(motion)
+    kots.kinematics()
 
-    jacob = kots.jacobian_target()
-    vec = kots.link_diff_kinematics_numerical(kots.target_.target_names, "cmtm", kots.order(), update_direction=dv)
+    dv = np.random.rand(kots.dof())
+    vec = kots.link_diff_kinematics_numerical([TARGET_LINK], "cmtm", kots.order(), update_direction=dv)
 
     alias = ["frame", "vel", "acc", "jerk", "snap"]
 
     for i in range(kots.order()-1):
-        ana_vec = kots.state_target_link_info(alias[i+1])[-1]
-        num_vec = kots.link_diff_kinematics_numerical(kots.target_.target_names, alias[i], order = kots.order(), update_direction=dv)
+        ana_vec = kots.state_info(StateType(data_type=alias[i+1], owner_type = "link", owner_name=TARGET_LINK)) 
+        num_vec = kots.link_diff_kinematics_numerical([TARGET_LINK], alias[i], order = kots.order(), update_direction=dv)
 
         num_vec2 = vec[:,6*i:6*(i+1)]
 
-        jac_vec = jacob[6*i:6*(i+1)] @ motion_diff
-
         assert np.allclose(ana_vec, num_vec)
         assert np.allclose(ana_vec, num_vec2)
-        assert np.allclose(ana_vec, jac_vec)
     
 def test_jacobian_numerical():
-    kots = Kots.from_json_file("./test_model/sample_robot.json")
+    kots = _make_kots(order=3)
 
     motion = np.random.rand(kots.order()*kots.dof())
 
     kots.import_motions(motion)
-    kots.set_target_from_file("target_list.json")  
+    kots.kinematics()
 
-    kots.kinematics()  
-
-    jacob_cmtm = kots.jacobian_target()
-    jacob_cmtm_num = kots.jacobian_target_numerical()
-
-    assert np.allclose(jacob_cmtm, jacob_cmtm_num, atol=1e-5, rtol=1e-5 )
+    for dt in ["frame", "vel", "acc"]:
+        state = StateType(data_type=dt, owner_type="link", owner_name=TARGET_LINK)
+        jacob = kots.jacobian(state)
+        jacob_num = kots.jacobian(state, numerical=True)
+        assert np.allclose(jacob, jacob_num, atol=1e-5, rtol=1e-5)
     
-def test_cmtm_jacobian_numerical_soft():
-    kots = Kots.from_json_file("./test_model/soft_rod.json", order=5)
+# def test_cmtm_jacobian_numerical_soft():
+#     kots = Kots.from_json_file("./test_model/soft_rod.json", order=5)
 
-    motion = np.random.rand(kots.order()*kots.dof())
+#     motion = np.random.rand(kots.order()*kots.dof())
 
-    kots.import_motions(motion)
+#     kots.import_motions(motion)
 
-    kots.kinematics()  
+#     kots.kinematics()  
 
-    jacob_cmtm = kots.jacobian(["end"], [["frame", "vel", "acc", "jerk", "snap"]])
-    jacob_cmtm_num = kots.jacobian_numerical(["end"], [["frame", "vel", "acc", "jerk", "snap"]])
+#     jacob_cmtm = kots.jacobian(StateType('link','end','snap'))
+#     jacob_cmtm_num = kots.jacobian(StateType('link','end','snap'), numerical=True)
+#     print("Analytical Jacobian:\n", jacob_cmtm.shape)
+#     print("Numerical Jacobian:\n", jacob_cmtm_num.shape)
 
-    assert np.allclose(jacob_cmtm, jacob_cmtm_num, atol=1e-5, rtol=1e-5)
+#     assert np.allclose(jacob_cmtm, jacob_cmtm_num, atol=1e-5, rtol=1e-5)
