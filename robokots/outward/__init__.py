@@ -12,6 +12,8 @@ from importlib import import_module
 _LAZY_API = {
     "build_kinematics_state": "build_kinematics_state",
     "build_dynamics_cmtm_state": "build_dynamics_cmtm_state",
+    "build_kinematics_state_jax": "build_kinematics_state_jax",
+    "kinematics_jax": "kinematics_jax",
     "get_value": "get_value",
     "compute_outward_value": "compute_outward_value",
     "update_outward_state": "update_outward_state",

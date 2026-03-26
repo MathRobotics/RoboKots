@@ -4,6 +4,7 @@ from pathlib import Path
 import mathrobo as mr
 from robokots.kots import *
 from robokots.core.models.kinematics.kinematics_jax import *
+from robokots.outward.diff.outward_jax import kinematics_jax as outward_kinematics_jax
 
 METHOD = "poly"
 TEST_DIR = Path(__file__).resolve().parent
@@ -69,6 +70,43 @@ def test_kinematics():
         assert np.allclose(h.mat(), h_list[i].mat())
         assert np.allclose(v, v_list[i])
         assert np.allclose(a, a_list[i])
+
+def test_kinematics_backend_jax_matches_numpy():
+    order = 5
+    motion = np.random.default_rng(0).standard_normal(order * _make_kots(order=order).dof())
+
+    kots = _make_kots(order=order)
+    kots_jax = _make_kots(order=order)
+
+    kots.import_motions(motion)
+    kots_jax.import_motions(motion)
+
+    kots.kinematics()
+    kots_jax.kinematics(backend="jax")
+
+    jax_frames = outward_kinematics_jax(kots_jax.robot_, kots_jax.motions_, order=1)
+    assert jax_frames.names == tuple(kots_jax.link_name_list())
+    target_idx = jax_frames.names.index(TARGET_LINK)
+    np.testing.assert_allclose(
+        np.asarray(jax_frames.state[target_idx]),
+        kots.state_info(StateType(data_type="frame", owner_type="link", owner_name=TARGET_LINK)).mat(),
+        atol=1e-6,
+        rtol=1e-6,
+    )
+
+    for dt in ["frame", "vel", "acc", "jerk", "snap"]:
+        state = StateType(data_type=dt, owner_type="link", owner_name=TARGET_LINK)
+        actual = kots_jax.state_info(state)
+        expected = kots.state_info(state)
+        if dt == "frame":
+            np.testing.assert_allclose(actual.mat(), expected.mat(), atol=1e-6, rtol=1e-6)
+        else:
+            np.testing.assert_allclose(actual, expected, atol=1e-6, rtol=1e-6)
+
+    for dt in ["frame", "vel", "acc"]:
+        state = StateType(data_type=dt, owner_type="link", owner_name=TARGET_LINK)
+        np.testing.assert_allclose(kots_jax.jacobian(state), kots.jacobian(state), atol=1e-5, rtol=1e-5)
+
 
 def test_kinematics_numerical():
     kots = _make_kots(order=3)
