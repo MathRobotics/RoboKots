@@ -97,6 +97,38 @@ def test_state_dict_to_cmtm():
     assert np.allclose(cmtm.elem_vecs(1), [0.7, 0.8, 0.9, 1.0, 1.1, 1.2])
     assert np.allclose(cmtm.elem_vecs(2), [1.3, 1.4, 1.5, 1.6, 1.7, 1.8])
 
+
+def test_state_dict_to_cmtm_reuses_cached_object():
+    state = {
+        "arm_link_pos": [1.0, 2.0, 3.0],
+        "arm_link_rot": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
+        "arm_link_vel": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+        "arm_link_acc": [0.7, 0.8, 0.9, 1.0, 1.1, 1.2],
+    }
+
+    cmtm0 = state_dict_to_cmtm(state, "arm")
+    cmtm1 = state_dict_to_cmtm(state, "arm")
+
+    assert cmtm0 is cmtm1
+
+
+def test_state_dict_to_rel_cmtm_reuses_cached_object():
+    state = {
+        "base_link_pos": [0.0, 0.0, 0.0],
+        "base_link_rot": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
+        "base_link_vel": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        "base_link_acc": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        "arm_link_pos": [1.0, 2.0, 3.0],
+        "arm_link_rot": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
+        "arm_link_vel": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+        "arm_link_acc": [0.7, 0.8, 0.9, 1.0, 1.1, 1.2],
+    }
+
+    rel0 = state_dict_to_rel_cmtm(state, "base", "arm")
+    rel1 = state_dict_to_rel_cmtm(state, "base", "arm")
+
+    assert rel0 is rel1
+
 def test_extract_dict_link_info():
     state = {
         "arm_link_pos": [1.0, 2.0, 3.0],

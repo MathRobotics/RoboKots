@@ -7,6 +7,34 @@ from mathrobo import SE3, SE3wrench, CMTM, CMTM, SO3, Factorial
 
 from .state import keys, keys_order, keys_time_order, keys_name
 
+
+_STATE_MEMO_KEY = "__robokots_state_memo__"
+
+
+def _state_keys_signature(state: dict) -> tuple[str, ...]:
+    return tuple(key for key in state.keys() if key != _STATE_MEMO_KEY)
+
+
+def _state_memo(state: dict) -> dict:
+    signature = _state_keys_signature(state)
+    memo = state.get(_STATE_MEMO_KEY)
+    if not isinstance(memo, dict):
+        memo = {"keys_signature": signature}
+        state[_STATE_MEMO_KEY] = memo
+    elif memo.get("keys_signature") != signature:
+        memo.clear()
+        memo["keys_signature"] = signature
+    return memo
+
+
+def _state_bucket(state: dict, bucket_name: str) -> dict:
+    memo = _state_memo(state)
+    bucket = memo.get(bucket_name)
+    if not isinstance(bucket, dict):
+        bucket = {}
+        memo[bucket_name] = bucket
+    return bucket
+
 def extract_state_keys(state: dict, prefix: str = "") -> list:
     """
     Extracts the suffix part of keys from a dictionary that match known physical quantities.
@@ -53,6 +81,10 @@ def count_dict_time_order(state: dict) -> int:
         int: The maximum derivative order detected in the keys.
     """
 
+    memo = _state_memo(state)
+    if "time_order" in memo:
+        return memo["time_order"]
+
     keys = extract_state_keys(state)
     max_order = 0
 
@@ -70,6 +102,7 @@ def count_dict_time_order(state: dict) -> int:
                 max_order = max(max_order, order)
                 break  # Stop checking once a match is found
 
+    memo["time_order"] = max_order
     return max_order
 
 def cmtm_to_state_list(cmtm : CMTM, owner_type : str, owner_name : str) -> list:
@@ -184,8 +217,14 @@ def state_dict_to_rot(state : dict, owner_name : str, owner_type : str = "link")
     Returns:
         np.ndarray: rotation matrix
     '''
+    cache_key = (owner_name, owner_type)
+    rot_cache = _state_bucket(state, "rot")
+    if cache_key in rot_cache:
+        return rot_cache[cache_key]
+
     rot_vec = np.array(state[owner_name+"_"+owner_type+"_rot"])
     rot = rot_vec.reshape(3,3)
+    rot_cache[cache_key] = rot
 
     return rot
 
@@ -198,9 +237,15 @@ def state_dict_to_frame(state : dict, owner_name : str, owner_type : str = "link
     Returns:
         SE3: SE3 object
     '''
+    cache_key = (owner_name, owner_type)
+    frame_cache = _state_bucket(state, "frame")
+    if cache_key in frame_cache:
+        return frame_cache[cache_key]
+
     pos = np.array(state[owner_name+"_"+owner_type+"_pos"])
     rot = state_dict_to_rot(state, owner_name, owner_type)
     mat = SE3(rot, pos)
+    frame_cache[cache_key] = mat
 
     return mat
 
@@ -213,9 +258,15 @@ def state_dict_to_frame_wrench(state : dict, owner_name : str, owner_type : str 
     Returns:
         SE3wrench: SE3wrench object
     '''
+    cache_key = (owner_name, owner_type)
+    frame_cache = _state_bucket(state, "frame_wrench")
+    if cache_key in frame_cache:
+        return frame_cache[cache_key]
+
     pos = np.array(state[owner_name+"_"+owner_type+"_pos"])
     rot = state_dict_to_rot(state, owner_name, owner_type)
     mat = SE3wrench(rot, pos)
+    frame_cache[cache_key] = mat
 
     return mat
 
@@ -255,10 +306,19 @@ def state_dict_to_cmtm(state : dict, owner_name : str, owner_type : str = "link"
     Returns:
         CMTM: CMTM object
     '''
+    if order is None:
+        order = count_dict_time_order(state)
+
+    cache_key = (owner_name, owner_type, order)
+    cmtm_cache = _state_bucket(state, "cmtm")
+    if cache_key in cmtm_cache:
+        return cmtm_cache[cache_key]
+
     mat = state_dict_to_frame(state, owner_name, owner_type)
     vec = __state_dict_to_cmtm_vecs(state, owner_name, owner_type, order)
 
     cmtm = CMTM[SE3](mat, vec)
+    cmtm_cache[cache_key] = cmtm
 
     return cmtm
 
@@ -271,10 +331,19 @@ def state_dict_to_cmtm_wrench(state : dict, owner_name : str, owner_type : str =
     Returns:
         CMTM: CMTM object
     '''
+    if order is None:
+        order = count_dict_time_order(state)
+
+    cache_key = (owner_name, owner_type, order)
+    cmtm_cache = _state_bucket(state, "cmtm_wrench")
+    if cache_key in cmtm_cache:
+        return cmtm_cache[cache_key]
+
     mat = state_dict_to_frame_wrench(state, owner_name, owner_type)
     vec = __state_dict_to_cmtm_vecs(state, owner_name, owner_type, order)
 
     cmtm = CMTM[SE3wrench](mat, vec)
+    cmtm_cache[cache_key] = cmtm
 
     return cmtm
 
@@ -288,9 +357,15 @@ def state_dict_to_rel_frame(state : dict, base_name : str, target_name : str, ow
     Returns:
         SE3: SE3 object
     '''
+    cache_key = (base_name, target_name, owner_type)
+    rel_cache = _state_bucket(state, "rel_frame")
+    if cache_key in rel_cache:
+        return rel_cache[cache_key]
+
     base_frame = state_dict_to_frame(state, base_name, owner_type)
     target_frame = state_dict_to_frame(state, target_name, owner_type)
     rel_frame = base_frame.inv() @ target_frame
+    rel_cache[cache_key] = rel_frame
 
     return rel_frame
 
@@ -304,9 +379,18 @@ def state_dict_to_rel_cmtm(state : dict, base_name : str, target_name : str, own
     Returns:
         CMTM: CMTM object
     '''
+    if order is None:
+        order = count_dict_time_order(state)
+
+    cache_key = (base_name, target_name, owner_type, order)
+    rel_cache = _state_bucket(state, "rel_cmtm")
+    if cache_key in rel_cache:
+        return rel_cache[cache_key]
+
     base_cmtm = state_dict_to_cmtm(state, base_name, owner_type, order)
     target_cmtm = state_dict_to_cmtm(state, target_name, owner_type, order)
     rel_cmtm = base_cmtm.inv() @ target_cmtm
+    rel_cache[cache_key] = rel_cmtm
 
     return rel_cmtm
 
@@ -320,9 +404,18 @@ def state_dict_to_rel_cmtm_wrench(state : dict, base_name : str, target_name : s
     Returns:
         CMTM: CMTM object
     '''
+    if order is None:
+        order = count_dict_time_order(state)
+
+    cache_key = (base_name, target_name, owner_type, order)
+    rel_cache = _state_bucket(state, "rel_cmtm_wrench")
+    if cache_key in rel_cache:
+        return rel_cache[cache_key]
+
     base_cmtm = state_dict_to_cmtm(state, base_name, owner_type, order)
     target_cmtm = state_dict_to_cmtm(state, target_name, owner_type, order)
     rel_cmtm = CMTM.change_elemclass(base_cmtm.inv() @ target_cmtm, SE3wrench)
+    rel_cache[cache_key] = rel_cmtm
     return rel_cmtm
 
 def _state_vec_base_key(owner_name: str, owner_type: str, data_type: str) -> str:

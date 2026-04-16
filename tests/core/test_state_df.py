@@ -1,6 +1,8 @@
 
 import numpy as np
 
+from robokots.core import RobotDF as CoreRobotDF, RobotState as CoreRobotState
+from robokots.core.dataframe import RobotDF as DataframeRobotDF, RobotState as DataframeRobotState
 from robokots.core.state_table import RobotDF, RobotState
 
 '''
@@ -104,3 +106,10 @@ def test_robot_state_link_state_vec():
     type = "vel"
     vec = state.state_vec(state.df(), joint_name, "joint", type)
     assert np.array_equal(vec, test_robot_data[joint_name + "_joint_" + type])
+
+
+def test_dataframe_alias_exports_same_symbols():
+    assert DataframeRobotDF is RobotDF
+    assert DataframeRobotState is RobotState
+    assert CoreRobotDF is RobotDF
+    assert CoreRobotState is RobotState

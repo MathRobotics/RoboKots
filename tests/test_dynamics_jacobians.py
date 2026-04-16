@@ -2,14 +2,20 @@ from typing import Optional
 
 import numpy as np
 import pytest
+from pathlib import Path
 
 from robokots.kots import Kots, StateType
 
 
+TEST_DIR = Path(__file__).resolve().parent
+MODEL_PATH = TEST_DIR / "test_model" / "sample_robot.json"
+TARGET_PATH = TEST_DIR / "target_list.json"
+
+
 @pytest.mark.slow
 def test_dynamics_jacobians():
-    kots = Kots.from_json_file("./test_model/sample_robot.json")
-    kots.set_target_from_file("target_list.json")
+    kots = Kots.from_json_file(str(MODEL_PATH))
+    kots.set_target_from_file(str(TARGET_PATH))
 
     motion = np.random.rand(kots.order() * kots.dof())
     kots.import_motions(motion)

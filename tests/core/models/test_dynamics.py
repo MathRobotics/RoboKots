@@ -1,6 +1,6 @@
 import numpy as np
 
-from mathrobo import SO3, SE3
+from mathrobo import CMVector, SO3, SE3
 from robokots.core.models.dynamics import *
 
 '''
@@ -56,3 +56,12 @@ def test_joint_dynamics():
     assert np.allclose(joint_force, expected_force)
     assert np.allclose(joint_torque, expected_torque)
 
+
+def test_link_force_cmvec_preserves_row_dimension():
+    vel = CMVector(np.arange(30, dtype=float).reshape(5, 6) / 10.0)
+    momentum = CMVector(np.arange(30, 60, dtype=float).reshape(5, 6) / 10.0)
+
+    force = link_force_cmvec(vel, momentum)
+
+    assert isinstance(force, CMVector)
+    assert force.vecs().shape == (4, 6)
