@@ -52,6 +52,47 @@ def test_from_urdf_file(tmp_path: Path):
     assert isinstance(frame, mr.SE3)
 
 
+def test_from_urdf_file_normalizes_joint_order_for_dynamics(tmp_path: Path):
+    urdf = """<?xml version="1.0"?>
+<robot name="misordered_tree">
+  <link name="base"/>
+  <link name="link1"/>
+  <link name="sensor_top"/>
+  <link name="sensor_bottom"/>
+  <joint name="sensor_top_joint" type="fixed">
+    <parent link="link1"/>
+    <child link="sensor_top"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <joint name="sensor_bottom_joint" type="fixed">
+    <parent link="link1"/>
+    <child link="sensor_bottom"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <joint name="joint1" type="revolute">
+    <parent link="base"/>
+    <child link="link1"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+</robot>
+"""
+    urdf_path = tmp_path / "misordered.urdf"
+    urdf_path.write_text(urdf, encoding="utf-8")
+
+    kots = Kots.from_urdf_file(str(urdf_path), order=4)
+    assert kots.joint_name_list() == [
+        "world_to_base",
+        "joint1",
+        "sensor_top_joint",
+        "sensor_bottom_joint",
+    ]
+
+    kots.import_motions(np.zeros(kots.dof() * kots.order(), dtype=float))
+    kots.kinematics()
+    kots.dynamics()
+
+
 def test_kinematics():
     kots = _make_kots(order=3)
     motion = np.random.rand(kots.order() * kots.dof())
