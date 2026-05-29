@@ -1,9 +1,14 @@
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
 import pytest
 
 from robokots.kots import Kots, StateType
+
+
+TEST_DIR = Path(__file__).resolve().parent
+MODEL_PATH = TEST_DIR / "test_model" / "sample_robot.json"
 
 
 @pytest.mark.slow
@@ -324,3 +329,32 @@ def test_dynamics_jacobians():
             kots.jacobian(joint_state(joint_name, "torque_diff3"), numerical=True),
             decimal=2,
         )
+
+
+@pytest.mark.slow
+def test_jacobian_matvec_dynamics_matches_jacobian_product():
+    kots = Kots.from_json_file(str(MODEL_PATH), order=4)
+    rng = np.random.default_rng(2)
+
+    motion = rng.standard_normal(kots.order() * kots.dof())
+    kots.import_motions(motion)
+    kots.dynamics()
+
+    link_name = "arm3"
+    joint_name = next(
+        name for name in kots.joint_name_list()
+        if kots.robot_.joint_list([name])[0].dof > 0
+    )
+    states = [
+        StateType("link", link_name, "momentum", "world"),
+        StateType("link", link_name, "force"),
+        StateType("joint", joint_name, "torque"),
+    ]
+    vec = rng.standard_normal(kots.dof() * StateType.max_time_order(states))
+
+    np.testing.assert_allclose(
+        kots.jacobian_matvec(states, vec),
+        kots.jacobian(states) @ vec,
+        atol=1e-10,
+        rtol=1e-10,
+    )

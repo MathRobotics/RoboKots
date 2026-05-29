@@ -23,6 +23,7 @@ from .outward import (
     diff_outward_numerical,
     jacobian_numerical,
     outward_jacobian,
+    outward_jacobian_matvec,
     calc_link_total_point_frame,
     update_outward_state,
 )
@@ -318,12 +319,39 @@ class Kots():
         return np.vstack(jacobs)
 
     return outward_jacobian(self.robot_, self.state_dict_, state_type_list, dim = self.dim_, list_output = list_output)
+
+  def jacobian_matvec(self, state_type, vec : np.ndarray, numerical : bool = False, list_output : bool = False):
+    if type(state_type) is list:
+      state_type_list = state_type
+    else:
+      state_type_list = [state_type]
+
+    max_order = StateType.max_time_order(state_type_list)
+    vec = np.asarray(vec)
+    expected_shape = (self.robot_.dof * max_order,)
+    if vec.shape != expected_shape:
+      raise ValueError(f"vec must have shape {expected_shape}, got {vec.shape}")
+
+    if numerical:
+      results = [jacobian_numerical(self.robot_, self.motions_, st, max_order) @ vec for st in state_type_list]
+      if list_output:
+        return results
+      else:
+        return np.concatenate(results)
+
+    return outward_jacobian_matvec(self.robot_, self.state_dict_, state_type_list, vec, dim = self.dim_, list_output = list_output)
   
   def jacobian_target(self, numerical : bool = False, list_output : bool = False):
     if self.target_ is None:
       raise ValueError("target is not set")
     
     return self.jacobian(self.target_._targets, numerical=numerical, list_output=list_output)
+
+  def jacobian_target_matvec(self, vec : np.ndarray, numerical : bool = False, list_output : bool = False):
+    if self.target_ is None:
+      raise ValueError("target is not set")
+
+    return self.jacobian_matvec(self.target_._targets, vec, numerical=numerical, list_output=list_output)
   
   def inverse_kinematics(self, target_type : List[StateType], target_value : List[np.ndarray],
                     q_init : np.ndarray, opt_func : None = None) -> np.ndarray:

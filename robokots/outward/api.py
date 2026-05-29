@@ -10,7 +10,7 @@ from .diff.numerical_diff import (
     diff_outward_numerical,
 )
 
-from .diff.outward_total_gradient import outward_jacobian
+from .diff.outward_total_gradient import outward_jacobian, outward_jacobian_matvec
 from .diff.outward_jacobians import jacobian_numerical
 
 __all__ = [
@@ -24,6 +24,7 @@ __all__ = [
     "link_diff_kinematics_numerical",
     "diff_outward_numerical",
     "outward_jacobian",
+    "outward_jacobian_matvec",
     "jacobian_numerical",
     "calc_link_total_point_frame",
 ]

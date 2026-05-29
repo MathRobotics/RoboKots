@@ -141,6 +141,52 @@ def test_jacobian_numerical():
         jacob = kots.jacobian(state)
         jacob_num = kots.jacobian(state, numerical=True)
         assert np.allclose(jacob, jacob_num, atol=1e-5, rtol=1e-5)
+
+
+def test_jacobian_matvec_kinematics_matches_jacobian_product():
+    kots = _make_kots(order=3)
+    rng = np.random.default_rng(0)
+
+    motion = rng.standard_normal(kots.order() * kots.dof())
+    kots.import_motions(motion)
+    kots.kinematics()
+
+    states = [
+        StateType(data_type="frame", owner_type="link", owner_name=TARGET_LINK),
+        StateType(data_type="vel", owner_type="link", owner_name=TARGET_LINK),
+        StateType(data_type="acc", owner_type="link", owner_name=TARGET_LINK),
+    ]
+    vec = rng.standard_normal(kots.dof() * StateType.max_time_order(states))
+
+    np.testing.assert_allclose(
+        kots.jacobian_matvec(states, vec),
+        kots.jacobian(states) @ vec,
+        atol=1e-10,
+        rtol=1e-10,
+    )
+
+    actual_parts = kots.jacobian_matvec(states, vec, list_output=True)
+    expected_parts = [jacob @ vec for jacob in kots.jacobian(states, list_output=True)]
+    for actual, expected in zip(actual_parts, expected_parts):
+        np.testing.assert_allclose(actual, expected, atol=1e-10, rtol=1e-10)
+
+
+def test_jacobian_target_matvec_matches_jacobian_product():
+    kots = _make_kots(order=3)
+    rng = np.random.default_rng(1)
+
+    kots.set_target_from_file(str(TARGET_PATH))
+    motion = rng.standard_normal(kots.order() * kots.dof())
+    kots.import_motions(motion)
+    kots.dynamics()
+
+    vec = rng.standard_normal(kots.dof() * StateType.max_time_order(kots.target_._targets))
+    np.testing.assert_allclose(
+        kots.jacobian_target_matvec(vec),
+        kots.jacobian_target() @ vec,
+        atol=1e-10,
+        rtol=1e-10,
+    )
     
 # def test_cmtm_jacobian_numerical_soft():
 #     kots = Kots.from_json_file("./test_model/soft_rod.json", order=5)

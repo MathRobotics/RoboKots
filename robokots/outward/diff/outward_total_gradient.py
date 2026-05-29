@@ -9,10 +9,11 @@ from robokots.core import RobotStruct
 from robokots.core.state import StateType, dim_to_dof, data_type_dof, data_type_offset
 from robokots.core.state import keys_kinematics, keys_momentum, keys_force, keys_torque
 
-from robokots.core.models.whole_body.total_kinematics_grad_mat import total_coord_to_link_vel_grad_mat
+from robokots.core.models.whole_body.total_kinematics_grad_mat import total_coord_to_link_vel_grad_mat, total_coord_to_link_vel_grad_matvec
 from robokots.core.models.whole_body.total_dynamics_grad_mat import total_coord_to_link_momentum_grad_mat, total_coord_to_joint_momentum_grad_mat
 from robokots.core.models.whole_body.total_dynamics_grad_mat import total_coord_to_world_link_momentum_grad_mat, total_coord_to_world_joint_momentum_grad_mat
 from robokots.core.models.whole_body.total_dynamics_grad_mat import total_coord_to_link_force_grad_mat, total_coord_to_joint_force_grad_mat, total_coord_to_joint_torque_grad_mat
+from robokots.core.models.whole_body.total_dynamics_grad_mat import total_coord_to_link_momentum_grad_matvec
 
 def link_jacobian(robot : RobotStruct, state : dict, link_name_list : list[str], order : int = 3, dim : int = 3) -> np.ndarray:
     links = robot.link_list(link_name_list)
@@ -121,7 +122,31 @@ def outward_kinematics_jacobian(robot : RobotStruct, state : dict, state_type_li
     else:
         return np.vstack(jacob_list)
 
-from robokots.core.models.whole_body.total_kinematics_grad_mat import total_coord_to_link_tan_vel_grad_mat
+def outward_kinematics_jacobian_matvec(robot : RobotStruct, state : dict, state_type_list : list[StateType], vec : np.ndarray, max_time_order = None, dim : int = 3, list_output : bool = False) -> np.ndarray:
+    kine_state_type_list = StateType.filter_list_by_kinematics(state_type_list)
+    if max_time_order is None:
+        max_time_order = StateType.max_time_order(kine_state_type_list)
+
+    mat_vec = total_coord_to_link_vel_grad_matvec(robot, state, vec, order=max_time_order, dim=dim)
+    dim_dof = dim_to_dof(dim)
+
+    vec_list = []
+    for st in kine_state_type_list:
+        link = robot.link(st.owner_name)
+        if link is None:
+            raise ValueError(f"Invalid link name: {st.owner_name}")
+        base = link.id * dim_dof * max_time_order
+        state_dof = data_type_dof(st.data_type, dim=dim)
+        offset = dim_dof*(st.time_order-1) + data_type_offset(st.data_type) * state_dof
+        vec_part = mat_vec[base + offset : base + offset + state_dof]
+        vec_list.append(vec_part)
+
+    if list_output:
+        return vec_list
+    else:
+        return np.concatenate(vec_list)
+
+from robokots.core.models.whole_body.total_kinematics_grad_mat import total_coord_to_link_tan_vel_grad_mat, total_coord_to_link_tan_vel_grad_matvec
 from robokots.core.models.whole_body.total_partial_grad_mat import *
 
 def outward_jacobian(robot : RobotStruct, state : dict, state_type_list : list[StateType], max_time_order = None, dim : int = 3, list_output : bool = False) -> np.ndarray:
@@ -208,3 +233,102 @@ def outward_jacobian(robot : RobotStruct, state : dict, state_type_list : list[S
         return jacob_list
     else:
         return np.vstack(jacob_list)
+
+def outward_jacobian_matvec(robot : RobotStruct, state : dict, state_type_list : list[StateType], vec : np.ndarray, max_time_order = None, dim : int = 3, list_output : bool = False) -> np.ndarray:
+    if StateType.is_list_all_in_kinematics(state_type_list):
+        return outward_kinematics_jacobian_matvec(robot, state, state_type_list, vec, max_time_order, dim=dim, list_output=list_output)
+
+    if max_time_order is None:
+        max_time_order = StateType.max_time_order(state_type_list)
+
+    dof = dim_to_dof(dim)
+
+    vec_kine = total_coord_to_link_vel_grad_matvec(robot, state, vec, order=max_time_order, dim=dim)
+    vec_tan_kine = total_coord_to_link_tan_vel_grad_matvec(robot, state, vec, out_order=max_time_order-1, in_order=max_time_order, dim=dim)
+    vec_link_mom = total_coord_to_link_momentum_grad_matvec(robot, state, vec, order=max_time_order, dim=dim)
+
+    vec_link_wmom = total_partial_link_momentum_to_world_link_momentum_grad_matvec(
+        robot, state, vec_link_mom, order=max_time_order, dim=dim
+    ) + total_partial_link_tan_vel_to_world_link_momentum_grad_matvec(
+        robot, state, vec_tan_kine, order=max_time_order, dim=dim
+    )
+
+    vec_joint_wmom = total_world_link_wrench_to_world_joint_wrench_matvec(
+        robot, vec_link_wmom, order=max_time_order-1, dim=dim
+    )
+
+    vec_joint_mom = total_partial_world_joint_momentum_to_joint_momentum_grad_matvec(
+        robot, state, vec_joint_wmom, max_time_order, dim
+    ) + total_partial_link_tan_vel_to_joint_momentum_grad_matvec(
+        robot, state, vec_tan_kine[(max_time_order-1)*dof:], max_time_order, dim
+    )
+
+    if max_time_order >= 3:
+        mat_mom_to_force = total_partial_momentum_to_force_grad_mat(robot, state, force_order=max_time_order-2, dim=dim)
+        vec_link_force = total_partial_momentum_to_force_grad_matvec(
+            robot, state, vec_link_mom, force_order=max_time_order-2, dim=dim
+        ) + total_partial_link_sp_vel_to_link_force_grad_matvec(
+            robot, state, vec_kine, force_order=max_time_order-2, dim=dim
+        )
+
+        mat_joint_mom_to_force = mat_mom_to_force[(max_time_order-2)*dof:,(max_time_order-1)*dof:]
+        vec_joint_force = mat_joint_mom_to_force @ vec_joint_mom \
+                    + total_partial_link_sp_vel_to_joint_force_grad_matvec(
+                        robot, state, vec_kine[(max_time_order)*dof:], force_order=max_time_order-2, dim=dim
+                    )
+
+        vec_joint_torque = total_joint_wrench_to_joint_torque_matvec(
+            robot, vec_joint_force, torque_order=max_time_order-2, dim=dim
+        )
+
+    vec_list = []
+    for st in state_type_list:
+        if st.owner_type == "link":
+            link = robot.link(st.owner_name)
+            if link is None:
+                raise ValueError(f"Invalid link name: {st.owner_name}")
+        elif st.owner_type == "joint":
+            joint = robot.joint(st.owner_name)
+            if joint is None:
+                raise ValueError(f"Invalid joint name: {st.owner_name}")
+
+        order = st.key_order -1
+
+        if st.data_type in keys_kinematics:
+            base = link.id * dof * max_time_order
+            vec_part = vec_kine[base + dof*order : base + dof*(order+1)]
+            vec_list.append(vec_part)
+        elif st.data_type in keys_momentum:
+            if st.owner_type == "link":
+                base = link.id * dof * (max_time_order-1)
+                if st.frame_name == "world":
+                    vec_part = vec_link_wmom[base + dof*(order) : base + dof*(order+1)]
+                else:
+                    vec_part = vec_link_mom[base + dof*(order) : base + dof*(order+1)]
+            elif st.owner_type == "joint":
+                base = joint.id * dof * (max_time_order-1)
+                if st.frame_name == "world":
+                    vec_part = vec_joint_wmom[base + dof*(order) : base + dof*(order+1)]
+                else:
+                    vec_part = vec_joint_mom[base + dof*(order) : base + dof*(order+1)]
+            vec_list.append(vec_part)
+        elif st.data_type in keys_force:
+            if st.owner_type == "link":
+                base = link.id * dof * (max_time_order-2)
+                vec_part = vec_link_force[base + dof*order : base + dof*(order+1)]
+            elif st.owner_type == "joint":
+                base = joint.id * dof * (max_time_order-2)
+                vec_part = vec_joint_force[base + dof*order : base + dof*(order+1)]
+            vec_list.append(vec_part)
+        elif st.data_type in keys_torque:
+            if st.owner_type == "joint":
+                base = joint.dof_index * (max_time_order-2)
+                vec_part = vec_joint_torque[base + joint.dof*(order) : base + joint.dof*(order+1)]
+            else:
+                raise ValueError("torque can be specified only for joint owner type")
+            vec_list.append(vec_part)
+
+    if list_output:
+        return vec_list
+    else:
+        return np.concatenate(vec_list)

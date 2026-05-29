@@ -10,15 +10,20 @@ from .basic import total_factorial_mat, total_factorial_mat_inv
 from .basic import total_link_cmtm_wrench_var_x_arb_vec, total_joint_cmtm_wrench_inv_var_x_arb_vec
 from .total_kinematics_mat import total_coord_arrange
 from .total_dynamics_mat import total_link_inertia_mat, total_joint_wrench_to_joint_torque_mat
+from .total_dynamics_mat import total_link_inertia_matvec
 from .total_dynamics_mat import total_world_link_cmtm_wrench, total_world_joint_cmtm_wrench_inv
 from .total_dynamics_mat import total_world_link_wrench_to_world_joint_wrench_mat
 from .total_kinematics_grad_mat import total_coord_to_joint_tan_vel_grad_mat, total_joint_tan_vel_to_link_sp_vel_grad_mat
 from .total_kinematics_grad_mat import total_coord_to_link_tan_vel_grad_mat, total_coord_to_link_vel_grad_mat
+from .total_kinematics_grad_mat import total_coord_to_link_sp_vel_grad_matvec
 
 from .total_partial_grad_mat import *
 
 def total_coord_to_link_momentum_grad_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 3) -> np.ndarray:
     return total_link_inertia_mat(r, order=order-1, dim=dim) @ total_joint_tan_vel_to_link_sp_vel_grad_mat(r, state, order, dim) @ total_coord_to_joint_tan_vel_grad_mat(r, state, order, dim)
+
+def total_coord_to_link_momentum_grad_matvec(r : RobotStruct, state : dict, vec : np.ndarray, order : int = 3, dim : int = 3) -> np.ndarray:
+    return total_link_inertia_matvec(r, total_coord_to_link_sp_vel_grad_matvec(r, state, vec, order, dim), order=order-1, dim=dim)
 
 def total_coord_to_world_link_momentum_grad_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 3) -> np.ndarray:
     # dof = dim_to_dof(dim)

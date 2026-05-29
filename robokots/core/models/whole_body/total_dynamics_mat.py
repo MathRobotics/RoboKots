@@ -21,6 +21,19 @@ def total_joint_wrench_to_joint_torque_mat(r : RobotStruct, torque_order : int =
         mat[joint.dof_index*torque_order:(joint.dof_index+joint.dof)*torque_order, i*n_:(i+1)*n_] = joint_select_diag_mat(joint.select_mat, torque_order).T
     return mat
 
+def total_joint_wrench_to_joint_torque_matvec(r : RobotStruct, vec : np.ndarray, torque_order : int = 1, dim : int = 3) -> np.ndarray:
+    n_ = dim_to_dof(dim) * torque_order
+    result = np.zeros(r.joint_dof * torque_order)
+
+    for i, joint in enumerate(r.joints):
+        if joint.dof == 0:
+            continue
+        out_start = joint.dof_index * torque_order
+        result[out_start:out_start + joint.dof*torque_order] = (
+            joint_select_diag_mat(joint.select_mat, torque_order).T @ vec[i*n_:(i+1)*n_]
+        )
+    return result
+
 def total_world_link_cmtm_wrench(r : RobotStruct, state : dict, order : int = 1, dim : int = 3) -> np.ndarray:
     n_ = dim_to_dof(dim) * order
     mat = np.zeros((r.link_num * n_, r.link_num * n_))
@@ -29,6 +42,16 @@ def total_world_link_cmtm_wrench(r : RobotStruct, state : dict, order : int = 1,
         cmtm_wrench = state_dict_to_cmtm_wrench(state, link.name, "link", order)
         mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = cmtm_wrench.mat_adj()
     return mat
+
+def total_world_link_cmtm_wrench_matvec(r : RobotStruct, state : dict, vec : np.ndarray, order : int = 1, dim : int = 3) -> np.ndarray:
+    n_ = dim_to_dof(dim) * order
+    result = np.zeros(r.link_num * n_)
+
+    for i, link in enumerate(r.links):
+        start = i * n_
+        cmtm_wrench = state_dict_to_cmtm_wrench(state, link.name, "link", order)
+        result[start:start+n_] = cmtm_wrench.mat_adj() @ vec[start:start+n_]
+    return result
 
 def total_world_link_cmtm_wrench_inv(r : RobotStruct, state : dict, order : int = 1, dim : int = 3) -> np.ndarray:
     n_ = dim_to_dof(dim) * order
@@ -56,6 +79,16 @@ def total_world_joint_cmtm_wrench_inv(r : RobotStruct, state : dict, order : int
         cmtm_wrench = state_dict_to_cmtm_wrench(state, r.links[joint.child_link_id].name, "link", order)
         mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = cmtm_wrench.mat_inv_adj()
     return mat
+
+def total_world_joint_cmtm_wrench_inv_matvec(r : RobotStruct, state : dict, vec : np.ndarray, order : int = 1, dim : int = 3) -> np.ndarray:
+    n_ = dim_to_dof(dim) * order
+    result = np.zeros(r.joint_num * n_)
+
+    for i, joint in enumerate(r.joints):
+        start = i * n_
+        cmtm_wrench = state_dict_to_cmtm_wrench(state, r.links[joint.child_link_id].name, "link", order)
+        result[start:start+n_] = cmtm_wrench.mat_inv_adj() @ vec[start:start+n_]
+    return result
 
 def total_joint_wrench_to_link_wrench_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 3) -> np.ndarray:
     n_ = dim_to_dof(dim) * order
@@ -104,6 +137,19 @@ def total_world_link_wrench_to_world_joint_wrench_mat(r : RobotStruct, order : i
             mat[i*n_:(i+1)*n_, j*n_:(j+1)*n_] = np.eye(n_)
     return mat
 
+def total_world_link_wrench_to_world_joint_wrench_matvec(r : RobotStruct, vec : np.ndarray, order : int = 1, dim : int = 3) -> np.ndarray:
+    n_ = dim_to_dof(dim) * order
+    result = np.zeros(r.joint_num * n_)
+
+    for i, joint in enumerate(r.joints):
+        link_route = []
+        joint_route = []
+        r.route_end_joints(joint, link_route, joint_route)
+        out_start = i * n_
+        for j in link_route:
+            result[out_start:out_start+n_] += vec[j*n_:(j+1)*n_]
+    return result
+
 def total_link_inertia_mat(r : RobotStruct, order : int = 3, dim : int = 3) -> np.ndarray:
     n_ = dim_to_dof(dim) * order
     mat = np.zeros((r.link_num * n_, r.link_num * n_))
@@ -112,6 +158,16 @@ def total_link_inertia_mat(r : RobotStruct, order : int = 3, dim : int = 3) -> n
         mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = inertia_diag_mat(spatial_inertia(link.mass, link.inertia, link.cog), order)
 
     return mat
+
+def total_link_inertia_matvec(r : RobotStruct, vec : np.ndarray, order : int = 3, dim : int = 3) -> np.ndarray:
+    n_ = dim_to_dof(dim) * order
+    result = np.zeros(r.link_num * n_)
+
+    for i, link in enumerate(r.links):
+        start = i * n_
+        inertia = inertia_diag_mat(spatial_inertia(link.mass, link.inertia, link.cog), order)
+        result[start:start+n_] = inertia @ vec[start:start+n_]
+    return result
 
 def total_momentum_to_force_mat(r : RobotStruct, state : dict, force_order : int = 1, dim : int = 3) -> np.ndarray:
     n_ = dim_to_dof(dim) * force_order
