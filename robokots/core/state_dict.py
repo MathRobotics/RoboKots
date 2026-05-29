@@ -5,25 +5,36 @@ import numpy as np
 from mathrobo import CMVector
 from mathrobo import SE3, SE3wrench, CMTM, CMTM, SO3, Factorial
 
-from .state import keys, keys_order, keys_time_order, keys_name
+from .state import keys, keys_order, keys_time_order, keys_name, state_dict_key
 
 
 _STATE_MEMO_KEY = "__robokots_state_memo__"
+_STATE_MEMOS: dict[int, dict] = {}
+
+
+def is_state_payload_key(key: object) -> bool:
+    return key != _STATE_MEMO_KEY
 
 
 def _state_keys_signature(state: dict) -> tuple[str, ...]:
-    return tuple(key for key in state.keys() if key != _STATE_MEMO_KEY)
+    return tuple(key for key in state.keys() if is_state_payload_key(key))
 
 
 def _state_memo(state: dict) -> dict:
     signature = _state_keys_signature(state)
-    memo = state.get(_STATE_MEMO_KEY)
-    if not isinstance(memo, dict):
-        memo = {"keys_signature": signature}
-        state[_STATE_MEMO_KEY] = memo
+    memo_key = id(state)
+    memo = _STATE_MEMOS.get(memo_key)
+    if len(_STATE_MEMOS) > 1024:
+        _STATE_MEMOS.clear()
+        memo = None
+
+    if not isinstance(memo, dict) or memo.get("state_ref") is not state:
+        memo = {"keys_signature": signature, "state_ref": state}
+        _STATE_MEMOS[memo_key] = memo
     elif memo.get("keys_signature") != signature:
         memo.clear()
         memo["keys_signature"] = signature
+        memo["state_ref"] = state
     return memo
 
 
@@ -118,23 +129,21 @@ def cmtm_to_state_list(cmtm : CMTM, owner_type : str, owner_name : str) -> list:
 
   order = cmtm._n
 
-  alias_name = f"{owner_name}_{owner_type}"
-
   mat = cmtm.elem_mat()
   pos = mat[:3,3]
   rot_vec = mat[:3,:3].ravel()
-  state.append((alias_name+"_pos" , np.asarray(pos)))
-  state.append((alias_name+"_rot" , np.asarray(rot_vec)))
+  state.append((state_dict_key(owner_type, owner_name, "pos") , np.asarray(pos)))
+  state.append((state_dict_key(owner_type, owner_name, "rot") , np.asarray(rot_vec)))
   if order > 1:
     veloc = cmtm.elem_vecs(0)
-    state.append((alias_name+"_vel" , np.asarray(veloc)))
+    state.append((state_dict_key(owner_type, owner_name, "vel") , np.asarray(veloc)))
   if order > 2:
     accel = cmtm.elem_vecs(1)
-    state.append((alias_name+"_acc" , np.asarray(accel)))
+    state.append((state_dict_key(owner_type, owner_name, "acc") , np.asarray(accel)))
   if order > 3:
     for i in range(order-keys_order["acc"]):
       vec = cmtm.elem_vecs(i+2)
-      state.append((alias_name+"_acc_diff"+str(i+1) , np.asarray(vec)))
+      state.append((state_dict_key(owner_type, owner_name, "acc")+"_diff"+str(i+1) , np.asarray(vec)))
   
   return state
 
@@ -157,7 +166,7 @@ def vecs_to_state_dict(vec : np.ndarray, owner_type : str, owner_name : str, dat
     else:
         raise ValueError("order must be greater than 0")
     
-    alias_name = f"{owner_name}_{owner_type}_{data_type}"
+    alias_name = state_dict_key(owner_type, owner_name, data_type)
 
     if vec.size == 0 or vec_dof == 0:
         return [
@@ -188,7 +197,7 @@ def state_dict_to_link_pos(state : dict, name : str) -> np.ndarray:
     Returns:
         np.ndarray: position vector
     '''
-    pos = np.array(state[name+"_link_pos"])
+    pos = np.array(state[state_dict_key("link", name, "pos")])
 
     return pos
 
@@ -222,7 +231,7 @@ def state_dict_to_rot(state : dict, owner_name : str, owner_type : str = "link")
     if cache_key in rot_cache:
         return rot_cache[cache_key]
 
-    rot_vec = np.array(state[owner_name+"_"+owner_type+"_rot"])
+    rot_vec = np.array(state[state_dict_key(owner_type, owner_name, "rot")])
     rot = rot_vec.reshape(3,3)
     rot_cache[cache_key] = rot
 
@@ -242,7 +251,7 @@ def state_dict_to_frame(state : dict, owner_name : str, owner_type : str = "link
     if cache_key in frame_cache:
         return frame_cache[cache_key]
 
-    pos = np.array(state[owner_name+"_"+owner_type+"_pos"])
+    pos = np.array(state[state_dict_key(owner_type, owner_name, "pos")])
     rot = state_dict_to_rot(state, owner_name, owner_type)
     mat = SE3(rot, pos)
     frame_cache[cache_key] = mat
@@ -263,7 +272,7 @@ def state_dict_to_frame_wrench(state : dict, owner_name : str, owner_type : str 
     if cache_key in frame_cache:
         return frame_cache[cache_key]
 
-    pos = np.array(state[owner_name+"_"+owner_type+"_pos"])
+    pos = np.array(state[state_dict_key(owner_type, owner_name, "pos")])
     rot = state_dict_to_rot(state, owner_name, owner_type)
     mat = SE3wrench(rot, pos)
     frame_cache[cache_key] = mat
@@ -288,12 +297,12 @@ def __state_dict_to_cmtm_vecs(state : dict, owner_name : str, owner_type : str =
     vec = np.zeros((order-1, 6))
 
     if order > 1:
-        vec[0] = np.asarray(state[owner_name+"_"+owner_type+"_vel"])
+        vec[0] = np.asarray(state[state_dict_key(owner_type, owner_name, "vel")])
     if order > 2:
-        vec[1] = np.asarray(state[owner_name+"_"+owner_type+"_acc"])
+        vec[1] = np.asarray(state[state_dict_key(owner_type, owner_name, "acc")])
     if order > 3:
         for i in range(order-keys_order["acc"]):
-            vec[i+2] = np.asarray(state[owner_name+"_"+owner_type+"_acc_diff"+str(i+1)])
+            vec[i+2] = np.asarray(state[state_dict_key(owner_type, owner_name, "acc")+"_diff"+str(i+1)])
 
     return vec
 
@@ -419,7 +428,7 @@ def state_dict_to_rel_cmtm_wrench(state : dict, base_name : str, target_name : s
     return rel_cmtm
 
 def _state_vec_base_key(owner_name: str, owner_type: str, data_type: str) -> str:
-    return f"{owner_name}_{owner_type}_{data_type}"
+    return state_dict_key(owner_type, owner_name, data_type)
 
 
 def _collect_state_vecs_fast(state: dict, owner_name: str, owner_type: str, data_type: str, order: int | None = None) -> list[np.ndarray] | None:
@@ -530,16 +539,16 @@ def extract_dict_link_info(state : dict, data_type : str, link_name : str, frame
             world_momentum = CMVector(( Factorial.mat(order, dim=6) @ cmtm_wrench.mat_adj() @ local_momentum).reshape(-1,6)).vecs()
             return world_momentum[-1]
         else:
-            return np.array(state[link_name+"_link_"+data_type])
+            return np.array(state[state_dict_key("link", link_name, data_type)])
     elif "force" in data_type:
         if frame == 'world':
             local_force = state_dict_to_cmvec(state, link_name, "link", "force", order).cm_vec()
             world_force = CMVector((Factorial.mat(order, dim=6) @ cmtm_wrench.mat_adj() @ local_force).reshape(-1,6)).vecs()
             return world_force[-1]
         else:
-            return np.array(state[link_name+"_link_"+data_type])
+            return np.array(state[state_dict_key("link", link_name, data_type)])
     else:
-        return np.array(state[link_name+"_link_"+keys_name[data_type]])
+        return np.array(state[state_dict_key("link", link_name, data_type)])
     
 def extract_dict_joint_info(state : dict, data_type : str, joint_name : str, frame = "dummy", rel_frame = 'dummy'):
     if frame != 'dummy':
@@ -558,18 +567,18 @@ def extract_dict_joint_info(state : dict, data_type : str, joint_name : str, fra
             world_momentum = CMVector((Factorial.mat(order, dim=6) @ cmtm_wrench.mat_adj() @ local_momentum).reshape(-1,6)).vecs()
             return world_momentum[-1]
         else:
-            return np.array(state[joint_name+"_joint_"+data_type])
+            return np.array(state[state_dict_key("joint", joint_name, data_type)])
     elif "force" in data_type:
         if frame == 'world':
             local_force = state_dict_to_cmvec(state, joint_name, "joint", "force", order).cm_vec()
             world_force = CMVector((Factorial.mat(order, dim=6) @ cmtm_wrench.mat_adj() @ local_force).reshape(-1,6)).vecs()
             return world_force[-1]
         else:
-            return np.array(state[joint_name+"_joint_"+data_type])
+            return np.array(state[state_dict_key("joint", joint_name, data_type)])
     elif "torque" in data_type:
-        return np.array(state[joint_name+"_joint_"+data_type])
+        return np.array(state[state_dict_key("joint", joint_name, data_type)])
     else:
-        return np.array(state[joint_name+"_joint_"+data_type])
+        return np.array(state[state_dict_key("joint", joint_name, data_type)])
     
 def extract_dict_total_link(state : dict, link_name_list : str, data_type : str, order : int) -> CMVector:
     for i, link_name in enumerate(link_name_list):

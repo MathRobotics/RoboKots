@@ -17,7 +17,7 @@ from ..core.state_dict import (
     state_dict_to_frame,
     vecs_to_state_dict,
 )
-from ..core.state import data_type_dof, StateType
+from ..core.state import data_type_dof, StateType, state_dict_key
 
 from ..core.models.kinematics.base import convert_joint_to_data, convert_link_to_data
 from ..core.models.kinematics.kinematics import joint_local_cmtm, joint_rel_cmtm, joint_rel_frame
@@ -117,48 +117,6 @@ def _truncate_link_cmtm_order(link_cmtm: CMTM, order: int) -> CMTM:
   return CMTM[SE3](SE3.set_mat(link_cmtm.elem_mat()), link_cmtm.vecs()[: order - 1])
 
 
-def _build_kinematics_state_with_cmtm(robot: RobotStruct, motions, order: int = 3):
-  motion = np.asarray(motions, dtype=float).reshape(-1)
-  if robot.dof * order > motion.size:
-    raise ValueError(f"Invalid motion length: {motion.size}. Must be {robot.dof * order}.")
-
-  state_dict = {}
-  link_cmtm_dict = {}
-  joint_cmtm_dict = {}
-
-  # The world link is the parent link of the first joint.
-  world_name = robot.links[robot.joints[0].parent_link_id].name
-  world_cmtm = CMTM.eye(SE3, order)
-  link_cmtm_dict[world_name] = world_cmtm
-  state_dict.update(cmtm_to_state_list(world_cmtm, "link", world_name))
-
-  for joint in robot.joints:
-    parent = robot.links[joint.parent_link_id]
-    child = robot.links[joint.child_link_id]
-
-    joint_data = convert_joint_to_data(joint)
-    link_data = convert_link_to_data(child)
-
-    joint_motions = motion[RobotMotions.owner_vec_index(joint.dof, joint.dof_index, order)]
-    link_motions = motion[RobotMotions.owner_vec_index(child.dof, child.dof_index, order)]
-
-    parent_cmtm = link_cmtm_dict[parent.name]
-    joint_rel = joint_rel_cmtm(joint_data, joint_motions, order)
-    link_local = soft_link_local_cmtm(link_data, link_motions, order)
-
-    child_cmtm = parent_cmtm @ joint_rel @ link_local
-
-    link_cmtm_dict[child.name] = child_cmtm
-    state_dict.update(cmtm_to_state_list(child_cmtm, "link", child.name))
-
-    # Keep joint local CMTM in state for Jacobian and derivative routines.
-    joint_local = joint_local_cmtm(joint_data, joint_motions, order)
-    joint_cmtm_dict[joint.name] = joint_local
-    state_dict.update(cmtm_to_state_list(joint_local, "joint", joint.name))
-
-  return state_dict, link_cmtm_dict, joint_cmtm_dict
-
-
 def _should_use_jax_kinematics(robot: RobotStruct, backend = None) -> bool:
   if backend is not None:
     if backend == "jax":
@@ -249,7 +207,7 @@ def build_dynamics_state(robot : RobotStruct, joint_motions) -> dict:
   state_dict = build_kinematics_state(robot, joint_motions, 3)
 
   world_name = robot.links[robot.joints[0].parent_link_id].name
-  state_dict.update([(world_name + "_link_force" , [0.,0.,0.,0.,0.,0.])])
+  state_dict.update([(state_dict_key("link", world_name, "force") , [0.,0.,0.,0.,0.,0.])])
 
   for joint in reversed(robot.joints):
     child = robot.links[joint.child_link_id]
@@ -259,22 +217,22 @@ def build_dynamics_state(robot : RobotStruct, joint_motions) -> dict:
 
     inertia = spatial_inertia(child.mass, child.inertia, child.cog)
 
-    link_veloc = np.array(state_dict[child.name + "_vel"])
-    link_accel = np.array(state_dict[child.name + "_acc"])
+    link_veloc = np.array(state_dict[state_dict_key("link", child.name, "vel")])
+    link_accel = np.array(state_dict[state_dict_key("link", child.name, "acc")])
     
     link_force = link_dynamics(inertia, link_veloc, link_accel)  
-    state_dict.update([(child.name + "_link_force" , link_force.tolist())])
+    state_dict.update([(state_dict_key("link", child.name, "force") , link_force.tolist())])
     
     joint_frame = joint_rel_frame(joint_data, joint_coord)
 
     p_joint_force = np.zeros(6)
     for id in child.child_joint_ids:
-      p_joint_force += state_dict[robot.joints[id].name + "_joint_force"]
+      p_joint_force += state_dict[state_dict_key("joint", robot.joints[id].name, "force")]
 
     joint_torque, joint_force = joint_dynamics(joint.select_mat, joint_frame, p_joint_force, link_force)
     
-    state_dict.update([(joint.name + "_joint_force" , joint_force.tolist())])
-    state_dict.update([(joint.name + "_joint_torque" , joint_torque.tolist())])
+    state_dict.update([(state_dict_key("joint", joint.name, "force") , joint_force.tolist())])
+    state_dict.update([(state_dict_key("joint", joint.name, "torque") , joint_torque.tolist())])
     
   return state_dict
 

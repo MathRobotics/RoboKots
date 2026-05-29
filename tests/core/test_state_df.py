@@ -1,9 +1,13 @@
 
 import numpy as np
+import pytest
+
+pytest.importorskip("polars")
 
 from robokots.core import RobotDF as CoreRobotDF, RobotState as CoreRobotState
 from robokots.core.dataframe import RobotDF as DataframeRobotDF, RobotState as DataframeRobotState
-from robokots.core.state_table import RobotDF, RobotState
+from robokots.core.state_table import RobotDF as CompatRobotDF, RobotState as CompatRobotState
+from robokots.contrib.polars.state_table import RobotDF, RobotState
 
 '''
 Test data for RobotDF
@@ -108,8 +112,23 @@ def test_robot_state_link_state_vec():
     assert np.array_equal(vec, test_robot_data[joint_name + "_joint_" + type])
 
 
+def test_robot_state_extract_link_pos_traj():
+    robot = MockRobot()
+    state = RobotState(robot.link_names, robot.joint_names, test_link_aliases, test_joint_aliases)
+    state.import_state(test_robot_data)
+    state.import_state(test_robot_data)
+
+    traj = state.extract_links_info_traj("pos", robot.link_names)
+
+    assert traj.shape == (2, 2, 3)
+    assert np.array_equal(traj[0, 0], test_robot_data["link1_link_pos"])
+    assert np.array_equal(traj[1, 1], test_robot_data["link2_link_pos"])
+
+
 def test_dataframe_alias_exports_same_symbols():
     assert DataframeRobotDF is RobotDF
     assert DataframeRobotState is RobotState
+    assert CompatRobotDF is RobotDF
+    assert CompatRobotState is RobotState
     assert CoreRobotDF is RobotDF
     assert CoreRobotState is RobotState

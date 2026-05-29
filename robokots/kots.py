@@ -6,7 +6,6 @@ import numpy as np
 from typing import List, Dict, Any, Optional, Tuple
 
 from .core.motion import RobotMotions
-from .core.state_table import RobotState
 from .core.state import StateType
 from .core.state_cache import StateCache
 from .core.state_dict import state_dict_to_links_pos, print_state_dict
@@ -34,7 +33,7 @@ class Kots():
   robot_ : RobotStruct
   motions_ : RobotMotions
   state_dict_ : dict
-  state_ : RobotState
+  state_ : Optional[Any]
   target_ : TargetList
   order_ : int
   dim_ : int
@@ -63,14 +62,14 @@ class Kots():
         j_aliases.append("acc_diff"+str(i+1))
         l_aliases.append("acc_diff"+str(i+1))
         
-    l_aliases.append("link_force")
-    j_aliases.append("joint_torque")
-    j_aliases.append("joint_force")
+    l_aliases.append("force")
+    j_aliases.append("torque")
+    j_aliases.append("force")
     
     for i in range(order-3):
-      l_aliases.append("link_force_diff"+str(i+1))
-      j_aliases.append("joint_torque_diff"+str(i+1))
-      j_aliases.append("joint_force_diff"+str(i+1))
+      l_aliases.append("force_diff"+str(i+1))
+      j_aliases.append("torque_diff"+str(i+1))
+      j_aliases.append("force_diff"+str(i+1))
 
     return m_aliases, l_aliases, j_aliases
   
@@ -80,7 +79,9 @@ class Kots():
 
     self.robot_ = robot
     self.motions_ = RobotMotions(robot.dof, m_aliases)
-    self.state_ = RobotState(robot.link_names, robot.joint_names, l_aliases, j_aliases)
+    self.state_ = None
+    self._state_l_aliases = l_aliases
+    self._state_j_aliases = j_aliases
     self.state_dict_ = {}
     self.state_cache_ = None
     self.state_cache_config_ = None
@@ -94,7 +95,9 @@ class Kots():
     m_aliases, l_aliases, j_aliases = self.order_to_aliases(order)
     self.order_ = order
     self.motions_ = RobotMotions(self.robot_.dof, m_aliases)
-    self.state_ = RobotState(self.robot_.link_names, self.robot_.joint_names, l_aliases, j_aliases)
+    self.state_ = None
+    self._state_l_aliases = l_aliases
+    self._state_j_aliases = j_aliases
     self.state_cache_ = None
     self.state_cache_config_ = None
 
@@ -209,8 +212,27 @@ class Kots():
       motion_diff[link.dof_index*order:link.dof_index*order+link.dof*order] = m.flatten()[link.dof:order+link.dof]
     return motion_diff
 
+  def _ensure_state_table(self):
+    if self.state_ is None:
+      try:
+        from .contrib.polars.state_table import RobotState
+      except ImportError as e:
+        raise ImportError(
+          "DataFrame state tables are optional. Install RoboKots with the "
+          "`table` extra, for example `pip install 'robokots[table]'`, "
+          "to use state_df(), set_state_df(), or trajectory helpers without "
+          "an explicit traj argument."
+        ) from e
+      self.state_ = RobotState(
+        self.robot_.link_names,
+        self.robot_.joint_names,
+        self._state_l_aliases,
+        self._state_j_aliases,
+      )
+    return self.state_
+
   def state_df(self):
-    return self.state_.df()
+    return self._ensure_state_table().df()
 
   def state_info(self, state_type : StateType):
     return get_value(self.robot_, self.state_dict_, state_type)
@@ -278,7 +300,7 @@ class Kots():
     return self.state_dict_
 
   def set_state_df(self):
-    self.state_.import_state(self.state_dict_)
+    self._ensure_state_table().import_state(self.state_dict_)
     
   def set_target_from_file(self, target_file : str):
     if not target_file:
@@ -376,7 +398,7 @@ class Kots():
       conectivity[i, 1] = joint.parent_link_id
 
     if traj is None:
-      link_pos_traj = self.state_.extract_links_info_traj("pos", self.robot_.link_names)
+      link_pos_traj = self._ensure_state_table().extract_links_info_traj("pos", self.robot_.link_names)
     else:
       link_pos_traj = traj
     show_robot_traj(conectivity, link_pos_traj, save, ax, color)
@@ -402,7 +424,7 @@ class Kots():
     for t in self.target_._targets:
       if t._state_type.owner_type == "link":
         owner_link_names.append(t._state_type.owner_name)
-    return self.state_.extract_links_info_traj("pos", owner_link_names)
+    return self._ensure_state_table().extract_links_info_traj("pos", owner_link_names)
 
   def show_points(self, points, ax = None, dimension=3):
     show_link_points(points, ax, dimension)

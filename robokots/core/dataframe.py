@@ -1,5 +1,5 @@
-"""Backward-compatible imports for state table data structures."""
+"""Deprecated compatibility imports for Polars-backed state tables."""
 
-from .state_table import RobotDF, RobotState
+from ..contrib.polars.state_table import RobotDF, RobotState
 
 __all__ = ["RobotDF", "RobotState"]

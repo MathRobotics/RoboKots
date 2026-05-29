@@ -15,9 +15,9 @@ _lazy_attributes: Dict[str, str] = {
     "RobotStruct": "robokots.core.robot",
     "JointStruct": "robokots.core.robot",
     "LinkStruct": "robokots.core.robot",
-    # State table helpers
-    "RobotDF": "robokots.core.state_table",
-    "RobotState": "robokots.core.state_table",
+    # Optional Polars-backed state table helpers
+    "RobotDF": "robokots.contrib.polars.state_table",
+    "RobotState": "robokots.contrib.polars.state_table",
     # State dictionary helpers
     "state_dict_to_cmtm": "robokots.core.state_dict",
     "state_dict_to_cmtm_wrench": "robokots.core.state_dict",

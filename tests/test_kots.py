@@ -52,6 +52,20 @@ def test_from_urdf_file(tmp_path: Path):
     assert isinstance(frame, mr.SE3)
 
 
+def test_state_table_is_lazy_optional():
+    kots = _make_kots(order=3)
+    assert kots.state_ is None
+
+    kots.import_motions(np.zeros(kots.order() * kots.dof(), dtype=float))
+    kots.kinematics()
+    kots.set_state_df()
+
+    assert kots.state_ is not None
+    assert kots.state_df().shape[0] == 1
+    assert not any("_link_link_force" in col for col in kots.state_df().columns)
+    assert not any("_joint_joint_torque" in col for col in kots.state_df().columns)
+
+
 def test_from_urdf_file_normalizes_joint_order_for_dynamics(tmp_path: Path):
     urdf = """<?xml version="1.0"?>
 <robot name="misordered_tree">

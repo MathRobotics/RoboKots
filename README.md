@@ -12,12 +12,18 @@ Install RoboKots
 pip install .
 ```
 
+Install optional table support for Polars-backed state tables:
+```
+pip install ".[table]"
+```
+
 ## Examples
 
 * `example/simple_example/main.py`: End-to-end kinematics and dynamics Jacobian
   checks with a sample robot model.
 * `example/polars_example/main.py`: Demonstrates how to export state to JSONL and
-  use Polars to do fast, columnar analytics (feature extraction and filtering).
+  use Polars to do fast, columnar analytics. This example requires the optional
+  `table` extra or a separate `polars` installation.
 * `example/benchmark_example/main.py`: Measures runtime of kinematics/dynamics/
   jacobian/state-update. Benchmark settings are edited in the script.
 

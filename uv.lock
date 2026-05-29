@@ -707,13 +707,16 @@ dependencies = [
     { name = "mathrobo" },
     { name = "matplotlib" },
     { name = "numpy" },
-    { name = "polars" },
     { name = "scipy" },
     { name = "sympy" },
 ]
 
 [package.optional-dependencies]
+table = [
+    { name = "polars" },
+]
 test = [
+    { name = "polars" },
     { name = "pytest" },
 ]
 
@@ -723,12 +726,13 @@ requires-dist = [
     { name = "mathrobo", specifier = ">=0.0.3" },
     { name = "matplotlib", specifier = ">=3.9.4" },
     { name = "numpy", specifier = ">=2.0.2" },
-    { name = "polars", specifier = ">=1.34.0" },
+    { name = "polars", marker = "extra == 'table'", specifier = ">=1.34.0" },
+    { name = "polars", marker = "extra == 'test'", specifier = ">=1.34.0" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8.4.2" },
     { name = "scipy", specifier = ">=1.13.1" },
     { name = "sympy", specifier = ">=1.14.0" },
 ]
-provides-extras = ["test"]
+provides-extras = ["table", "test"]
 
 [[package]]
 name = "scipy"
