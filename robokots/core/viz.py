@@ -24,7 +24,6 @@ def _is_3d_axes(ax):
   return getattr(ax, "name", None) == "3d"
 
 def set_equall_aspect(ax, data, margin):
-  margin = 0.1
   ax_min = np.zeros(2)
   ax_max = np.zeros(2)
   box_length = np.zeros(2)
@@ -43,7 +42,6 @@ def set_equall_aspect(ax, data, margin):
   ax.set_ylim(ax_ave[1] - box_length[1]*box_ratio[1]*0.5, ax_ave[1] + box_length[1]*box_ratio[1]*0.5)
 
 def set_equall_aspect_3d(ax, data, margin):
-  margin = 0.1
   ax_min = np.zeros(3)
   ax_max = np.zeros(3)
   box_length = np.zeros(3)
@@ -175,5 +173,10 @@ def show_link_points(link_pos, ax = None, dimension=3):
       ax.set_ylabel('Y')
       ax.set_zlabel('Z')
       
-  ax.scatter(link_pos[:,0], link_pos[:,1], c='r', marker='o')  
+  if dimension == 2:
+    ax.scatter(link_pos[:,0], link_pos[:,1], c='r', marker='o')
+  elif dimension == 3:
+    ax.scatter(link_pos[:,0], link_pos[:,1], link_pos[:,2], c='r', marker='o')
+  else:
+    raise ValueError("dimension must be 2 or 3")
   plt.show()
