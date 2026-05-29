@@ -42,6 +42,5 @@ __all__ = [
     "diff",
     "state",
     "values",
-    "backends",
     *_LAZY_API.keys(),
 ]

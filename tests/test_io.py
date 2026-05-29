@@ -48,6 +48,31 @@ TEST_URDF = """<?xml version="1.0"?>
 </robot>
 """
 
+MISORDERED_URDF = """<?xml version="1.0"?>
+<robot name="misordered_tree">
+  <link name="base"/>
+  <link name="link1"/>
+  <link name="sensor_top"/>
+  <link name="sensor_bottom"/>
+  <joint name="sensor_top_joint" type="fixed">
+    <parent link="link1"/>
+    <child link="sensor_top"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <joint name="sensor_bottom_joint" type="fixed">
+    <parent link="link1"/>
+    <child link="sensor_bottom"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+  <joint name="joint1" type="revolute">
+    <parent link="base"/>
+    <child link="link1"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+</robot>
+"""
+
 def test_load_json_file():
     FILE_DIR.mkdir(parents=True, exist_ok=True)
     # Test loading a valid JSON file
@@ -115,6 +140,16 @@ def test_urdf_xml_to_model_data_without_world_link():
     assert len(model["links"]) == 2
     assert len(model["joints"]) == 1
     assert model["joints"][0]["name"] == "joint1"
+
+
+def test_urdf_joint_order_is_normalized_for_tree_traversal():
+    model = urdf_xml_to_model_data(MISORDERED_URDF)
+    assert [joint["name"] for joint in model["joints"]] == [
+        "world_to_base",
+        "joint1",
+        "sensor_top_joint",
+        "sensor_bottom_joint",
+    ]
 
 
 def test_urdf_unsupported_joint_type():

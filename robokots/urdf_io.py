@@ -3,6 +3,7 @@
 # 2026.02.13 Created by Codex
 
 import xml.etree.ElementTree as ET
+import heapq
 from math import cos, sin
 from typing import Dict, List
 
@@ -30,6 +31,49 @@ def _rpy_to_quaternion_wxyz(rpy: List[float]) -> List[float]:
     y = cr * sp * cy + sr * cp * sy
     z = cr * cp * sy - sr * sp * cy
     return [w, x, y, z]
+
+
+def _topologically_order_joints(joints: List[Dict]) -> List[Dict]:
+    if not joints:
+        return []
+
+    child_link_to_joint_idx: Dict[int, int] = {}
+    for idx, joint in enumerate(joints):
+        child_link_id = int(joint["child_link_id"])
+        if child_link_id in child_link_to_joint_idx:
+            prev_joint = joints[child_link_to_joint_idx[child_link_id]]["name"]
+            raise ValueError(
+                f"Invalid URDF tree: child link id {child_link_id} is attached by both "
+                f"'{prev_joint}' and '{joint['name']}'."
+            )
+        child_link_to_joint_idx[child_link_id] = idx
+
+    children: List[List[int]] = [[] for _ in joints]
+    indegree = [0] * len(joints)
+    for idx, joint in enumerate(joints):
+        parent_link_id = int(joint["parent_link_id"])
+        parent_joint_idx = child_link_to_joint_idx.get(parent_link_id)
+        if parent_joint_idx is None:
+            continue
+        indegree[idx] = 1
+        children[parent_joint_idx].append(idx)
+
+    ready = [idx for idx, degree in enumerate(indegree) if degree == 0]
+    heapq.heapify(ready)
+
+    ordered: List[Dict] = []
+    while ready:
+        idx = heapq.heappop(ready)
+        ordered.append(joints[idx])
+        for child_idx in children[idx]:
+            indegree[child_idx] -= 1
+            if indegree[child_idx] == 0:
+                heapq.heappush(ready, child_idx)
+
+    if len(ordered) != len(joints):
+        raise ValueError("Invalid URDF tree: joint graph must be acyclic and connected through parent links.")
+
+    return ordered
 
 
 def urdf_root_to_model_data(root: ET.Element, add_world_link: bool = True) -> Dict:
@@ -175,8 +219,10 @@ def urdf_root_to_model_data(root: ET.Element, add_world_link: bool = True) -> Di
                 }
             )
 
-    # Existing outward pipeline assumes the first joint starts from world.
-    joints = world_joints + parsed_joints
+    # RoboKots uses joint order as part of its internal joint-base representation.
+    # Normalize URDF/XML order into a parent-before-child order while preserving
+    # the relative order of siblings from the input file.
+    joints = _topologically_order_joints(world_joints + parsed_joints)
     for idx, joint in enumerate(joints):
         joint["id"] = idx
 

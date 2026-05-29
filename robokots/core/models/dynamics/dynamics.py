@@ -84,7 +84,9 @@ def link_force_cmvec(vel : CMVector, momentum : CMVector, dim : int = 6) -> np.n
     """
     mom_diff = momentum.vecs()[1:].flatten()
     v_x_mom = Factorial.mat(momentum._n-1, dim) @ CMTM.hat_adj(SE3wrench, vel.cm_vecs()[:vel._n-1]) @ momentum.cm_vecs()[:momentum._n-1].flatten()
-    return CMVector(mom_diff + v_x_mom)
+    # CMVector expects (order, dim) rows; passing a flat vector makes mathrobo
+    # interpret it as dim=1 and breaks higher-order factorial scaling.
+    return CMVector((mom_diff + v_x_mom).reshape(-1, dim))
 
 def link_dynamics_cmvec(inertia : np.ndarray, vecs : np.ndarray) -> np.ndarray:
     """
