@@ -1,5 +1,4 @@
 from typing import List
-from mathrobo import SO3, SE3, CMTM
 
 frame_names = ("world","local")
 
@@ -275,10 +274,13 @@ keys_name = {
 
 def data_type_to_sub_func(data_type : str):
     if data_type == "rot":
+        from mathrobo import SO3
         return SO3.sub_tan_vec
     elif data_type == "frame":
+        from mathrobo import SE3
         return SE3.sub_tan_vec
     elif data_type == "cmtm":
+        from mathrobo import CMTM
         return CMTM.sub_vec
     elif data_type in ["pos", "vel", "acc"] \
         or data_type in ["jerk", "snap", "crackle", "pop", "lock", "drop", "shot", "put"]  \

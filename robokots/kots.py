@@ -3,30 +3,18 @@
 # 2024.12.13 Created by T.Ishigaki
 
 import numpy as np
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Any, Optional, Tuple
 
 from .core.motion import RobotMotions
 from .core.state import StateType
 from .core.state_cache import StateCache
-from .core.state_dict import state_dict_to_links_pos, print_state_dict
 from .core.robot import RobotStruct
 from .core.target import TargetList, RobotNames
 from .core.viz import show_robot, show_robot_traj, RobotColor, show_link_points
 
-from .robot_io import *
-from .outward import (
-    build_dynamics_outward_state,
-    build_kinematics_state,
-    build_kinematics_outward_state,
-    get_value,
-    link_diff_kinematics_numerical,
-    diff_outward_numerical,
-    jacobian_numerical,
-    outward_jacobian,
-    outward_jacobian_matvec,
-    calc_link_total_point_frame,
-    update_outward_state,
-)
+from . import outward as outward_api
+from .robot_io import load_json_file
+from .urdf_io import load_urdf_file
 
 default_order = 3 
 default_dim = 3
@@ -133,6 +121,8 @@ class Kots():
     self.robot_.print()
 
   def print_state_dict(self):
+    from .core.state_dict import print_state_dict
+
     print_state_dict(self.state_dict_)
 
   def targets(self):
@@ -239,10 +229,10 @@ class Kots():
     return self._ensure_state_table().df()
 
   def state_info(self, state_type : StateType):
-    return get_value(self.robot_, self.state_dict_, state_type)
+    return outward_api.get_value(self.robot_, self.state_dict_, state_type)
 
   def state_info_list(self, state_type_list : List[StateType], list_output : bool = False) -> List[np.ndarray]:
-    state_list = [get_value(self.robot_, self.state_dict_, st) for st in state_type_list]
+    state_list = [outward_api.get_value(self.robot_, self.state_dict_, st) for st in state_type_list]
     if list_output:
         return state_list
     else:
@@ -264,20 +254,20 @@ class Kots():
       and all(link.dof == 0 for link in self.robot_.links)
     )
     if backend == "numpy" or (backend is None and not use_jax_default):
-      self.outward_state_ = build_kinematics_outward_state(self.robot_, self.motion(order), order)
+      self.outward_state_ = outward_api.build_kinematics_outward_state(self.robot_, self.motion(order), order)
       self.state_dict_ = self.outward_state_.to_state_dict(self.robot_)
     else:
       self.outward_state_ = None
-      self.state_dict_ = build_kinematics_state(self.robot_, self.motion(order), order, backend=backend)
+      self.state_dict_ = outward_api.build_kinematics_state(self.robot_, self.motion(order), order, backend=backend)
 
   # ToDo: change function name
   def kinematics_point(self, s : float = 0.0):
-    return calc_link_total_point_frame(self.robot_, self.motions_, self.state_dict_, s)
+    return outward_api.calc_link_total_point_frame(self.robot_, self.motions_, self.state_dict_, s)
   
   def dynamics(self, order = None):
     if order is None:
       order = self.order_
-    self.outward_state_ = build_dynamics_outward_state(self.robot_, self.motion(order), order-2)
+    self.outward_state_ = outward_api.build_dynamics_outward_state(self.robot_, self.motion(order), order-2)
     self.state_dict_ = self.outward_state_.to_state_dict(self.robot_)
 
   def _use_jax_kinematics_backend(self, backend: str = None) -> bool:
@@ -312,15 +302,15 @@ class Kots():
       if not is_dynamics:
         if self._use_jax_kinematics_backend(kinematics_backend):
           self.state_cache_ = StateCache(
-            build_state=lambda x_all, time=None, required=None: build_kinematics_state(self.robot_, x_all, order, backend=kinematics_backend)
+            build_state=lambda x_all, time=None, required=None: outward_api.build_kinematics_state(self.robot_, x_all, order, backend=kinematics_backend)
           )
         else:
           self.state_cache_ = StateCache(
-            build_state=lambda x_all, time=None, required=None: build_kinematics_outward_state(self.robot_, x_all, order)
+            build_state=lambda x_all, time=None, required=None: outward_api.build_kinematics_outward_state(self.robot_, x_all, order)
           )
       else:
         self.state_cache_ = StateCache(
-          build_state=lambda x_all, time=None, required=None: build_dynamics_outward_state(self.robot_, x_all, order-2)
+          build_state=lambda x_all, time=None, required=None: outward_api.build_dynamics_outward_state(self.robot_, x_all, order-2)
         )
       self.state_cache_config_ = cache_config
 
@@ -338,7 +328,7 @@ class Kots():
 
     motion_pack = _MotionPack(self.motion(order), motion_revision)
 
-    state_obj = update_outward_state(self.robot_, motion_pack, self.state_cache_, is_dynamics, order)
+    state_obj = outward_api.update_outward_state(self.robot_, motion_pack, self.state_cache_, is_dynamics, order)
     return self._set_current_state(state_obj)
 
   def set_state_df(self):
@@ -358,7 +348,7 @@ class Kots():
     
     motion = self.motion(order)
 
-    return link_diff_kinematics_numerical(self.robot_, motion, link_name_list, data_type, order, eps, update_method, update_direction)
+    return outward_api.link_diff_kinematics_numerical(self.robot_, motion, link_name_list, data_type, order, eps, update_method, update_direction)
   
   def diff_outward_numerical(self, state_type : StateType, order : int = None, eps : float = 1e-8, update_method : str = "poly", update_direction = None):
     if order is None:
@@ -366,7 +356,7 @@ class Kots():
 
     motion = self.motion(order)
     
-    return diff_outward_numerical(self.robot_, motion, state_type, order, eps, update_method, update_direction)
+    return outward_api.diff_outward_numerical(self.robot_, motion, state_type, order, eps, update_method, update_direction)
 
   def jacobian(self, state_type, numerical : bool = False, list_output : bool = False):
     if type(state_type) is list:
@@ -376,14 +366,14 @@ class Kots():
     
     if numerical:
       max_order = StateType.max_time_order(state_type_list)
-      jacobs = [jacobian_numerical(self.robot_, self.motions_, st, max_order) for st in state_type_list]
+      jacobs = [outward_api.jacobian_numerical(self.robot_, self.motions_, st, max_order) for st in state_type_list]
       if list_output:
         return jacobs
       else:
         return np.vstack(jacobs)
 
     state = self.outward_state_ if self.outward_state_ is not None else self.state_dict_
-    return outward_jacobian(self.robot_, state, state_type_list, dim = self.dim_, list_output = list_output)
+    return outward_api.outward_jacobian(self.robot_, state, state_type_list, dim = self.dim_, list_output = list_output)
 
   def jacobian_matvec(self, state_type, vec : np.ndarray, numerical : bool = False, list_output : bool = False):
     if type(state_type) is list:
@@ -398,14 +388,14 @@ class Kots():
       raise ValueError(f"vec must have shape {expected_shape}, got {vec.shape}")
 
     if numerical:
-      results = [jacobian_numerical(self.robot_, self.motions_, st, max_order) @ vec for st in state_type_list]
+      results = [outward_api.jacobian_numerical(self.robot_, self.motions_, st, max_order) @ vec for st in state_type_list]
       if list_output:
         return results
       else:
         return np.concatenate(results)
 
     state = self.outward_state_ if self.outward_state_ is not None else self.state_dict_
-    return outward_jacobian_matvec(self.robot_, state, state_type_list, vec, dim = self.dim_, list_output = list_output)
+    return outward_api.outward_jacobian_matvec(self.robot_, state, state_type_list, vec, dim = self.dim_, list_output = list_output)
   
   def jacobian_target(self, numerical : bool = False, list_output : bool = False):
     if self.target_ is None:
@@ -426,6 +416,8 @@ class Kots():
     )
 
   def show_robot(self, save = False, ax = None, color : RobotColor = None):
+    from .core.state_dict import state_dict_to_links_pos
+
     conectivity = np.zeros((self.robot_.joint_num, 2), dtype='int64')
     for i in range(self.robot_.joint_num):
       joint = self.robot_.joints[i]
@@ -448,9 +440,13 @@ class Kots():
     show_robot_traj(conectivity, link_pos_traj, save, ax, color)
 
   def show_link_points(self):
+    from .core.state_dict import state_dict_to_links_pos
+
     show_link_points(state_dict_to_links_pos(self.state_dict_, self.robot_.link_names))
 
   def show_target_link_points(self, plt = None, dimension=3):
+    from .core.state_dict import state_dict_to_links_pos
+
     if not self.target_:
       raise ValueError("target_ is not set")
     

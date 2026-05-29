@@ -15,7 +15,6 @@ from ..core.state_dict import (
     state_dict_to_cmtm_wrench,
     state_dict_to_cmvec,
     state_dict_to_frame,
-    vecs_to_state_dict,
 )
 from ..core.state import data_type_dof, StateType, state_dict_key
 

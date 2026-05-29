@@ -3,7 +3,6 @@
 # 2025.04.07 Created by T.Ishigaki
 # dynamics module
 
-import math
 import numpy as np
 
 from mathrobo import CMVector, Factorial

@@ -5,7 +5,7 @@ import numpy as np
 from mathrobo import CMVector
 from mathrobo import SE3, SE3wrench, CMTM, CMTM, SO3, Factorial
 
-from .state import keys, keys_order, keys_time_order, keys_name, state_dict_key
+from .state import keys, keys_order, keys_time_order, state_dict_key
 
 
 _STATE_MEMO_KEY = "__robokots_state_memo__"

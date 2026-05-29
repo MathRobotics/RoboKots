@@ -13,17 +13,42 @@ from robokots.core.state_dict import state_dict_to_cmtm, state_dict_to_cmtm_wren
 
 from robokots.core.models.whole_body.total_kinematics_grad_mat import (
     total_coord_to_joint_tan_vel_grad_mat,
+    total_coord_to_link_tan_vel_grad_mat,
+    total_coord_to_link_tan_vel_grad_matvec,
     total_coord_to_link_vel_grad_mat,
     total_coord_to_link_vel_grad_matvec,
 )
 from robokots.core.models.whole_body.total_kinematics_mat import total_coord_arrange
 from robokots.core.models.whole_body.total_dynamics_grad_mat import (
+    total_coord_to_joint_momentum_grad_mat,
     total_coord_to_link_momentum_grad_mat,
     total_coord_to_link_momentum_grad_matvec,
-    total_coord_to_joint_momentum_grad_mat,
+    total_coord_to_world_joint_momentum_grad_mat,
+    total_coord_to_world_link_momentum_grad_mat,
 )
-from robokots.core.models.whole_body.total_dynamics_grad_mat import total_coord_to_world_link_momentum_grad_mat, total_coord_to_world_joint_momentum_grad_mat
 from robokots.core.models.whole_body.total_dynamics_grad_mat import total_coord_to_link_force_grad_mat, total_coord_to_joint_force_grad_mat, total_coord_to_joint_torque_grad_mat
+from robokots.core.models.whole_body.total_dynamics_mat import (
+    total_joint_wrench_to_joint_torque_mat,
+    total_joint_wrench_to_joint_torque_matvec,
+    total_world_link_wrench_to_world_joint_wrench_mat,
+    total_world_link_wrench_to_world_joint_wrench_matvec,
+)
+from robokots.core.models.whole_body.total_partial_grad_mat import (
+    total_partial_link_momentum_to_world_link_momentum_grad_mat,
+    total_partial_link_momentum_to_world_link_momentum_grad_matvec,
+    total_partial_link_sp_vel_to_joint_force_grad_mat,
+    total_partial_link_sp_vel_to_joint_force_grad_matvec,
+    total_partial_link_sp_vel_to_link_force_grad_mat,
+    total_partial_link_sp_vel_to_link_force_grad_matvec,
+    total_partial_link_tan_vel_to_joint_momentum_grad_mat,
+    total_partial_link_tan_vel_to_joint_momentum_grad_matvec,
+    total_partial_link_tan_vel_to_world_link_momentum_grad_mat,
+    total_partial_link_tan_vel_to_world_link_momentum_grad_matvec,
+    total_partial_momentum_to_force_grad_mat,
+    total_partial_momentum_to_force_grad_matvec,
+    total_partial_world_joint_momentum_to_joint_momentum_grad_mat,
+    total_partial_world_joint_momentum_to_joint_momentum_grad_matvec,
+)
 from robokots.core.models.dynamics.base import spatial_inertia
 from robokots.core.models.dynamics.dynamics_matrix import (
     inertia_diag_mat,
@@ -426,8 +451,6 @@ def outward_kinematics_jacobian_matvec(robot : RobotStruct, state : dict, state_
     else:
         return np.concatenate(vec_list)
 
-from robokots.core.models.whole_body.total_kinematics_grad_mat import total_coord_to_link_tan_vel_grad_mat, total_coord_to_link_tan_vel_grad_matvec
-
 def _outward_link_only_jacobian(
     robot: RobotStruct,
     state: dict,
@@ -587,9 +610,6 @@ def _outward_joint_only_jacobian(
     if list_output:
         return jacob_list
     return np.vstack(jacob_list)
-
-from robokots.core.models.whole_body.total_kinematics_grad_mat import total_coord_to_link_tan_vel_grad_mat
-from robokots.core.models.whole_body.total_partial_grad_mat import *
 
 def outward_jacobian(robot : RobotStruct, state : dict, state_type_list : list[StateType], max_time_order = None, dim : int = 3, list_output : bool = False) -> np.ndarray:
     if StateType.is_list_all_in_kinematics(state_type_list):
