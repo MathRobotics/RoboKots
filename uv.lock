@@ -705,10 +705,8 @@ source = { editable = "." }
 dependencies = [
     { name = "jax" },
     { name = "mathrobo" },
-    { name = "matplotlib" },
     { name = "numpy" },
     { name = "scipy" },
-    { name = "sympy" },
 ]
 
 [package.optional-dependencies]
@@ -719,20 +717,22 @@ test = [
     { name = "polars" },
     { name = "pytest" },
 ]
+viz = [
+    { name = "matplotlib" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "jax", specifier = ">=0.4.30" },
     { name = "mathrobo", specifier = ">=0.0.3" },
-    { name = "matplotlib", specifier = ">=3.9.4" },
+    { name = "matplotlib", marker = "extra == 'viz'", specifier = ">=3.9.4" },
     { name = "numpy", specifier = ">=2.0.2" },
     { name = "polars", marker = "extra == 'table'", specifier = ">=1.34.0" },
     { name = "polars", marker = "extra == 'test'", specifier = ">=1.34.0" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8.4.2" },
     { name = "scipy", specifier = ">=1.13.1" },
-    { name = "sympy", specifier = ">=1.14.0" },
 ]
-provides-extras = ["table", "test"]
+provides-extras = ["table", "viz", "test"]
 
 [[package]]
 name = "scipy"
