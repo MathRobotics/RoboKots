@@ -34,17 +34,18 @@ class StateCache:
     Cache for expensive state computations.
 
     build_state should ideally accept:
-      build_state(x_all, time=time_grid, required=required_keys) -> dict[StateKey, Any]
+      build_state(x_all, time=time_grid, required=required_keys) -> state object
 
     Backward compatible:
       build_state(x_all) -> dict
       build_state(x_all, time=time_grid) -> dict
     """
 
-    build_state: Callable[..., dict]
+    build_state: Callable[..., Any]
 
-    # Latest cached state mapping
-    state: dict[StateKey, Any] = field(default_factory=dict)
+    # Latest cached state object. This may be a legacy flat dict or a richer
+    # internal state representation such as OutwardState.
+    state: Any = field(default_factory=dict)
 
     _rev_last: int = -1
     _time_rev_last: int = -1
@@ -58,7 +59,7 @@ class StateCache:
         self._rev_last = -1
         self._time_rev_last = -1
         self._memo.clear()
-        self.state.clear()
+        self.state = {}
 
     def _required_sig(self, required: Optional[Iterable[StateKey]]) -> int:
         if required is None:
@@ -92,9 +93,6 @@ class StateCache:
                 st = self.build_state(x_all, time=time)
             except TypeError:
                 st = self.build_state(x_all)
-
-        if not isinstance(st, dict):
-            raise TypeError("StateCache.build_state must return a dict.")
 
         self.state = st  # Replace the state map atomically for safety.
         self._rev_last = rev

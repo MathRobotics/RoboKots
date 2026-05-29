@@ -226,6 +226,9 @@ def state_dict_to_rot(state : dict, owner_name : str, owner_type : str = "link")
     Returns:
         np.ndarray: rotation matrix
     '''
+    if hasattr(state, "cmtm"):
+        return np.asarray(state.cmtm(owner_type, owner_name, 1).elem_mat()[:3, :3])
+
     cache_key = (owner_name, owner_type)
     rot_cache = _state_bucket(state, "rot")
     if cache_key in rot_cache:
@@ -246,6 +249,9 @@ def state_dict_to_frame(state : dict, owner_name : str, owner_type : str = "link
     Returns:
         SE3: SE3 object
     '''
+    if hasattr(state, "cmtm"):
+        return SE3.set_mat(state.cmtm(owner_type, owner_name, 1).elem_mat())
+
     cache_key = (owner_name, owner_type)
     frame_cache = _state_bucket(state, "frame")
     if cache_key in frame_cache:
@@ -267,6 +273,10 @@ def state_dict_to_frame_wrench(state : dict, owner_name : str, owner_type : str 
     Returns:
         SE3wrench: SE3wrench object
     '''
+    if hasattr(state, "cmtm_wrench"):
+        mat = state.cmtm_wrench(owner_type, owner_name, 1).elem_mat()
+        return SE3wrench(mat[:3, :3], mat[:3, 3])
+
     cache_key = (owner_name, owner_type)
     frame_cache = _state_bucket(state, "frame_wrench")
     if cache_key in frame_cache:
@@ -315,6 +325,9 @@ def state_dict_to_cmtm(state : dict, owner_name : str, owner_type : str = "link"
     Returns:
         CMTM: CMTM object
     '''
+    if hasattr(state, "cmtm"):
+        return state.cmtm(owner_type, owner_name, order)
+
     if order is None:
         order = count_dict_time_order(state)
 
@@ -340,6 +353,9 @@ def state_dict_to_cmtm_wrench(state : dict, owner_name : str, owner_type : str =
     Returns:
         CMTM: CMTM object
     '''
+    if hasattr(state, "cmtm_wrench"):
+        return state.cmtm_wrench(owner_type, owner_name, order)
+
     if order is None:
         order = count_dict_time_order(state)
 
@@ -366,6 +382,9 @@ def state_dict_to_rel_frame(state : dict, base_name : str, target_name : str, ow
     Returns:
         SE3: SE3 object
     '''
+    if hasattr(state, "rel_cmtm"):
+        return SE3.set_mat(state.rel_cmtm(base_name, target_name, owner_type, 1).elem_mat())
+
     cache_key = (base_name, target_name, owner_type)
     rel_cache = _state_bucket(state, "rel_frame")
     if cache_key in rel_cache:
@@ -388,6 +407,9 @@ def state_dict_to_rel_cmtm(state : dict, base_name : str, target_name : str, own
     Returns:
         CMTM: CMTM object
     '''
+    if hasattr(state, "rel_cmtm"):
+        return state.rel_cmtm(base_name, target_name, owner_type, order)
+
     if order is None:
         order = count_dict_time_order(state)
 
@@ -413,6 +435,9 @@ def state_dict_to_rel_cmtm_wrench(state : dict, base_name : str, target_name : s
     Returns:
         CMTM: CMTM object
     '''
+    if hasattr(state, "rel_cmtm_wrench"):
+        return state.rel_cmtm_wrench(base_name, target_name, owner_type, order)
+
     if order is None:
         order = count_dict_time_order(state)
 
@@ -477,6 +502,9 @@ def state_dict_to_vecs(state : dict, owner_type : str, owner_name : str, data_ty
     Returns:
         np.ndarray: vector
     '''
+    if hasattr(state, "cmvec"):
+        return state.cmvec(owner_type, owner_name, data_type).vec()
+
     vecs = _collect_state_vecs_fast(state, owner_name, owner_type, data_type)
     if vecs is None:
         vecs = _collect_state_vecs_scan(state, owner_name, owner_type, data_type)
@@ -495,6 +523,17 @@ def state_dict_to_cmvec(state : dict, owner_name : str, owner_type : str, data_t
     Returns:
         CMVector: vector
     '''
+    if hasattr(state, "cmvec"):
+        cmvec = state.cmvec(owner_type, owner_name, data_type)
+        if order > cmvec._n:
+            raise ValueError(
+                f"Invalid order: requested {order}, but source order is {cmvec._n} for "
+                f"{owner_name}_{owner_type}_{data_type}."
+            )
+        if order == cmvec._n:
+            return cmvec
+        return CMVector(cmvec.vecs()[:order])
+
     vecs = _collect_state_vecs_fast(state, owner_name, owner_type, data_type, order=order)
     if vecs is None:
         vecs = _collect_state_vecs_scan(state, owner_name, owner_type, data_type, order=order)

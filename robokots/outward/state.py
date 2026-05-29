@@ -9,8 +9,8 @@ from mathrobo import CMVector, CMTM, Factorial, SE3, SE3wrench
 
 from ..core.robot import RobotStruct
 from ..core.motion import RobotMotions
+from ..core.outward_state import OutwardState
 from ..core.state_dict import (
-    cmtm_to_state_list,
     state_dict_to_cmtm,
     state_dict_to_cmtm_wrench,
     state_dict_to_cmvec,
@@ -145,15 +145,21 @@ def build_kinematics_state(robot : RobotStruct, motions, order = 3, backend = No
 
     return build_kinematics_state_jax(robot, motions, order)
 
-  state_dict, _, _ = _build_kinematics_state_with_cmtm(robot, motions, order)
-  return state_dict
+  return build_kinematics_outward_state(robot, motions, order).to_state_dict(robot)
 
-def _build_kinematics_state_with_cmtm(robot: RobotStruct, motions, order: int = 3):
+
+def build_kinematics_outward_state(robot : RobotStruct, motions, order = 3) -> OutwardState:
+  '''
+  Forward kinematics computation in the internal CMTM-backed state format.
+  '''
+  return _build_kinematics_state_with_cmtm(robot, motions, order)
+
+
+def _build_kinematics_state_with_cmtm(robot: RobotStruct, motions, order: int = 3) -> OutwardState:
   motion = np.asarray(motions, dtype=float).reshape(-1)
   if robot.dof * order > motion.size:
     raise ValueError(f"Invalid motion length: {motion.size}. Must be {robot.dof * order}.")
 
-  state_dict = {}
   link_cmtm_dict = {}
   joint_cmtm_dict = {}
 
@@ -161,7 +167,6 @@ def _build_kinematics_state_with_cmtm(robot: RobotStruct, motions, order: int = 
   world_name = robot.links[robot.joints[0].parent_link_id].name
   world_cmtm = CMTM.eye(SE3, order)
   link_cmtm_dict[world_name] = world_cmtm
-  state_dict.update(cmtm_to_state_list(world_cmtm, "link", world_name))
 
   for joint in robot.joints:
     parent = robot.links[joint.parent_link_id]
@@ -180,14 +185,12 @@ def _build_kinematics_state_with_cmtm(robot: RobotStruct, motions, order: int = 
     child_cmtm = parent_cmtm @ joint_rel @ link_local
 
     link_cmtm_dict[child.name] = child_cmtm
-    state_dict.update(cmtm_to_state_list(child_cmtm, "link", child.name))
 
     # Keep joint local CMTM in state for Jacobian and derivative routines.
     joint_local = joint_local_cmtm(joint_data, joint_motions, order)
     joint_cmtm_dict[joint.name] = joint_local
-    state_dict.update(cmtm_to_state_list(joint_local, "joint", joint.name))
 
-  return state_dict, link_cmtm_dict, joint_cmtm_dict
+  return OutwardState(order=order, link_cmtm=link_cmtm_dict, joint_cmtm=joint_cmtm_dict)
 
 
 def calc_link_total_point_frame(robot : RobotStruct, motions : RobotMotions, state : dict, point : float) -> SE3:
@@ -236,8 +239,9 @@ def build_dynamics_state(robot : RobotStruct, joint_motions) -> dict:
     
   return state_dict
 
-def build_dynamics_cmtm_state(robot : RobotStruct, motions, dynamics_order = 1) -> dict:
-  state_dict, link_cmtm_dict, _ = _build_kinematics_state_with_cmtm(robot, motions, dynamics_order + 2)
+def build_dynamics_outward_state(robot : RobotStruct, motions, dynamics_order = 1) -> OutwardState:
+  outward_state = build_kinematics_outward_state(robot, motions, dynamics_order + 2)
+  link_cmtm_dict = outward_state.link_cmtm
   joint_momentum_cmvec = {}
   momentum_order = dynamics_order + 1
   factor_mat = Factorial.mat(momentum_order, 6)
@@ -255,14 +259,12 @@ def build_dynamics_cmtm_state(robot : RobotStruct, motions, dynamics_order = 1) 
 
     # calculate link momentum
     link_momentum = link_momentum_cmvec(inertia, link_cmtm.cmvecs())
-    state = vecs_to_state_dict(link_momentum.vecs(), "link", child.name, "momentum", momentum_order)
-    state_dict.update(state)
+    outward_state.link_momentum[child.name] = link_momentum
 
     # calculate link force
     if dynamics_order > 0:
       link_force = link_force_cmvec(link_cmtm.cmvecs(), link_momentum)
-      state = vecs_to_state_dict(link_force.vecs(), "link", child.name, "force", dynamics_order)
-      state_dict.update(state)
+      outward_state.link_force[child.name] = link_force
 
     # calculate joint momentum
     joint_momentums = np.asarray(link_momentum.vec(), dtype=float).copy()
@@ -279,22 +281,18 @@ def build_dynamics_cmtm_state(robot : RobotStruct, motions, dynamics_order = 1) 
 
       joint_momentums += factor_mat @ c_joint_cmtm_wrench.mat_adj() @ c_joint_momentum.cm_vec()
 
-    state = vecs_to_state_dict(joint_momentums, "joint", joint.name, "momentum", momentum_order)
-    state_dict.update(state)
-
     # calculate joint force and torque
     joint_momentum = CMVector(joint_momentums.reshape(-1,6))
     joint_momentum_cmvec[joint.name] = joint_momentum
+    outward_state.joint_momentum[joint.name] = joint_momentum
     if dynamics_order > 0:
       joint_force = link_force_cmvec(link_cmtm.cmvecs(), joint_momentum)
-      state = vecs_to_state_dict(joint_force.vecs(), "joint", joint.name, "force", dynamics_order)
-      state_dict.update(state)
+      outward_state.joint_force[joint.name] = joint_force
 
       if joint.dof == 0:
         continue
       joint_torque = joint_select_diag_mat(joint.select_mat, dynamics_order).T @ joint_force.vec()
-      state = vecs_to_state_dict(joint_torque.reshape(-1, joint.dof), "joint", joint.name, "torque", dynamics_order)
-      state_dict.update(state)
+      outward_state.joint_torque[joint.name] = joint_torque.reshape(-1, joint.dof)
 
   # Compute for the world link
   world_link = robot.links[0]
@@ -303,12 +301,14 @@ def build_dynamics_cmtm_state(robot : RobotStruct, motions, dynamics_order = 1) 
 
   link_vel = CMVector(link_cmtm.vecs())
   link_momentum = link_momentum_cmvec(inertia, link_vel)
-  state = vecs_to_state_dict(link_momentum.vecs(), "link", world_link.name, "momentum", dynamics_order+1)
-  state_dict.update(state)
+  outward_state.link_momentum[world_link.name] = link_momentum
 
   if dynamics_order > 0:
     link_force = link_force_cmvec(link_vel, link_momentum)
-    state = vecs_to_state_dict(link_force.vecs(), "link", world_link.name, "force", dynamics_order)
-    state_dict.update(state)
+    outward_state.link_force[world_link.name] = link_force
     
-  return state_dict
+  return outward_state
+
+
+def build_dynamics_cmtm_state(robot : RobotStruct, motions, dynamics_order = 1) -> dict:
+  return build_dynamics_outward_state(robot, motions, dynamics_order).to_state_dict(robot)

@@ -15,8 +15,9 @@ from .core.viz import show_robot, show_robot_traj, RobotColor, show_link_points
 
 from .robot_io import *
 from .outward import (
+    build_dynamics_outward_state,
     build_kinematics_state,
-    build_dynamics_cmtm_state,
+    build_kinematics_outward_state,
     get_value,
     link_diff_kinematics_numerical,
     diff_outward_numerical,
@@ -34,11 +35,12 @@ class Kots():
   motions_ : RobotMotions
   state_dict_ : dict
   state_ : Optional[Any]
+  outward_state_ : Optional[Any]
   target_ : TargetList
   order_ : int
   dim_ : int
   lib_ : str
-  state_cache_config_ : Optional[Tuple[bool, int]]
+  state_cache_config_ : Optional[Tuple[bool, int, Optional[str]]]
 
   def order_to_aliases(self, order: int) -> List[str]:
     m_aliases = []
@@ -80,6 +82,7 @@ class Kots():
     self.robot_ = robot
     self.motions_ = RobotMotions(robot.dof, m_aliases)
     self.state_ = None
+    self.outward_state_ = None
     self._state_l_aliases = l_aliases
     self._state_j_aliases = j_aliases
     self.state_dict_ = {}
@@ -96,6 +99,7 @@ class Kots():
     self.order_ = order
     self.motions_ = RobotMotions(self.robot_.dof, m_aliases)
     self.state_ = None
+    self.outward_state_ = None
     self._state_l_aliases = l_aliases
     self._state_j_aliases = j_aliases
     self.state_cache_ = None
@@ -253,7 +257,18 @@ class Kots():
   def kinematics(self, order = None, backend : str = None):
     if order is None:
       order = self.order_
-    self.state_dict_ = build_kinematics_state(self.robot_, self.motion(order), order, backend=backend)
+    use_jax_default = (
+      backend is None
+      and len(self.robot_.links) > 0
+      and getattr(self.robot_.links[0], "lib", "numpy") == "jax"
+      and all(link.dof == 0 for link in self.robot_.links)
+    )
+    if backend == "numpy" or (backend is None and not use_jax_default):
+      self.outward_state_ = build_kinematics_outward_state(self.robot_, self.motion(order), order)
+      self.state_dict_ = self.outward_state_.to_state_dict(self.robot_)
+    else:
+      self.outward_state_ = None
+      self.state_dict_ = build_kinematics_state(self.robot_, self.motion(order), order, backend=backend)
 
   # ToDo: change function name
   def kinematics_point(self, s : float = 0.0):
@@ -262,29 +277,56 @@ class Kots():
   def dynamics(self, order = None):
     if order is None:
       order = self.order_
-    self.state_dict_ = build_dynamics_cmtm_state(self.robot_, self.motion(order), order-2)
+    self.outward_state_ = build_dynamics_outward_state(self.robot_, self.motion(order), order-2)
+    self.state_dict_ = self.outward_state_.to_state_dict(self.robot_)
+
+  def _use_jax_kinematics_backend(self, backend: str = None) -> bool:
+    return (
+      backend == "jax"
+      or (
+        backend is None
+        and len(self.robot_.links) > 0
+        and getattr(self.robot_.links[0], "lib", "numpy") == "jax"
+        and all(link.dof == 0 for link in self.robot_.links)
+      )
+    )
+
+  def _set_current_state(self, state_obj):
+    if hasattr(state_obj, "to_state_dict"):
+      self.outward_state_ = state_obj
+      self.state_dict_ = state_obj.to_state_dict(self.robot_)
+    else:
+      self.outward_state_ = None
+      self.state_dict_ = state_obj
+    return self.state_dict_
 
   def update_state_dict(self, order : int = None, is_dynamics: bool = False, backend : str = None) -> dict:
     if order is None:
       order = self.order_
 
     kinematics_backend = None if is_dynamics else backend
+    if kinematics_backend not in (None, "numpy", "jax"):
+      raise ValueError(f"Unsupported kinematics backend: {kinematics_backend}. Use 'numpy' or 'jax'.")
     cache_config = (bool(is_dynamics), int(order), kinematics_backend)
     if self.state_cache_ is None or self.state_cache_config_ != cache_config:
       if not is_dynamics:
-        self.state_cache_ = StateCache(
-          build_state=lambda x_all, time=None, required=None: build_kinematics_state(self.robot_, x_all, order, backend=kinematics_backend)
-        )
+        if self._use_jax_kinematics_backend(kinematics_backend):
+          self.state_cache_ = StateCache(
+            build_state=lambda x_all, time=None, required=None: build_kinematics_state(self.robot_, x_all, order, backend=kinematics_backend)
+          )
+        else:
+          self.state_cache_ = StateCache(
+            build_state=lambda x_all, time=None, required=None: build_kinematics_outward_state(self.robot_, x_all, order)
+          )
       else:
         self.state_cache_ = StateCache(
-          build_state=lambda x_all, time=None, required=None: build_dynamics_cmtm_state(self.robot_, x_all, order-2)
+          build_state=lambda x_all, time=None, required=None: build_dynamics_outward_state(self.robot_, x_all, order-2)
         )
       self.state_cache_config_ = cache_config
 
     motion_revision = self.motions_.revision()
     if self.state_cache_.is_fresh(motion_revision):
-      self.state_dict_ = self.state_cache_.state
-      return self.state_dict_
+      return self._set_current_state(self.state_cache_.state)
 
     class _MotionPack:
       def __init__(self, x: np.ndarray, revision: int):
@@ -296,8 +338,8 @@ class Kots():
 
     motion_pack = _MotionPack(self.motion(order), motion_revision)
 
-    self.state_dict_ = update_outward_state(self.robot_, motion_pack, self.state_cache_, is_dynamics, order)
-    return self.state_dict_
+    state_obj = update_outward_state(self.robot_, motion_pack, self.state_cache_, is_dynamics, order)
+    return self._set_current_state(state_obj)
 
   def set_state_df(self):
     self._ensure_state_table().import_state(self.state_dict_)
@@ -340,7 +382,8 @@ class Kots():
       else:
         return np.vstack(jacobs)
 
-    return outward_jacobian(self.robot_, self.state_dict_, state_type_list, dim = self.dim_, list_output = list_output)
+    state = self.outward_state_ if self.outward_state_ is not None else self.state_dict_
+    return outward_jacobian(self.robot_, state, state_type_list, dim = self.dim_, list_output = list_output)
 
   def jacobian_matvec(self, state_type, vec : np.ndarray, numerical : bool = False, list_output : bool = False):
     if type(state_type) is list:
@@ -361,7 +404,8 @@ class Kots():
       else:
         return np.concatenate(results)
 
-    return outward_jacobian_matvec(self.robot_, self.state_dict_, state_type_list, vec, dim = self.dim_, list_output = list_output)
+    state = self.outward_state_ if self.outward_state_ is not None else self.state_dict_
+    return outward_jacobian_matvec(self.robot_, state, state_type_list, vec, dim = self.dim_, list_output = list_output)
   
   def jacobian_target(self, numerical : bool = False, list_output : bool = False):
     if self.target_ is None:

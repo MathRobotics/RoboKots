@@ -11,6 +11,8 @@ from importlib import import_module
 
 _LAZY_API = {
     "build_kinematics_state": "build_kinematics_state",
+    "build_kinematics_outward_state": "build_kinematics_outward_state",
+    "build_dynamics_outward_state": "build_dynamics_outward_state",
     "build_dynamics_cmtm_state": "build_dynamics_cmtm_state",
     "build_kinematics_state_jax": "build_kinematics_state_jax",
     "kinematics_jax": "kinematics_jax",
