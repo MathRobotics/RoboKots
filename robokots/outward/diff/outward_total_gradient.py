@@ -11,18 +11,23 @@ from robokots.core.state import StateType, dim_to_dof, data_type_dof, data_type_
 from robokots.core.state import keys_kinematics, keys_momentum, keys_force, keys_torque
 from robokots.core.state_dict import state_dict_to_cmtm, state_dict_to_cmtm_wrench, state_dict_to_cmvec, state_dict_to_rel_cmtm
 
-from robokots.core.models.whole_body.total_kinematics_grad_mat import total_coord_to_joint_tan_vel_grad_mat, total_coord_to_link_vel_grad_mat
+from robokots.core.models.whole_body.total_kinematics_grad_mat import (
+    total_coord_to_joint_tan_vel_grad_mat,
+    total_coord_to_link_vel_grad_mat,
+    total_coord_to_link_vel_grad_matvec,
+)
 from robokots.core.models.whole_body.total_kinematics_mat import total_coord_arrange
-from robokots.core.models.whole_body.total_dynamics_grad_mat import total_coord_to_link_momentum_grad_mat, total_coord_to_joint_momentum_grad_mat
+from robokots.core.models.whole_body.total_dynamics_grad_mat import (
+    total_coord_to_link_momentum_grad_mat,
+    total_coord_to_link_momentum_grad_matvec,
+    total_coord_to_joint_momentum_grad_mat,
+)
 from robokots.core.models.whole_body.total_dynamics_grad_mat import total_coord_to_world_link_momentum_grad_mat, total_coord_to_world_joint_momentum_grad_mat
 from robokots.core.models.whole_body.total_dynamics_grad_mat import total_coord_to_link_force_grad_mat, total_coord_to_joint_force_grad_mat, total_coord_to_joint_torque_grad_mat
 from robokots.core.models.dynamics.base import spatial_inertia
 from robokots.core.models.dynamics.dynamics_matrix import (
     inertia_diag_mat,
-    partial_link_sp_vel_to_force_grad_mat,
-    partial_momentum_to_force_grad_mat,
 )
-from robokots.core.models.kinematics.kinematics_matrix import joint_select_diag_mat
 
 
 def _selected_coord_to_link_vel_grad_mat(
@@ -161,26 +166,17 @@ def _selected_coord_to_link_force_grad_mat(
     dim: int = 3,
 ) -> np.ndarray:
     dof = dim_to_dof(dim)
-    order = force_order + 2
-    n_v = dof * order
-    n_m = dof * (order - 1)
     n_f = dof * force_order
-    mat_link_mom = _selected_coord_to_link_momentum_grad_mat(robot, state, links, order=order, dim=dim)
-    mat_kine = _selected_coord_to_link_vel_grad_mat(robot, state, links, order=order, dim=dim)
-    mat = np.zeros((len(links) * n_f, mat_kine.shape[1]))
+    full = total_coord_to_link_force_grad_mat(robot, state, force_order=force_order, dim=dim)
+    mat = np.zeros((len(links) * n_f, full.shape[1]))
 
     for i, link in enumerate(links):
         if link is None:
             raise ValueError("link_name_list contains invalid link name")
 
-        row_f = i * n_f
-        row_m = i * n_m
-        row_v = i * n_v
-        cmtm = state_dict_to_cmtm(state, link.name, "link", force_order + 1)
-        p_mom = partial_momentum_to_force_grad_mat(cmtm, force_order=force_order, dim=dim)
-        link_momentum = state_dict_to_cmvec(state, link.name, "link", "momentum", force_order)
-        p_vel = partial_link_sp_vel_to_force_grad_mat(link_momentum, force_order=force_order, dim=dim)
-        mat[row_f:row_f+n_f, :] = p_mom @ mat_link_mom[row_m:row_m+n_m, :] + p_vel @ mat_kine[row_v:row_v+n_v, :]
+        src = link.id * n_f
+        dst = i * n_f
+        mat[dst:dst+n_f, :] = full[src:src+n_f, :]
 
     return mat
 
@@ -279,33 +275,17 @@ def _selected_coord_to_joint_force_grad_mat(
     dim: int = 3,
 ) -> np.ndarray:
     dof = dim_to_dof(dim)
-    order = force_order + 2
-    n_v = dof * order
-    n_m = dof * (order - 1)
     n_f = dof * force_order
-    child_links = []
-    for joint in joints:
-        if joint is None:
-            raise ValueError("joint_name_list contains invalid joint name")
-        child_links.append(robot.links[joint.child_link_id])
-
-    mat_joint_mom = _selected_coord_to_joint_momentum_grad_mat(robot, state, joints, order=order, dim=dim)
-    mat_child_link_vel = _selected_coord_to_link_vel_grad_mat(robot, state, child_links, order=order, dim=dim)
-    mat = np.zeros((len(joints) * n_f, mat_child_link_vel.shape[1]))
+    full = total_coord_to_joint_force_grad_mat(robot, state, force_order=force_order, dim=dim)
+    mat = np.zeros((len(joints) * n_f, full.shape[1]))
 
     for i, joint in enumerate(joints):
-        row_f = i * n_f
-        row_m = i * n_m
-        row_v = i * n_v
-        child_link = child_links[i]
-        cmtm = state_dict_to_cmtm(state, child_link.name, "link", force_order + 1)
-        p_mom = partial_momentum_to_force_grad_mat(cmtm, force_order=force_order, dim=dim)
-        joint_momentum = state_dict_to_cmvec(state, joint.name, "joint", "momentum", force_order)
-        p_vel = partial_link_sp_vel_to_force_grad_mat(joint_momentum, force_order=force_order, dim=dim)
-        mat[row_f:row_f+n_f, :] = (
-            p_mom @ mat_joint_mom[row_m:row_m+n_m, :]
-            + p_vel @ mat_child_link_vel[row_v:row_v+n_v, :]
-        )
+        if joint is None:
+            raise ValueError("joint_name_list contains invalid joint name")
+
+        src = joint.id * n_f
+        dst = i * n_f
+        mat[dst:dst+n_f, :] = full[src:src+n_f, :]
 
     return mat
 
@@ -317,24 +297,17 @@ def _selected_coord_to_joint_torque_grad_mat(
     torque_order: int = 1,
     dim: int = 3,
 ) -> np.ndarray:
-    dof = dim_to_dof(dim)
-    n_f = dof * torque_order
-    mat_joint_force = _selected_coord_to_joint_force_grad_mat(
-        robot, state, joints, force_order=torque_order, dim=dim
-    )
-    mat = np.zeros((sum(joint.dof * torque_order for joint in joints), mat_joint_force.shape[1]))
+    full = total_coord_to_joint_torque_grad_mat(robot, state, torque_order=torque_order, dim=dim)
+    mat = np.zeros((sum(joint.dof * torque_order for joint in joints), full.shape[1]))
 
     row_torque = 0
-    for i, joint in enumerate(joints):
+    for joint in joints:
         if joint is None:
             raise ValueError("joint_name_list contains invalid joint name")
 
-        row_force = i * n_f
         rows = joint.dof * torque_order
-        mat[row_torque:row_torque+rows, :] = (
-            joint_select_diag_mat(joint.select_mat, torque_order).T
-            @ mat_joint_force[row_force:row_force+n_f, :]
-        )
+        src = joint.dof_index * torque_order
+        mat[row_torque:row_torque+rows, :] = full[src:src+rows, :]
         row_torque += rows
 
     return mat
