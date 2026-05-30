@@ -155,8 +155,10 @@ def build_kinematics_outward_state(robot : RobotStruct, motions, order = 3) -> O
 
 
 def _build_kinematics_state_with_cmtm(robot: RobotStruct, motions, order: int = 3) -> OutwardState:
-  motion = np.asarray(motions, dtype=float).reshape(-1)
-  if robot.dof * order > motion.size:
+  motion = np.asarray(motions, dtype=float)
+  if motion.ndim != 1:
+    raise ValueError(f"motions must be a 1-D vector in outward state builders, got shape {motion.shape}.")
+  if robot.dof * order != motion.size:
     raise ValueError(f"Invalid motion length: {motion.size}. Must be {robot.dof * order}.")
 
   link_cmtm_dict = {}

@@ -8,9 +8,12 @@ from typing import List, Any, Optional, Tuple
 from .core.motion import RobotMotions
 from .core.state import StateType
 from .core.state_cache import StateCache
+from .core.state_batch import StateBatch
+from .core.state_tensor import JacobianTensor, StateTensor
 from .core.robot import RobotStruct
 from .core.target import TargetList, RobotNames
 from .core.viz import show_robot, show_robot_traj, RobotColor, show_link_points
+from .core import batch as batch_api
 
 from . import outward as outward_api
 from .robot_io import load_json_file
@@ -68,7 +71,7 @@ class Kots():
     m_aliases, l_aliases, j_aliases = self.order_to_aliases(order)
 
     self.robot_ = robot
-    self.motions_ = RobotMotions(robot.dof, m_aliases)
+    self.motions_ = RobotMotions(robot.dof, m_aliases, owner_layout=robot.motion_owners())
     self.state_ = None
     self.outward_state_ = None
     self._state_l_aliases = l_aliases
@@ -76,22 +79,28 @@ class Kots():
     self.state_dict_ = {}
     self.state_cache_ = None
     self.state_cache_config_ = None
+    self.target_ = None
+    self.state_batch_ = None
     self.order_ = order
     self.dim_ = dim
     self.lib_ = lib
+    self.batch_shape_ = ()
 
   def set_order(self, order: int):
     if order < 1:
       raise ValueError("order must be greater than 0")
     m_aliases, l_aliases, j_aliases = self.order_to_aliases(order)
     self.order_ = order
-    self.motions_ = RobotMotions(self.robot_.dof, m_aliases)
+    self.motions_ = RobotMotions(self.robot_.dof, m_aliases, owner_layout=self.robot_.motion_owners())
     self.state_ = None
     self.outward_state_ = None
+    self.state_dict_ = {}
     self._state_l_aliases = l_aliases
     self._state_j_aliases = j_aliases
     self.state_cache_ = None
     self.state_cache_config_ = None
+    self.state_batch_ = None
+    self.batch_shape_ = ()
 
   @staticmethod
   def from_json_file(model_file_name : str, order=default_order, dim=default_dim, lib : str = "numpy") -> "Kots":
@@ -145,66 +154,89 @@ class Kots():
 
   def set_motion_aliases(self, aliases : list[str]):
     self.motions_.set_aliases(aliases)
+    self._invalidate_current_state()
     
   def import_motions(self, vecs : np.ndarray):
     self.motions_.set_motion(vecs)
     self.motions_.increment_revision()
+    self._invalidate_current_state()
+    self.batch_shape_ = self.motions_.batch_shape()
+
+  def import_motion_array(self, array : np.ndarray):
+    self.motions_.set_dof_order(array)
+    self.motions_.increment_revision()
+    self._invalidate_current_state()
+    self.batch_shape_ = self.motions_.batch_shape()
+
+  def motion_tensor(self):
+    return self.motions_.motion_tensor()
+
+  def motion_array(self, order : int = None):
+    if order is None:
+      order = self.order_
+    return self.motions_.to_dof_order(order)
 
   def motion(self, order : int = None):
     if order is None:
       order = self.order_
-    motion = np.zeros(self.robot_.dof * order)
-    for joint in self.robot_.joints:
-      m = self.motions_.joint_motions(joint.dof, joint.dof_index, order)
-      motion[joint.dof_index*order:joint.dof_index*order+joint.dof*order] = m.flatten()
-    for link in self.robot_.links:
-      m = self.motions_.link_motions(link.dof, link.dof_index, order)
-      motion[link.dof_index*order:link.dof_index*order+link.dof*order] = m.flatten()
-    return motion
+    return self.motions_.to_vector(order)
   
-  def motion_diff(self, order : int = None, last_diff = None):
+  def motion_derivative(self, order : int = None, tail = None):
     if order is None:
       order = self.order_
-    if last_diff is None:
-      last_diff = np.zeros(self.robot_.dof)
-    motion_diff = np.zeros(self.robot_.dof * order)
-    for joint in self.robot_.joints:
-      m = self.motions_.joint_motions(joint.dof, joint.dof_index, self.order_)
-      m = np.append(m, last_diff[joint.dof_index:joint.dof_index+joint.dof])
-      motion_diff[joint.dof_index*order:joint.dof_index*order+joint.dof*order] = m.flatten()[joint.dof:order+joint.dof]
-    for link in self.robot_.links:
-      m = self.motions_.link_motions(link.dof, link.dof_index, self.order_)
-      m = np.append(m, last_diff[link.dof_index:link.dof_index+link.dof])
-      motion_diff[link.dof_index*order:link.dof_index*order+link.dof*order] = m.flatten()[link.dof:order+link.dof]
-    return motion_diff
+    return self.motions_.to_derivative_vector(order, tail=tail)
+
+  def motion_derivative_array(self, order : int = None, tail = None):
+    if order is None:
+      order = self.order_
+    return self.motion_tensor().derivative(tail).as_dof_order(order).data
+
+  def motion_diff(self, order : int = None, last_diff = None):
+    return self.motion_derivative(order, tail=last_diff)
   
   def motion_cm(self, order : int = None):
     if order is None:
       order = self.order_
-    motion = np.zeros(self.robot_.dof * order)
-    for joint in self.robot_.joints:
-      m = self.motions_.joint_motions_cm(joint.dof, joint.dof_index, order)
-      motion[joint.dof_index*order:joint.dof_index*order+joint.dof*order] = m.flatten()
-    for link in self.robot_.links:
-      m = self.motions_.link_motions_cm(link.dof, link.dof_index, order)
-      motion[link.dof_index*order:link.dof_index*order+link.dof*order] = m.flatten()
-    return motion
-  
-  def motion_diff_cm(self, order : int = None, last_diff = None):
+    return self.motions_.to_vector(order, cm=True)
+
+  def motion_cm_array(self, order : int = None):
     if order is None:
       order = self.order_
-    if last_diff is None:
-      last_diff = np.zeros(self.robot_.dof)
-    motion_diff = np.zeros(self.robot_.dof * order)
-    for joint in self.robot_.joints:
-      m = self.motions_.joint_motions_cm(joint.dof, joint.dof_index, self.order_)
-      m = np.append(m, last_diff[joint.dof_index:joint.dof_index+joint.dof])
-      motion_diff[joint.dof_index*order:joint.dof_index*order+joint.dof*order] = m.flatten()[joint.dof:order+joint.dof]
-    for link in self.robot_.links:
-      m = self.motions_.link_motions_cm(link.dof, link.dof_index, self.order_)
-      m = np.append(m, last_diff[link.dof_index:link.dof_index+link.dof])
-      motion_diff[link.dof_index*order:link.dof_index*order+link.dof*order] = m.flatten()[link.dof:order+link.dof]
-    return motion_diff
+    return self.motion_tensor().cm_scaled().as_dof_order(order).data
+  
+  def motion_derivative_cm(self, order : int = None, tail = None):
+    if order is None:
+      order = self.order_
+    return self.motions_.to_derivative_vector(order, tail=tail, cm=True)
+
+  def motion_derivative_cm_array(self, order : int = None, tail = None):
+    if order is None:
+      order = self.order_
+    return self.motion_tensor().derivative(tail).cm_scaled().as_dof_order(order).data
+
+  def motion_diff_cm(self, order : int = None, last_diff = None):
+    return self.motion_derivative_cm(order, tail=last_diff)
+
+  def _set_batch_states(self, states, batch_shape : tuple):
+    self.batch_shape_ = batch_shape
+    if not batch_shape:
+      return self._set_current_state(states)
+    self.state_batch_ = StateBatch.from_states(states, batch_shape, self.robot_)
+    self.outward_state_ = self.state_batch_.outward_states
+    self.state_dict_ = self.state_batch_.state_dicts
+    return self.state_dict_
+
+  def _invalidate_current_state(self):
+    self.state_cache_ = None
+    self.state_cache_config_ = None
+    self.state_batch_ = None
+    self.outward_state_ = None
+    self.state_dict_ = {}
+    self.batch_shape_ = ()
+
+  def _ensure_not_batched(self, api_name : str):
+    if self.batch_shape_ or self.motions_.is_batched() or self.state_batch_ is not None:
+      raise ValueError(f"{api_name} does not support batched state or motion")
 
   def _ensure_state_table(self):
     if self.state_ is None:
@@ -226,12 +258,17 @@ class Kots():
     return self.state_
 
   def state_df(self):
+    self._ensure_not_batched("state_df")
     return self._ensure_state_table().df()
 
   def state_info(self, state_type : StateType):
+    if self.state_batch_ is not None:
+      return self.state_batch_.state_info(self.robot_, state_type, outward_api.get_value)
     return outward_api.get_value(self.robot_, self.state_dict_, state_type)
 
   def state_info_list(self, state_type_list : List[StateType], list_output : bool = False) -> List[np.ndarray]:
+    if self.state_batch_ is not None:
+      return self.state_batch_.state_info_list(self.robot_, state_type_list, outward_api.get_value, list_output=list_output)
     state_list = [outward_api.get_value(self.robot_, self.state_dict_, st) for st in state_type_list]
     if list_output:
         return state_list
@@ -243,32 +280,41 @@ class Kots():
       raise ValueError("target is not set")
 
     return self.state_info_list(self.target_._targets, list_output=list_output)
+
+  def state_tensor(self, state_type) -> StateTensor:
+    if type(state_type) is list:
+      state_type_list = state_type
+    else:
+      state_type_list = [state_type]
+    values = self.state_info_list(state_type_list)
+    if not self.batch_shape_:
+      values = np.asarray(values).reshape(-1)
+    return StateTensor.from_array(values, state_type_list)
+
+  def target_state_tensor(self) -> StateTensor:
+    if self.target_ is None:
+      raise ValueError("target is not set")
+    values = self.target_state_info()
+    if not self.batch_shape_:
+      values = np.asarray(values).reshape(-1)
+    return StateTensor.from_array(values, self.target_._targets)
   
   def kinematics(self, order = None, backend : str = None):
     if order is None:
       order = self.order_
-    use_jax_default = (
-      backend is None
-      and len(self.robot_.links) > 0
-      and getattr(self.robot_.links[0], "lib", "numpy") == "jax"
-      and all(link.dof == 0 for link in self.robot_.links)
-    )
-    if backend == "numpy" or (backend is None and not use_jax_default):
-      self.outward_state_ = outward_api.build_kinematics_outward_state(self.robot_, self.motion(order), order)
-      self.state_dict_ = self.outward_state_.to_state_dict(self.robot_)
-    else:
-      self.outward_state_ = None
-      self.state_dict_ = outward_api.build_kinematics_state(self.robot_, self.motion(order), order, backend=backend)
+    states, batch_shape = self._build_state_result(order=order, is_dynamics=False, backend=backend)
+    self._set_batch_states(states, batch_shape)
 
   # ToDo: change function name
   def kinematics_point(self, s : float = 0.0):
+    self._ensure_not_batched("kinematics_point")
     return outward_api.calc_link_total_point_frame(self.robot_, self.motions_, self.state_dict_, s)
   
   def dynamics(self, order = None):
     if order is None:
       order = self.order_
-    self.outward_state_ = outward_api.build_dynamics_outward_state(self.robot_, self.motion(order), order-2)
-    self.state_dict_ = self.outward_state_.to_state_dict(self.robot_)
+    states, batch_shape = self._build_state_result(order=order, is_dynamics=True)
+    self._set_batch_states(states, batch_shape)
 
   def _use_jax_kinematics_backend(self, backend: str = None) -> bool:
     return (
@@ -281,7 +327,36 @@ class Kots():
       )
     )
 
+  def _resolve_kinematics_backend(self, is_dynamics : bool = False, backend : str = None):
+    kinematics_backend = None if is_dynamics else backend
+    if kinematics_backend not in (None, "numpy", "jax"):
+      raise ValueError(f"Unsupported kinematics backend: {kinematics_backend}. Use 'numpy' or 'jax'.")
+    return kinematics_backend
+
+  def _state_builder(self, order : int, is_dynamics : bool = False, backend : str = None):
+    kinematics_backend = self._resolve_kinematics_backend(is_dynamics, backend)
+    if is_dynamics:
+      return (
+        kinematics_backend,
+        lambda x: outward_api.build_dynamics_outward_state(self.robot_, x, order-2),
+      )
+    if self._use_jax_kinematics_backend(kinematics_backend):
+      return (
+        kinematics_backend,
+        lambda x: outward_api.build_kinematics_state(self.robot_, x, order, backend=kinematics_backend),
+      )
+    return (
+      kinematics_backend,
+      lambda x: outward_api.build_kinematics_outward_state(self.robot_, x, order),
+    )
+
+  def _build_state_result(self, order : int, is_dynamics : bool = False, backend : str = None):
+    _, build_state = self._state_builder(order, is_dynamics=is_dynamics, backend=backend)
+    return batch_api.map_flat_batch(self.motion(order), build_state)
+
   def _set_current_state(self, state_obj):
+    self.batch_shape_ = ()
+    self.state_batch_ = None
     if hasattr(state_obj, "to_state_dict"):
       self.outward_state_ = state_obj
       self.state_dict_ = state_obj.to_state_dict(self.robot_)
@@ -294,27 +369,28 @@ class Kots():
     if order is None:
       order = self.order_
 
-    kinematics_backend = None if is_dynamics else backend
-    if kinematics_backend not in (None, "numpy", "jax"):
-      raise ValueError(f"Unsupported kinematics backend: {kinematics_backend}. Use 'numpy' or 'jax'.")
+    kinematics_backend, build_state = self._state_builder(order, is_dynamics=is_dynamics, backend=backend)
+    motion_revision = self.motions_.revision()
+
     cache_config = (bool(is_dynamics), int(order), kinematics_backend)
+    if not self.motions_.is_batched():
+      if self.state_cache_ is None or self.state_cache_config_ != cache_config:
+        self.state_cache_ = StateCache(build_state=lambda x_all, time=None, required=None: build_state(x_all))
+        self.state_cache_config_ = cache_config
+      elif self.state_cache_.is_fresh(motion_revision):
+        if self.outward_state_ is self.state_cache_.state or self.state_dict_ is self.state_cache_.state:
+          return self.state_dict_
+        return self._set_current_state(self.state_cache_.state)
+
+    motion = self.motion(order)
+    if batch_api.is_batched_feature_array(motion):
+      states, batch_shape = batch_api.map_flat_batch(motion, build_state)
+      return self._set_batch_states(states, batch_shape)
+
     if self.state_cache_ is None or self.state_cache_config_ != cache_config:
-      if not is_dynamics:
-        if self._use_jax_kinematics_backend(kinematics_backend):
-          self.state_cache_ = StateCache(
-            build_state=lambda x_all, time=None, required=None: outward_api.build_kinematics_state(self.robot_, x_all, order, backend=kinematics_backend)
-          )
-        else:
-          self.state_cache_ = StateCache(
-            build_state=lambda x_all, time=None, required=None: outward_api.build_kinematics_outward_state(self.robot_, x_all, order)
-          )
-      else:
-        self.state_cache_ = StateCache(
-          build_state=lambda x_all, time=None, required=None: outward_api.build_dynamics_outward_state(self.robot_, x_all, order-2)
-        )
+      self.state_cache_ = StateCache(build_state=lambda x_all, time=None, required=None: build_state(x_all))
       self.state_cache_config_ = cache_config
 
-    motion_revision = self.motions_.revision()
     if self.state_cache_.is_fresh(motion_revision):
       return self._set_current_state(self.state_cache_.state)
 
@@ -326,12 +402,13 @@ class Kots():
       def get(self) -> np.ndarray:
         return self._x
 
-    motion_pack = _MotionPack(self.motion(order), motion_revision)
+    motion_pack = _MotionPack(motion, motion_revision)
 
     state_obj = outward_api.update_outward_state(self.robot_, motion_pack, self.state_cache_, is_dynamics, order)
     return self._set_current_state(state_obj)
 
   def set_state_df(self):
+    self._ensure_not_batched("set_state_df")
     self._ensure_state_table().import_state(self.state_dict_)
     
   def set_target_from_file(self, target_file : str):
@@ -345,6 +422,7 @@ class Kots():
   def link_diff_kinematics_numerical(self, link_name_list : list[str], data_type = "vel", order = None, eps = 1e-8, update_method = "poly", update_direction = None):
     if order is None:
       order = self.order_
+    self._ensure_not_batched("link_diff_kinematics_numerical")
     
     motion = self.motion(order)
 
@@ -353,49 +431,121 @@ class Kots():
   def diff_outward_numerical(self, state_type : StateType, order : int = None, eps : float = 1e-8, update_method : str = "poly", update_direction = None):
     if order is None:
       order = self.order_
+    self._ensure_not_batched("diff_outward_numerical")
 
     motion = self.motion(order)
     
     return outward_api.diff_outward_numerical(self.robot_, motion, state_type, order, eps, update_method, update_direction)
 
-  def jacobian(self, state_type, numerical : bool = False, list_output : bool = False):
-    if type(state_type) is list:
-      state_type_list = state_type
-    else:
-      state_type_list = [state_type]
-    
-    if numerical:
-      max_order = StateType.max_time_order(state_type_list)
+  def _state_type_list(self, state_type):
+    return state_type if type(state_type) is list else [state_type]
+
+  def _sample_motions(self, motion : np.ndarray, order : int) -> RobotMotions:
+    sample_motions = RobotMotions(
+      self.robot_.dof,
+      self.motions_.aliases[:order],
+      owner_layout=self.robot_.motion_owners(),
+    )
+    sample_motions.set_motion(motion)
+    return sample_motions
+
+  def _jacobian_numerical(self, state_type_list, max_order : int, list_output : bool = False):
+    if not self.motions_.is_batched():
       jacobs = [outward_api.jacobian_numerical(self.robot_, self.motions_, st, max_order) for st in state_type_list]
-      if list_output:
-        return jacobs
-      else:
-        return np.vstack(jacobs)
+      return jacobs if list_output else np.vstack(jacobs)
+
+    flat_motion, batch_shape = batch_api.flatten_feature_batch(self.motion(max_order))
+    sample_results = [
+      [
+        outward_api.jacobian_numerical(self.robot_, self._sample_motions(x, max_order), st, max_order)
+        for st in state_type_list
+      ]
+      for x in flat_motion
+    ]
+    return batch_api.stack_results(
+      sample_results,
+      batch_shape,
+      list_output,
+      len(state_type_list),
+      combine=np.vstack,
+    )
+
+  def _jacobian_from_state(self, state, state_type_list, max_order : int, list_output : bool = False):
+    if not isinstance(state, list):
+      return outward_api.outward_jacobian(self.robot_, state, state_type_list, dim = self.dim_, list_output = list_output)
+
+    sample_results = [
+      outward_api.outward_jacobian(self.robot_, st, state_type_list, max_time_order=max_order, dim = self.dim_, list_output = list_output)
+      for st in state
+    ]
+    return batch_api.stack_results(
+      sample_results,
+      self.batch_shape_,
+      list_output,
+      len(state_type_list),
+    )
+
+  def _jacobian_matvec_numerical(self, state_type_list, max_order : int, vec, list_output : bool = False):
+    if not self.motions_.is_batched():
+      results = [outward_api.jacobian_numerical(self.robot_, self.motions_, st, max_order) @ vec for st in state_type_list]
+      return results if list_output else np.concatenate(results)
+
+    flat_motion, batch_shape = batch_api.flatten_feature_batch(self.motion(max_order))
+    sample_results = []
+    for x, v in zip(flat_motion, vec):
+      sample_motions = self._sample_motions(x, max_order)
+      parts = [
+        outward_api.jacobian_numerical(self.robot_, sample_motions, st, max_order) @ v
+        for st in state_type_list
+      ]
+      sample_results.append(parts if list_output else np.concatenate(parts))
+    return batch_api.stack_results(
+      sample_results,
+      batch_shape,
+      list_output,
+      len(state_type_list),
+    )
+
+  def _jacobian_matvec_from_state(self, state, state_type_list, max_order : int, vec, batch_shape : tuple, list_output : bool = False):
+    if not isinstance(state, list):
+      return outward_api.outward_jacobian_matvec(self.robot_, state, state_type_list, vec, dim = self.dim_, list_output = list_output)
+
+    sample_results = [
+      outward_api.outward_jacobian_matvec(self.robot_, st, state_type_list, v, max_time_order=max_order, dim = self.dim_, list_output = list_output)
+      for st, v in zip(state, vec)
+    ]
+    return batch_api.stack_results(
+      sample_results,
+      batch_shape,
+      list_output,
+      len(state_type_list),
+    )
+
+  def jacobian(self, state_type, numerical : bool = False, list_output : bool = False):
+    state_type_list = self._state_type_list(state_type)
+    max_order = StateType.max_time_order(state_type_list)
+    if numerical:
+      return self._jacobian_numerical(state_type_list, max_order, list_output)
 
     state = self.outward_state_ if self.outward_state_ is not None else self.state_dict_
-    return outward_api.outward_jacobian(self.robot_, state, state_type_list, dim = self.dim_, list_output = list_output)
+    return self._jacobian_from_state(state, state_type_list, max_order, list_output)
 
   def jacobian_matvec(self, state_type, vec : np.ndarray, numerical : bool = False, list_output : bool = False):
-    if type(state_type) is list:
-      state_type_list = state_type
-    else:
-      state_type_list = [state_type]
-
+    state_type_list = self._state_type_list(state_type)
     max_order = StateType.max_time_order(state_type_list)
-    vec = np.asarray(vec)
     expected_shape = (self.robot_.dof * max_order,)
-    if vec.shape != expected_shape:
-      raise ValueError(f"vec must have shape {expected_shape}, got {vec.shape}")
+    batch_shape = self.batch_shape_ if self.batch_shape_ else self.motions_.batch_shape()
+    vec = batch_api.broadcast_feature_vector(vec, batch_shape, expected_shape)
 
     if numerical:
-      results = [outward_api.jacobian_numerical(self.robot_, self.motions_, st, max_order) @ vec for st in state_type_list]
-      if list_output:
-        return results
-      else:
-        return np.concatenate(results)
+      return self._jacobian_matvec_numerical(state_type_list, max_order, vec, list_output)
 
     state = self.outward_state_ if self.outward_state_ is not None else self.state_dict_
-    return outward_api.outward_jacobian_matvec(self.robot_, state, state_type_list, vec, dim = self.dim_, list_output = list_output)
+    return self._jacobian_matvec_from_state(state, state_type_list, max_order, vec, batch_shape, list_output)
+
+  def jacobian_tensor(self, state_type, numerical : bool = False) -> JacobianTensor:
+    state_type_list = self._state_type_list(state_type)
+    return JacobianTensor.from_array(self.jacobian(state_type_list, numerical=numerical), state_type_list)
   
   def jacobian_target(self, numerical : bool = False, list_output : bool = False):
     if self.target_ is None:
@@ -408,6 +558,11 @@ class Kots():
       raise ValueError("target is not set")
 
     return self.jacobian_matvec(self.target_._targets, vec, numerical=numerical, list_output=list_output)
+
+  def jacobian_target_tensor(self, numerical : bool = False) -> JacobianTensor:
+    if self.target_ is None:
+      raise ValueError("target is not set")
+    return JacobianTensor.from_array(self.jacobian_target(numerical=numerical), self.target_._targets)
   
   def inverse_kinematics(self, target_type : List[StateType], target_value : List[np.ndarray],
                     q_init : np.ndarray, opt_func : None = None) -> np.ndarray:
@@ -416,6 +571,7 @@ class Kots():
     )
 
   def show_robot(self, save = False, ax = None, color : RobotColor = None):
+    self._ensure_not_batched("show_robot")
     from .core.state_dict import state_dict_to_links_pos
 
     conectivity = np.zeros((self.robot_.joint_num, 2), dtype='int64')
@@ -434,17 +590,20 @@ class Kots():
       conectivity[i, 1] = joint.parent_link_id
 
     if traj is None:
+      self._ensure_not_batched("show_robot_traj")
       link_pos_traj = self._ensure_state_table().extract_links_info_traj("pos", self.robot_.link_names)
     else:
       link_pos_traj = traj
     show_robot_traj(conectivity, link_pos_traj, save, ax, color)
 
   def show_link_points(self):
+    self._ensure_not_batched("show_link_points")
     from .core.state_dict import state_dict_to_links_pos
 
     show_link_points(state_dict_to_links_pos(self.state_dict_, self.robot_.link_names))
 
   def show_target_link_points(self, plt = None, dimension=3):
+    self._ensure_not_batched("show_target_link_points")
     from .core.state_dict import state_dict_to_links_pos
 
     if not self.target_:
@@ -457,6 +616,7 @@ class Kots():
     show_link_points(state_dict_to_links_pos(self.state_dict_, owner_link_names), plt, dimension)
 
   def target_link_pos_traj(self):
+    self._ensure_not_batched("target_link_pos_traj")
     if not self.target_:
       raise ValueError("target_ is not set")
     

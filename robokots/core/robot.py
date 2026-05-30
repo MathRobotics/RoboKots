@@ -7,6 +7,7 @@ from __future__ import annotations
 import numpy as np
 
 import warnings
+from dataclasses import dataclass
 from typing import List, Dict
 
 warnings.simplefilter("always", UserWarning)
@@ -19,6 +20,13 @@ def _array_module(lib: str):
     import jax.numpy as jnp
     return jnp
   raise ValueError(f"Unsupported library: {lib}. Use 'jax' or 'numpy'.")
+
+
+@dataclass(frozen=True)
+class MotionOwner:
+  dof: int
+  dof_index: int
+
 
 class RobotStruct:
   def __init__(self, links_: List["LinkStruct"], joints_: List["JointStruct"]):
@@ -52,6 +60,14 @@ class RobotStruct:
   
   def is_joint(self, name : str) -> bool:
     return name in self._joints_by_name
+
+  def motion_owners(self) -> tuple[MotionOwner, ...]:
+    owners = [owner for owner in (*self.links, *self.joints) if owner.dof > 0]
+    owners.sort(key=lambda owner: owner.dof_index)
+    return tuple(MotionOwner(owner.dof, owner.dof_index) for owner in owners)
+
+  def motion_owner_dofs(self) -> list[int]:
+    return [owner.dof for owner in self.motion_owners()]
 
   def robot_init(self):
     self.joint_num = len(self.joints)  

@@ -90,11 +90,10 @@ def show_robot(joint_conectivity, marker_pos, save = False, ax = None, color : R
   
   set_equall_aspect_3d(ax, marker_pos, 0.1)
 
-  if owns_axes:
-    plt.show()
-    
   if save:  
     plt.savefig('simple_draw.png')
+  elif owns_axes:
+    plt.show()
 
 def show_robot_traj(joint_conectivity, marker_pos_list, save = False, ax = None, color : RobotColor = None):
   plt = _get_pyplot()
@@ -149,11 +148,10 @@ def show_robot_traj(joint_conectivity, marker_pos_list, save = False, ax = None,
     set_equall_aspect(ax_, marker_pos, 0.1)
     
 
-  if owns_axes:
-    plt.show()
-
   if save:  
     plt.savefig('simple_draw.png')
+  elif owns_axes:
+    plt.show()
 
 def show_link_points(link_pos, ax = None, dimension=3):
   plt = _get_pyplot()

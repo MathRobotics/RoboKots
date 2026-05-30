@@ -19,6 +19,8 @@ OPS = (
     "link_diff_numerical",
     "jacobian_analytic",
     "jacobian_numerical",
+    "dynamics_jacobian_analytic",
+    "dynamics_jacobian_numerical",
     "update_cached",
     "update_recompute",
 )
@@ -32,17 +34,26 @@ CONFIG = {
     "warmup": 5,
     "seed": 0,
     "ops": list(OPS),
-    # Baseline mean values [ms] measured with mathrobo==0.0.1
-    # under this default CONFIG (order=5, repeat=200, repeat_numerical=10, seed=0).
+    # Baseline mean values [ms] for this repository/config.
+    # Update these after intentional performance changes.
     "baseline_mean_ms": {
-        "kinematics": 8.438,
-        "dynamics": 12.970,
-        "link_diff_numerical": 23.127,
-        "jacobian_analytic": 10.713,
-        "jacobian_numerical": 14.059,
-        "update_cached": 0.059,
-        "update_recompute": 8.395,
+        "kinematics": 2.025,
+        "kinematics_jax": 34.580,
+        "dynamics": 4.129,
+        "link_diff_numerical": 6.429,
+        "jacobian_analytic": 4.115,
+        "jacobian_numerical": 83.277,
+        "dynamics_jacobian_analytic": 17.292,
+        "dynamics_jacobian_numerical": 165.893,
+        "update_cached": 0.00101,
+        "update_recompute": 2.052,
     },
+    # Use a high-order state by default so numerical Jacobian timing reflects
+    # the lifted motion dimension, not only a first-order position query.
+    "jacobian_data_type": "snap",
+    "dynamics_jacobian_data_type": "torque_diff2",
+    "dynamics_jacobian_owner_type": "joint",
+    "dynamics_jacobian_owner_name": None,
     # link_diff benchmark settings
     "link_diff_data_type": "frame",
     "link_diff_link_count": 3,
@@ -131,6 +142,9 @@ def main() -> None:
     seed = int(CONFIG["seed"])
     selected_ops = list(CONFIG["ops"])
     baseline_mean_ms = {str(k): float(v) for k, v in dict(CONFIG.get("baseline_mean_ms", {})).items()}
+    jacobian_data_type = str(CONFIG.get("jacobian_data_type", "snap"))
+    dynamics_jacobian_data_type = str(CONFIG.get("dynamics_jacobian_data_type", "force_diff2"))
+    dynamics_jacobian_owner_type = str(CONFIG.get("dynamics_jacobian_owner_type", "joint"))
     link_diff_data_type = str(CONFIG.get("link_diff_data_type", "frame"))
     link_diff_link_count = int(CONFIG.get("link_diff_link_count", 3))
 
@@ -155,7 +169,17 @@ def main() -> None:
     kots.import_motions(base_motion)
 
     end_link = kots.link_name_list()[-1]
-    st_pos = StateType("link", end_link, "pos")
+    end_joint = kots.joint_name_list()[-1]
+    st_jacobian = StateType("link", end_link, jacobian_data_type)
+    dynamics_jacobian_owner_name = CONFIG.get("dynamics_jacobian_owner_name")
+    if dynamics_jacobian_owner_name is None:
+        dynamics_jacobian_owner_name = end_joint if dynamics_jacobian_owner_type == "joint" else end_link
+    dynamics_jacobian_owner_name = str(dynamics_jacobian_owner_name)
+    st_dynamics_jacobian = StateType(
+        dynamics_jacobian_owner_type,
+        dynamics_jacobian_owner_name,
+        dynamics_jacobian_data_type,
+    )
     link_names = kots.link_name_list()
     link_diff_targets = link_names[-min(len(link_names), link_diff_link_count) :]
     link_diff_direction = rng.standard_normal(kots.dof())
@@ -168,6 +192,12 @@ def main() -> None:
     print(f"warmup     : {warmup}")
     print(f"repeat     : {repeat}")
     print(f"repeat_num : {repeat_numerical}")
+    print(f"jacobian   : state={end_link}_link_{jacobian_data_type} order={st_jacobian.time_order}")
+    print(
+        "dyn_jacob  : "
+        f"state={dynamics_jacobian_owner_name}_{dynamics_jacobian_owner_type}_{dynamics_jacobian_data_type} "
+        f"order={st_dynamics_jacobian.time_order}"
+    )
     if "link_diff_numerical" in selected_ops:
         print(f"link_diff  : type={link_diff_data_type} targets={link_diff_targets}")
     print()
@@ -194,10 +224,17 @@ def main() -> None:
 
     def op_jacobian_analytic() -> None:
         kots.kinematics(order=order)
-        _ = kots.jacobian(st_pos, numerical=False)
+        _ = kots.jacobian(st_jacobian, numerical=False)
 
     def op_jacobian_numerical() -> None:
-        _ = kots.jacobian(st_pos, numerical=True)
+        _ = kots.jacobian(st_jacobian, numerical=True)
+
+    def op_dynamics_jacobian_analytic() -> None:
+        kots.dynamics(order=order)
+        _ = kots.jacobian(st_dynamics_jacobian, numerical=False)
+
+    def op_dynamics_jacobian_numerical() -> None:
+        _ = kots.jacobian(st_dynamics_jacobian, numerical=True)
 
     def op_update_cached() -> None:
         _ = kots.update_state_dict(order=order, is_dynamics=False)
@@ -216,6 +253,8 @@ def main() -> None:
         "link_diff_numerical": op_link_diff_numerical,
         "jacobian_analytic": op_jacobian_analytic,
         "jacobian_numerical": op_jacobian_numerical,
+        "dynamics_jacobian_analytic": op_dynamics_jacobian_analytic,
+        "dynamics_jacobian_numerical": op_dynamics_jacobian_numerical,
         "update_cached": op_update_cached,
         "update_recompute": op_update_recompute,
     }
@@ -224,7 +263,11 @@ def main() -> None:
         kots.update_state_dict(order=order, is_dynamics=False)
 
     for op_name in selected_ops:
-        repeats = repeat_numerical if op_name in {"jacobian_numerical", "link_diff_numerical"} else repeat
+        repeats = repeat_numerical if op_name in {
+            "jacobian_numerical",
+            "dynamics_jacobian_numerical",
+            "link_diff_numerical",
+        } else repeat
         stats = _measure(op_map[op_name], repeats=repeats, warmup=warmup)
         _print_result(op_name, repeats=repeats, stats=stats)
         _print_baseline_compare(op_name, stats=stats, baseline_mean_ms=baseline_mean_ms)

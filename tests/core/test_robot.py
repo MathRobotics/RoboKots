@@ -23,6 +23,17 @@ def test_robot_struct_init():
     assert robot.link_names == ["link1","link2"]
     assert robot.joint_names == ["joint1"]
 
+
+def test_robot_motion_owners_are_centralized_by_dof_index():
+    link1 = LinkStruct(0, "link1", np.zeros(3), 1.0, np.eye(6), "soft")
+    link2 = LinkStruct(1, "link2", np.zeros(3), 1.0, np.eye(6), "rigid")
+    joint1 = JointStruct(0, "joint1", "revolute", np.array((1, 0, 0)), 0, 1, SE3())
+
+    robot = RobotStruct([link1, link2], [joint1])
+
+    assert [(owner.dof, owner.dof_index) for owner in robot.motion_owners()] == [(6, 0), (1, 6)]
+    assert robot.motion_owner_dofs() == [6, 1]
+
 def test_joint_struct_init():
     origin = SE3.rand()
     # Create a mock joint
