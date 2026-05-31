@@ -27,6 +27,7 @@ class Kots():
   state_dict_ : dict
   state_ : Optional[Any]
   outward_state_ : Optional[Any]
+  state_dict_source_ : Optional[Any]
   target_ : TargetList
   order_ : int
   dim_ : int
@@ -77,6 +78,7 @@ class Kots():
     self._state_l_aliases = l_aliases
     self._state_j_aliases = j_aliases
     self.state_dict_ = {}
+    self.state_dict_source_ = None
     self.state_cache_ = None
     self.state_cache_config_ = None
     self.target_ = None
@@ -95,6 +97,7 @@ class Kots():
     self.state_ = None
     self.outward_state_ = None
     self.state_dict_ = {}
+    self.state_dict_source_ = None
     self._state_l_aliases = l_aliases
     self._state_j_aliases = j_aliases
     self.state_cache_ = None
@@ -217,14 +220,21 @@ class Kots():
   def motion_diff_cm(self, order : int = None, last_diff = None):
     return self.motion_derivative_cm(order, tail=last_diff)
 
-  def _set_batch_states(self, states, batch_shape : tuple):
+  def _set_batch_states(self, states, batch_shape : tuple, materialize_dict : bool = True):
     self.batch_shape_ = batch_shape
     if not batch_shape:
-      return self._set_current_state(states)
-    self.state_batch_ = StateBatch.from_states(states, batch_shape, self.robot_)
+      return self._set_current_state(states, materialize_dict=materialize_dict)
+    if hasattr(states, "to_state_dict"):
+      self.state_batch_ = states
+      self.outward_state_ = states
+      self.state_dict_ = states.to_state_dict(self.robot_) if materialize_dict else {}
+      self.state_dict_source_ = states if materialize_dict else None
+      return self.state_dict_ if materialize_dict else states
+    self.state_batch_ = StateBatch.from_states(states, batch_shape, self.robot_, materialize_dict=materialize_dict)
     self.outward_state_ = self.state_batch_.outward_states
-    self.state_dict_ = self.state_batch_.state_dicts
-    return self.state_dict_
+    self.state_dict_ = self.state_batch_.state_dicts if materialize_dict or self.outward_state_ is None else {}
+    self.state_dict_source_ = self.state_batch_ if self.state_dict_ else None
+    return self.state_dict_ if materialize_dict or self.outward_state_ is None else self.outward_state_
 
   def _invalidate_current_state(self):
     self.state_cache_ = None
@@ -232,6 +242,7 @@ class Kots():
     self.state_batch_ = None
     self.outward_state_ = None
     self.state_dict_ = {}
+    self.state_dict_source_ = None
     self.batch_shape_ = ()
 
   def _ensure_not_batched(self, api_name : str):
@@ -261,17 +272,26 @@ class Kots():
     self._ensure_not_batched("state_df")
     return self._ensure_state_table().df()
 
+  def _state_for_direct_read(self):
+    return self.outward_state_ if self.outward_state_ is not None else self.state_dict_
+
   def state_info(self, state_type : StateType):
-    if self.state_batch_ is not None:
+    if isinstance(self.state_batch_, StateBatch):
       return self.state_batch_.state_info(self.robot_, state_type, outward_api.get_value)
-    return outward_api.get_value(self.robot_, self.state_dict_, state_type)
+    value = outward_api.get_value(self.robot_, self._state_for_direct_read(), state_type)
+    if self.batch_shape_ and hasattr(value, "mat"):
+      return value.mat()
+    return value
 
   def state_info_list(self, state_type_list : List[StateType], list_output : bool = False) -> List[np.ndarray]:
-    if self.state_batch_ is not None:
+    if isinstance(self.state_batch_, StateBatch):
       return self.state_batch_.state_info_list(self.robot_, state_type_list, outward_api.get_value, list_output=list_output)
-    state_list = [outward_api.get_value(self.robot_, self.state_dict_, st) for st in state_type_list]
+    state = self._state_for_direct_read()
+    state_list = [outward_api.get_value(self.robot_, state, st) for st in state_type_list]
     if list_output:
         return state_list
+    elif self.batch_shape_:
+        return np.concatenate([np.asarray(v).reshape(self.batch_shape_ + (-1,)) for v in state_list], axis=-1)
     else:
         return np.vstack(state_list)
 
@@ -351,21 +371,34 @@ class Kots():
     )
 
   def _build_state_result(self, order : int, is_dynamics : bool = False, backend : str = None):
-    _, build_state = self._state_builder(order, is_dynamics=is_dynamics, backend=backend)
-    return batch_api.map_flat_batch(self.motion(order), build_state)
+    kinematics_backend, build_state = self._state_builder(order, is_dynamics=is_dynamics, backend=backend)
+    motion = self.motion(order)
+    if (
+      batch_api.is_batched_feature_array(motion)
+      and kinematics_backend in (None, "numpy")
+    ):
+      try:
+        if is_dynamics:
+          return outward_api.build_dynamics_outward_state(self.robot_, motion, order - 2), motion.shape[:-1]
+        return outward_api.build_kinematics_outward_state(self.robot_, motion, order), motion.shape[:-1]
+      except Exception:
+        pass
+    return batch_api.map_flat_batch(motion, build_state)
 
-  def _set_current_state(self, state_obj):
+  def _set_current_state(self, state_obj, materialize_dict : bool = True):
     self.batch_shape_ = ()
     self.state_batch_ = None
     if hasattr(state_obj, "to_state_dict"):
       self.outward_state_ = state_obj
-      self.state_dict_ = state_obj.to_state_dict(self.robot_)
+      self.state_dict_ = state_obj.to_state_dict(self.robot_) if materialize_dict else {}
+      self.state_dict_source_ = state_obj if materialize_dict else None
     else:
       self.outward_state_ = None
       self.state_dict_ = state_obj
-    return self.state_dict_
+      self.state_dict_source_ = state_obj
+    return self.state_dict_ if materialize_dict or not hasattr(state_obj, "to_state_dict") else state_obj
 
-  def update_state_dict(self, order : int = None, is_dynamics: bool = False, backend : str = None) -> dict:
+  def update_state(self, order : int = None, is_dynamics: bool = False, backend : str = None):
     if order is None:
       order = self.order_
 
@@ -379,20 +412,20 @@ class Kots():
         self.state_cache_config_ = cache_config
       elif self.state_cache_.is_fresh(motion_revision):
         if self.outward_state_ is self.state_cache_.state or self.state_dict_ is self.state_cache_.state:
-          return self.state_dict_
-        return self._set_current_state(self.state_cache_.state)
+          return self.state_cache_.state
+        return self._set_current_state(self.state_cache_.state, materialize_dict=False)
 
     motion = self.motion(order)
     if batch_api.is_batched_feature_array(motion):
-      states, batch_shape = batch_api.map_flat_batch(motion, build_state)
-      return self._set_batch_states(states, batch_shape)
+      states, batch_shape = self._build_state_result(order=order, is_dynamics=is_dynamics, backend=backend)
+      return self._set_batch_states(states, batch_shape, materialize_dict=False)
 
     if self.state_cache_ is None or self.state_cache_config_ != cache_config:
       self.state_cache_ = StateCache(build_state=lambda x_all, time=None, required=None: build_state(x_all))
       self.state_cache_config_ = cache_config
 
     if self.state_cache_.is_fresh(motion_revision):
-      return self._set_current_state(self.state_cache_.state)
+      return self._set_current_state(self.state_cache_.state, materialize_dict=False)
 
     class _MotionPack:
       def __init__(self, x: np.ndarray, revision: int):
@@ -405,7 +438,33 @@ class Kots():
     motion_pack = _MotionPack(motion, motion_revision)
 
     state_obj = outward_api.update_outward_state(self.robot_, motion_pack, self.state_cache_, is_dynamics, order)
-    return self._set_current_state(state_obj)
+    return self._set_current_state(state_obj, materialize_dict=False)
+
+  def to_state_dict(self) -> dict:
+    if isinstance(self.state_batch_, StateBatch):
+      if self.state_dict_source_ is self.state_batch_:
+        return self.state_dict_
+      if not self.state_batch_.state_dicts and self.state_batch_.outward_states is not None:
+        self.state_batch_ = StateBatch.from_states(
+          self.state_batch_.outward_states,
+          self.state_batch_.batch_shape,
+          self.robot_,
+          materialize_dict=True,
+        )
+      self.state_dict_ = self.state_batch_.state_dicts
+      self.state_dict_source_ = self.state_batch_
+      return self.state_dict_
+
+    if self.outward_state_ is not None and hasattr(self.outward_state_, "to_state_dict"):
+      if self.state_dict_source_ is self.outward_state_:
+        return self.state_dict_
+      self.state_dict_ = self.outward_state_.to_state_dict(self.robot_)
+      self.state_dict_source_ = self.outward_state_
+    return self.state_dict_
+
+  def update_state_dict(self, order : int = None, is_dynamics: bool = False, backend : str = None) -> dict:
+    self.update_state(order=order, is_dynamics=is_dynamics, backend=backend)
+    return self.to_state_dict()
 
   def set_state_df(self):
     self._ensure_not_batched("set_state_df")
@@ -472,6 +531,25 @@ class Kots():
 
   def _jacobian_from_state(self, state, state_type_list, max_order : int, list_output : bool = False):
     if not isinstance(state, list):
+      if self.batch_shape_:
+        try:
+          return outward_api.outward_jacobian(self.robot_, state, state_type_list, max_time_order=max_order, dim = self.dim_, list_output = list_output)
+        except Exception:
+          pass
+        is_dynamics = any(st.is_dynamics for st in state_type_list)
+        _, build_state = self._state_builder(max_order, is_dynamics=is_dynamics)
+        flat_motion, batch_shape = batch_api.flatten_feature_batch(self.motion(max_order))
+        states = [build_state(x) for x in flat_motion]
+        sample_results = [
+          outward_api.outward_jacobian(self.robot_, st, state_type_list, max_time_order=max_order, dim = self.dim_, list_output = list_output)
+          for st in states
+        ]
+        return batch_api.stack_results(
+          sample_results,
+          batch_shape,
+          list_output,
+          len(state_type_list),
+        )
       return outward_api.outward_jacobian(self.robot_, state, state_type_list, dim = self.dim_, list_output = list_output)
 
     sample_results = [
@@ -508,6 +586,26 @@ class Kots():
 
   def _jacobian_matvec_from_state(self, state, state_type_list, max_order : int, vec, batch_shape : tuple, list_output : bool = False):
     if not isinstance(state, list):
+      if batch_shape:
+        try:
+          direct_vec = vec.reshape(batch_shape + (vec.shape[-1],))
+          return outward_api.outward_jacobian_matvec(self.robot_, state, state_type_list, direct_vec, max_time_order=max_order, dim = self.dim_, list_output = list_output)
+        except Exception:
+          pass
+        is_dynamics = any(st.is_dynamics for st in state_type_list)
+        _, build_state = self._state_builder(max_order, is_dynamics=is_dynamics)
+        flat_motion, _ = batch_api.flatten_feature_batch(self.motion(max_order))
+        states = [build_state(x) for x in flat_motion]
+        sample_results = [
+          outward_api.outward_jacobian_matvec(self.robot_, st, state_type_list, v, max_time_order=max_order, dim = self.dim_, list_output = list_output)
+          for st, v in zip(states, vec)
+        ]
+        return batch_api.stack_results(
+          sample_results,
+          batch_shape,
+          list_output,
+          len(state_type_list),
+        )
       return outward_api.outward_jacobian_matvec(self.robot_, state, state_type_list, vec, dim = self.dim_, list_output = list_output)
 
     sample_results = [

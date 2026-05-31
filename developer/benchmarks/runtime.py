@@ -10,7 +10,7 @@ from robokots.core.state import StateType
 from robokots.kots import Kots
 
 
-DEFAULT_MODEL = Path(__file__).resolve().parents[1] / "model" / "sample_robot.json"
+DEFAULT_MODEL = Path(__file__).resolve().parents[2] / "examples" / "model" / "sample_robot.json"
 
 OPS = (
     "kinematics",
@@ -21,8 +21,14 @@ OPS = (
     "jacobian_numerical",
     "dynamics_jacobian_analytic",
     "dynamics_jacobian_numerical",
+    "update_state_cached",
+    "update_state_recompute",
+    "update_state_dynamics_cached",
+    "update_state_dynamics_recompute",
     "update_cached",
     "update_recompute",
+    "update_dynamics_cached",
+    "update_dynamics_recompute",
 )
 
 # Edit here for your benchmark setting.
@@ -37,16 +43,22 @@ CONFIG = {
     # Baseline mean values [ms] for this repository/config.
     # Update these after intentional performance changes.
     "baseline_mean_ms": {
-        "kinematics": 2.025,
-        "kinematics_jax": 34.580,
-        "dynamics": 4.129,
-        "link_diff_numerical": 6.429,
-        "jacobian_analytic": 4.115,
-        "jacobian_numerical": 83.277,
-        "dynamics_jacobian_analytic": 17.292,
-        "dynamics_jacobian_numerical": 165.893,
-        "update_cached": 0.00101,
-        "update_recompute": 2.052,
+        "kinematics": 0.586,
+        "kinematics_jax": 17.045,
+        "dynamics": 1.550,
+        "link_diff_numerical": 1.861,
+        "jacobian_analytic": 1.626,
+        "jacobian_numerical": 22.343,
+        "dynamics_jacobian_analytic": 8.524,
+        "dynamics_jacobian_numerical": 62.142,
+        "update_state_cached": 0.000543,
+        "update_state_recompute": 0.522,
+        "update_state_dynamics_cached": 0.000453,
+        "update_state_dynamics_recompute": 1.509,
+        "update_cached": 0.000676,
+        "update_recompute": 0.577,
+        "update_dynamics_cached": 0.000561,
+        "update_dynamics_recompute": 1.634,
     },
     # Use a high-order state by default so numerical Jacobian timing reflects
     # the lifted motion dimension, not only a first-order position query.
@@ -236,6 +248,26 @@ def main() -> None:
     def op_dynamics_jacobian_numerical() -> None:
         _ = kots.jacobian(st_dynamics_jacobian, numerical=True)
 
+    def op_update_state_cached() -> None:
+        _ = kots.update_state(order=order, is_dynamics=False)
+
+    def op_update_state_recompute() -> None:
+        counter["i"] += 1
+        motion = base_motion.copy()
+        motion[0] += 1e-6 * counter["i"]
+        kots.import_motions(motion)
+        _ = kots.update_state(order=order, is_dynamics=False)
+
+    def op_update_state_dynamics_cached() -> None:
+        _ = kots.update_state(order=order, is_dynamics=True)
+
+    def op_update_state_dynamics_recompute() -> None:
+        counter["i"] += 1
+        motion = base_motion.copy()
+        motion[0] += 1e-6 * counter["i"]
+        kots.import_motions(motion)
+        _ = kots.update_state(order=order, is_dynamics=True)
+
     def op_update_cached() -> None:
         _ = kots.update_state_dict(order=order, is_dynamics=False)
 
@@ -246,6 +278,16 @@ def main() -> None:
         kots.import_motions(motion)
         _ = kots.update_state_dict(order=order, is_dynamics=False)
 
+    def op_update_dynamics_cached() -> None:
+        _ = kots.update_state_dict(order=order, is_dynamics=True)
+
+    def op_update_dynamics_recompute() -> None:
+        counter["i"] += 1
+        motion = base_motion.copy()
+        motion[0] += 1e-6 * counter["i"]
+        kots.import_motions(motion)
+        _ = kots.update_state_dict(order=order, is_dynamics=True)
+
     op_map: dict[str, Callable[[], None]] = {
         "kinematics": op_kinematics,
         "kinematics_jax": op_kinematics_jax,
@@ -255,14 +297,26 @@ def main() -> None:
         "jacobian_numerical": op_jacobian_numerical,
         "dynamics_jacobian_analytic": op_dynamics_jacobian_analytic,
         "dynamics_jacobian_numerical": op_dynamics_jacobian_numerical,
+        "update_state_cached": op_update_state_cached,
+        "update_state_recompute": op_update_state_recompute,
+        "update_state_dynamics_cached": op_update_state_dynamics_cached,
+        "update_state_dynamics_recompute": op_update_state_dynamics_recompute,
         "update_cached": op_update_cached,
         "update_recompute": op_update_recompute,
+        "update_dynamics_cached": op_update_dynamics_cached,
+        "update_dynamics_recompute": op_update_dynamics_recompute,
     }
 
-    if "update_cached" in selected_ops:
-        kots.update_state_dict(order=order, is_dynamics=False)
-
     for op_name in selected_ops:
+        if op_name == "update_cached":
+            kots.update_state_dict(order=order, is_dynamics=False)
+        elif op_name == "update_state_cached":
+            kots.update_state(order=order, is_dynamics=False)
+        elif op_name == "update_dynamics_cached":
+            kots.update_state_dict(order=order, is_dynamics=True)
+        elif op_name == "update_state_dynamics_cached":
+            kots.update_state(order=order, is_dynamics=True)
+
         repeats = repeat_numerical if op_name in {
             "jacobian_numerical",
             "dynamics_jacobian_numerical",

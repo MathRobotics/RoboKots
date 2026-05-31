@@ -12,7 +12,7 @@ from robokots.core.state import StateType
 from robokots.kots import Kots
 
 
-DEFAULT_MODEL = Path(__file__).resolve().parents[1] / "model" / "sample_robot.json"
+DEFAULT_MODEL = Path(__file__).resolve().parents[2] / "examples" / "model" / "sample_robot.json"
 
 CONFIG = {
     "model": DEFAULT_MODEL,

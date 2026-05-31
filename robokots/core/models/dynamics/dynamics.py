@@ -59,7 +59,7 @@ def link_momentum_cmvec(inertia : np.ndarray, vel : CMVector) -> CMVector:
     Returns:
         numpy.ndarray: 6n spatial momentum vectors of the link.
     """
-    vecs = (vel.vecs() @ inertia.T).reshape(-1, inertia.shape[0])
+    vecs = vel.vecs() @ inertia.T
     return CMVector(vecs)
 
 def link_force_cmvec(vel : CMVector, momentum : CMVector, dim : int = 6) -> np.ndarray:
@@ -81,11 +81,16 @@ def link_force_cmvec(vel : CMVector, momentum : CMVector, dim : int = 6) -> np.n
           = d/dt(m) + o_inv @ hat_cadj(o @ v) @ (o @ m)
           = mom_diff + v_x_mom
     """
-    mom_diff = momentum.vecs()[1:].flatten()
-    v_x_mom = Factorial.mat(momentum._n-1, dim) @ CMTM.hat_adj(SE3wrench, vel.cm_vecs()[:vel._n-1]) @ momentum.cm_vecs()[:momentum._n-1].flatten()
+    force_order = momentum._n - 1
+    mom_diff = momentum.vecs()[..., 1:, :].reshape(momentum.vecs().shape[:-2] + (force_order * dim,))
+    vel_hat = CMTM.hat_adj(SE3wrench, vel.cm_vecs()[..., :force_order, :])
+    momentum_cm = momentum.cm_vecs()[..., :force_order, :].reshape(momentum.cm_vecs().shape[:-2] + (force_order * dim,))
+    v_x_mom = (vel_hat @ momentum_cm[..., None])[..., 0]
+    factorial = Factorial.mat(force_order, dim)
+    v_x_mom = v_x_mom @ factorial.T
     # CMVector expects (order, dim) rows; passing a flat vector makes mathrobo
     # interpret it as dim=1 and breaks higher-order factorial scaling.
-    return CMVector((mom_diff + v_x_mom).reshape(-1, dim))
+    return CMVector((mom_diff + v_x_mom).reshape(momentum.vecs().shape[:-2] + (force_order, dim)))
 
 def link_dynamics_cmvec(inertia : np.ndarray, vecs : np.ndarray) -> np.ndarray:
     """

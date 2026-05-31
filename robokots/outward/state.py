@@ -19,7 +19,7 @@ from ..core.state_dict import (
 from ..core.state import data_type_dof, StateType, state_dict_key
 
 from ..core.models.kinematics.base import convert_joint_to_data, convert_link_to_data
-from ..core.models.kinematics.kinematics import joint_local_cmtm, joint_rel_cmtm, joint_rel_frame
+from ..core.models.kinematics.kinematics import joint_local_cmtm, joint_rel_frame
 from ..core.models.kinematics.kinematics_matrix import joint_select_diag_mat
 from ..core.models.kinematics.kinematics_soft_link import soft_link_local_cmtm, calc_link_local_point_frame
 
@@ -30,6 +30,82 @@ from ..core.models.dynamics.dynamics import (
     link_force_cmvec,
     link_momentum_cmvec,
 )
+
+
+def _batch_eye_cmtm(batch_shape: tuple[int, ...], order: int) -> CMTM:
+  mat = np.broadcast_to(np.eye(4), batch_shape + (4, 4)).copy()
+  vecs = np.zeros(batch_shape + (order - 1, 6))
+  return CMTM[SE3](SE3.set_mat(mat), vecs)
+
+
+def _batch_local_tan_vec(select_mat: np.ndarray, vec: np.ndarray) -> np.ndarray:
+  vec = np.asarray(vec, dtype=float)
+  if vec.shape[-1] == 0:
+    return np.zeros(vec.shape[:-1] + (6,), dtype=vec.dtype)
+  return vec @ np.asarray(select_mat, dtype=vec.dtype).T
+
+
+def _batch_local_frame(select_mat: np.ndarray, coord: np.ndarray) -> SE3:
+  return SE3.set_mat(SE3.exp(_batch_local_tan_vec(select_mat, coord)))
+
+
+def _batch_local_cmtm(select_mat: np.ndarray, motions: np.ndarray, dof: int, order: int) -> CMTM:
+  motions = np.asarray(motions, dtype=float)
+  batch_shape = motions.shape[:-1]
+  if dof == 0:
+    return _batch_eye_cmtm(batch_shape, order)
+  blocks = motions.reshape(batch_shape + (order, dof))
+  frame = _batch_local_frame(select_mat, blocks[..., 0, :])
+  if order > 1:
+    vecs = _batch_local_tan_vec(select_mat, blocks[..., 1:, :])
+  else:
+    vecs = np.zeros(batch_shape + (0, 6), dtype=motions.dtype)
+  return CMTM[SE3](frame, vecs)
+
+
+def _batch_joint_rel_cmtm(joint_data, joint_motions: np.ndarray, order: int) -> CMTM:
+  joint_motions = np.asarray(joint_motions, dtype=float)
+  batch_shape = joint_motions.shape[:-1]
+  if joint_data.dof == 0:
+    local = SE3.set_mat(np.broadcast_to(np.eye(4), batch_shape + (4, 4)).copy())
+    vecs = np.zeros(batch_shape + (order - 1, 6), dtype=joint_motions.dtype)
+  else:
+    blocks = joint_motions.reshape(batch_shape + (order, joint_data.dof))
+    local = _batch_local_frame(joint_data.select_mat, blocks[..., 0, :])
+    vecs = _batch_local_tan_vec(joint_data.select_mat, blocks[..., 1:, :]) if order > 1 else np.zeros(batch_shape + (0, 6))
+  origin = SE3.set_mat(np.broadcast_to(joint_data.origin.mat(), batch_shape + (4, 4)).copy())
+  return CMTM[SE3](origin @ local, vecs)
+
+
+def _left_matmul(mat: np.ndarray, value: np.ndarray) -> np.ndarray:
+  value = np.asarray(value)
+  if value.ndim == 1:
+    return mat @ value
+  return value @ mat.T
+
+
+def _cmtm_matvec(cmtm: CMTM, vec: np.ndarray) -> np.ndarray:
+  vec = np.asarray(vec)
+  if vec.ndim == 1:
+    return cmtm.mat_adj() @ vec
+  return (cmtm.mat_adj() @ vec[..., None])[..., 0]
+
+
+def _joint_local_and_rel_cmtm(joint_data, joint_motions: np.ndarray, order: int) -> tuple[CMTM, CMTM]:
+  if joint_data.dof == 0:
+    joint_local = CMTM.eye(SE3, order)
+    joint_rel = CMTM[SE3](
+      joint_data.origin,
+      np.zeros((order - 1, 6)),
+    )
+    return joint_local, joint_rel
+
+  joint_local = joint_local_cmtm(joint_data, joint_motions, order)
+  joint_rel = CMTM[SE3](
+    joint_data.origin @ SE3.set_mat(joint_local.elem_mat()),
+    joint_local.vecs(),
+  )
+  return joint_local, joint_rel
 
 def get_dof(robot : RobotStruct, state_type : StateType, dim : int = 3) -> int:
     if "torque" in state_type.data_type:
@@ -55,14 +131,32 @@ def get_value(robot : RobotStruct, state_dict : dict, state_type : StateType):
         return state_dict_to_frame(state_dict, state_type.owner_name)
     elif state_type.data_type == "cmtm":
         return state_dict_to_cmtm(state_dict, state_type.owner_name, state_type.owner_type)
+    elif state_type.data_type == "pos" and hasattr(state_dict, "cmtm"):
+        mat = state_dict_to_cmtm(state_dict, state_type.owner_name, state_type.owner_type, 1).elem_mat()
+        return np.asarray(mat)[..., :3, 3]
+    elif state_type.data_type == "rot" and hasattr(state_dict, "cmtm"):
+        mat = state_dict_to_cmtm(state_dict, state_type.owner_name, state_type.owner_type, 1).elem_mat()
+        return np.asarray(mat)[..., :3, :3].reshape(np.asarray(mat).shape[:-2] + (9,))
+    elif not state_type.is_dynamics and hasattr(state_dict, "cmtm"):
+        cmtm = state_dict_to_cmtm(state_dict, state_type.owner_name, state_type.owner_type, state_type.time_order)
+        return np.asarray(cmtm.elem_vecs(state_type.key_order - 2))
     elif "momentum" in state_type.data_type:
         if state_type.frame_name == 'world':
             local_momentum = state_dict_to_cmvec(state_dict, state_type.owner_name, \
                                                  state_type.owner_type,
                                                  "momentum", \
                                                  state_type.key_order).cm_vec()
-            world_momentum = CMVector.set_cmvecs((cmtm_wrench.mat_adj() @ local_momentum).reshape(-1,6)).vecs()
-            return world_momentum[-1]
+            world_momentum_vec = _cmtm_matvec(cmtm_wrench, local_momentum)
+            world_momentum = CMVector.set_cmvecs(world_momentum_vec.reshape(world_momentum_vec.shape[:-1] + (-1,6))).vecs()
+            return world_momentum[..., -1, :]
+        elif hasattr(state_dict, "cmvec"):
+            return state_dict_to_cmvec(
+                state_dict,
+                state_type.owner_name,
+                state_type.owner_type,
+                "momentum",
+                state_type.key_order,
+            ).vecs()[..., -1, :]
         else:
             return np.array(state_dict[state_type.alliance])
     elif "force" in state_type.data_type:
@@ -71,11 +165,22 @@ def get_value(robot : RobotStruct, state_dict : dict, state_type : StateType):
                                                 state_type.owner_type,
                                                 "force", \
                                                 state_type.key_order).cm_vec()
-            world_force = CMVector.set_cmvecs((cmtm_wrench.mat_adj() @ local_force).reshape(-1,6)).vecs()
-            return world_force[-1]
+            world_force_vec = _cmtm_matvec(cmtm_wrench, local_force)
+            world_force = CMVector.set_cmvecs(world_force_vec.reshape(world_force_vec.shape[:-1] + (-1,6))).vecs()
+            return world_force[..., -1, :]
+        elif hasattr(state_dict, "cmvec"):
+            return state_dict_to_cmvec(
+                state_dict,
+                state_type.owner_name,
+                state_type.owner_type,
+                "force",
+                state_type.key_order,
+            ).vecs()[..., -1, :]
         else:
             return np.array(state_dict[state_type.alliance])
     elif "torque" in state_type.data_type:
+        if hasattr(state_dict, "joint_torque"):
+            return np.asarray(state_dict.joint_torque[state_type.owner_name])[..., state_type.key_order - 1, :]
         return np.array(state_dict[state_type.alliance])
     else:
         return np.array(state_dict[state_type.alliance])
@@ -89,7 +194,7 @@ def get_cmvec(robot : RobotStruct, state_dict : dict, state_type : StateType, or
             joint = robot.joint_list([state_type.owner_name])
             link_name = robot.links[joint[0].child_link_id].name
         cmtm_wrench = state_dict_to_cmtm_wrench(state_dict, link_name, "link", order)
-        vec = CMTM.change_elemclass(cmtm_wrench, SE3wrench).mat_adj() @ vec.cm_vec()
+        vec = _cmtm_matvec(CMTM.change_elemclass(cmtm_wrench, SE3wrench), vec.cm_vec())
     return vec
 
 def get_total_cmvec(robot : RobotStruct, state_dict : dict, owner_type : str, data_type : str, frame_name : None, order : int) -> CMVector:
@@ -113,7 +218,7 @@ def _truncate_link_cmtm_order(link_cmtm: CMTM, order: int) -> CMTM:
     raise ValueError(f"Invalid order: {order}. Must be <= source order {link_cmtm._n}.")
   if order == link_cmtm._n:
     return link_cmtm
-  return CMTM[SE3](SE3.set_mat(link_cmtm.elem_mat()), link_cmtm.vecs()[: order - 1])
+  return CMTM[SE3](SE3.set_mat(link_cmtm.elem_mat()), link_cmtm.vecs()[..., : order - 1, :])
 
 
 def _should_use_jax_kinematics(robot: RobotStruct, backend = None) -> bool:
@@ -156,6 +261,8 @@ def build_kinematics_outward_state(robot : RobotStruct, motions, order = 3) -> O
 
 def _build_kinematics_state_with_cmtm(robot: RobotStruct, motions, order: int = 3) -> OutwardState:
   motion = np.asarray(motions, dtype=float)
+  if motion.ndim > 1:
+    return _build_batch_kinematics_state_with_cmtm(robot, motion, order)
   if motion.ndim != 1:
     raise ValueError(f"motions must be a 1-D vector in outward state builders, got shape {motion.shape}.")
   if robot.dof * order != motion.size:
@@ -174,22 +281,45 @@ def _build_kinematics_state_with_cmtm(robot: RobotStruct, motions, order: int = 
     child = robot.links[joint.child_link_id]
 
     joint_data = convert_joint_to_data(joint)
-    link_data = convert_link_to_data(child)
-
     joint_motions = motion[RobotMotions.owner_vec_index(joint.dof, joint.dof_index, order)]
-    link_motions = motion[RobotMotions.owner_vec_index(child.dof, child.dof_index, order)]
 
     parent_cmtm = link_cmtm_dict[parent.name]
-    joint_rel = joint_rel_cmtm(joint_data, joint_motions, order)
-    link_local = soft_link_local_cmtm(link_data, link_motions, order)
+    joint_local, joint_rel = _joint_local_and_rel_cmtm(joint_data, joint_motions, order)
 
-    child_cmtm = parent_cmtm @ joint_rel @ link_local
+    child_cmtm = parent_cmtm @ joint_rel
+    if child.dof != 0:
+      link_data = convert_link_to_data(child)
+      link_motions = motion[RobotMotions.owner_vec_index(child.dof, child.dof_index, order)]
+      child_cmtm = child_cmtm @ soft_link_local_cmtm(link_data, link_motions, order)
 
     link_cmtm_dict[child.name] = child_cmtm
 
     # Keep joint local CMTM in state for Jacobian and derivative routines.
-    joint_local = joint_local_cmtm(joint_data, joint_motions, order)
     joint_cmtm_dict[joint.name] = joint_local
+
+  return OutwardState(order=order, link_cmtm=link_cmtm_dict, joint_cmtm=joint_cmtm_dict)
+
+
+def _build_batch_kinematics_state_with_cmtm(robot: RobotStruct, motions: np.ndarray, order: int = 3) -> OutwardState:
+  if motions.shape[-1] != robot.dof * order:
+    raise ValueError(f"Invalid motion length: {motions.shape[-1]}. Must be {robot.dof * order}.")
+  if any(link.dof != 0 for link in robot.links):
+    raise NotImplementedError("Batched kinematics currently supports rigid links only.")
+  batch_shape = motions.shape[:-1]
+  link_cmtm_dict = {}
+  joint_cmtm_dict = {}
+
+  world_name = robot.links[robot.joints[0].parent_link_id].name
+  link_cmtm_dict[world_name] = _batch_eye_cmtm(batch_shape, order)
+
+  for joint in robot.joints:
+    parent = robot.links[joint.parent_link_id]
+    child = robot.links[joint.child_link_id]
+    joint_data = convert_joint_to_data(joint)
+    joint_motions = motions[..., RobotMotions.owner_vec_index(joint.dof, joint.dof_index, order)]
+
+    link_cmtm_dict[child.name] = link_cmtm_dict[parent.name] @ _batch_joint_rel_cmtm(joint_data, joint_motions, order)
+    joint_cmtm_dict[joint.name] = _batch_local_cmtm(joint_data.select_mat, joint_motions, joint_data.dof, order)
 
   return OutwardState(order=order, link_cmtm=link_cmtm_dict, joint_cmtm=joint_cmtm_dict)
 
@@ -280,10 +410,11 @@ def build_dynamics_outward_state(robot : RobotStruct, motions, dynamics_order = 
       c_joint_rel_cmtm = momentum_link_cmtm_dict[child.name].inv() @ momentum_link_cmtm_dict[c_joint_link.name]
       c_joint_cmtm_wrench = CMTM.change_elemclass(c_joint_rel_cmtm, SE3wrench)
 
-      joint_momentums += factor_mat @ c_joint_cmtm_wrench.mat_adj() @ c_joint_momentum.cm_vec()
+      transported = (c_joint_cmtm_wrench.mat_adj() @ c_joint_momentum.cm_vec()[..., None])[..., 0]
+      joint_momentums += _left_matmul(factor_mat, transported)
 
     # calculate joint force and torque
-    joint_momentum = CMVector(joint_momentums.reshape(-1,6))
+    joint_momentum = CMVector(joint_momentums.reshape(joint_momentums.shape[:-1] + (-1, 6)))
     joint_momentum_cmvec[joint.name] = joint_momentum
     outward_state.joint_momentum[joint.name] = joint_momentum
     if dynamics_order > 0:
@@ -292,8 +423,9 @@ def build_dynamics_outward_state(robot : RobotStruct, motions, dynamics_order = 
 
       if joint.dof == 0:
         continue
-      joint_torque = joint_select_diag_mat(joint.select_mat, dynamics_order).T @ joint_force.vec()
-      outward_state.joint_torque[joint.name] = joint_torque.reshape(-1, joint.dof)
+      select = joint_select_diag_mat(joint.select_mat, dynamics_order)
+      joint_torque = joint_force.vec() @ select
+      outward_state.joint_torque[joint.name] = joint_torque.reshape(joint_force.vec().shape[:-1] + (dynamics_order, joint.dof))
 
   # Compute for the world link
   world_link = robot.links[0]

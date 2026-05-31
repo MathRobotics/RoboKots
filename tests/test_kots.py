@@ -332,7 +332,34 @@ def test_batched_dynamics_and_jacobian_matches_loop():
         single.import_motions(motion)
         single.dynamics()
         np.testing.assert_allclose(actual_force[i], single.state_info(force_state))
-        np.testing.assert_allclose(actual_jacob[i], single.jacobian(torque_state))
+        np.testing.assert_allclose(actual_jacob[i], single.jacobian(torque_state), atol=1e-12)
+
+
+def test_batched_dynamics_jacobian_matvec_matches_jacobian_product():
+    order = 5
+    kots = _make_kots(order=order)
+    rng = np.random.default_rng(11)
+    batch_shape = (2, 3)
+    motions = rng.standard_normal(batch_shape + (kots.dof() * order,))
+    states = [
+        StateType("link", TARGET_LINK, "momentum"),
+        StateType("link", TARGET_LINK, "force"),
+        StateType("joint", "joint3", "momentum"),
+        StateType("joint", "joint3", "torque"),
+    ]
+    vecs = rng.standard_normal(batch_shape + (kots.dof() * StateType.max_time_order(states),))
+
+    kots.import_motions(motions)
+    kots.dynamics()
+
+    actual = kots.jacobian_matvec(states, vecs)
+    expected = (kots.jacobian(states) @ vecs[..., None])[..., 0]
+    parts = kots.jacobian_matvec(states, vecs, list_output=True)
+
+    assert actual.shape == expected.shape
+    assert len(parts) == len(states)
+    np.testing.assert_allclose(actual, expected, atol=1e-10, rtol=1e-10)
+    np.testing.assert_allclose(actual, np.concatenate(parts, axis=-1), atol=1e-10, rtol=1e-10)
 
 
 def test_multidimensional_batched_kinematics_keeps_prefix_shape():

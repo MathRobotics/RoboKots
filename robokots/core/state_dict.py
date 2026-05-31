@@ -130,8 +130,8 @@ def cmtm_to_state_list(cmtm : CMTM, owner_type : str, owner_name : str) -> list:
   order = cmtm._n
 
   mat = cmtm.elem_mat()
-  pos = mat[:3,3]
-  rot_vec = mat[:3,:3].ravel()
+  pos = mat[..., :3, 3]
+  rot_vec = mat[..., :3, :3].reshape(mat.shape[:-2] + (9,))
   state.append((state_dict_key(owner_type, owner_name, "pos") , np.asarray(pos)))
   state.append((state_dict_key(owner_type, owner_name, "rot") , np.asarray(rot_vec)))
   if order > 1:
@@ -161,10 +161,14 @@ def vecs_to_state_dict(vec : np.ndarray, owner_type : str, owner_name : str, dat
     state = []
     vec = np.asarray(vec)
 
-    if order > 0:
-        vec_dof = vec.size // order
-    else:
+    if order <= 0:
         raise ValueError("order must be greater than 0")
+    if vec.ndim >= 2 and vec.shape[-2] == order:
+        vecs = vec
+        vec_dof = vec.shape[-1]
+    else:
+        vec_dof = vec.shape[-1] // order if vec.ndim > 1 else vec.size // order
+        vecs = vec.reshape(vec.shape[:-1] + (order, vec_dof))
     
     alias_name = state_dict_key(owner_type, owner_name, data_type)
 
@@ -176,14 +180,12 @@ def vecs_to_state_dict(vec : np.ndarray, owner_type : str, owner_name : str, dat
             for i in range(order)
         ]
 
-    vecs = vec.reshape(-1, vec_dof)
-
     state = [
         (
             f"{alias_name}" if i == 0 else f"{alias_name}_diff{i}",
-            row,
+            vecs[..., i, :],
         )
-        for i, row in enumerate(vecs)
+        for i in range(order)
     ]
 
     return state
@@ -227,7 +229,8 @@ def state_dict_to_rot(state : dict, owner_name : str, owner_type : str = "link")
         np.ndarray: rotation matrix
     '''
     if hasattr(state, "cmtm"):
-        return np.asarray(state.cmtm(owner_type, owner_name, 1).elem_mat()[:3, :3])
+        mat = np.asarray(state.cmtm(owner_type, owner_name, 1).elem_mat())
+        return mat[..., :3, :3]
 
     cache_key = (owner_name, owner_type)
     rot_cache = _state_bucket(state, "rot")
@@ -235,7 +238,7 @@ def state_dict_to_rot(state : dict, owner_name : str, owner_type : str = "link")
         return rot_cache[cache_key]
 
     rot_vec = np.array(state[state_dict_key(owner_type, owner_name, "rot")])
-    rot = rot_vec.reshape(3,3)
+    rot = rot_vec.reshape(rot_vec.shape[:-1] + (3,3))
     rot_cache[cache_key] = rot
 
     return rot
@@ -304,15 +307,17 @@ def __state_dict_to_cmtm_vecs(state : dict, owner_name : str, owner_type : str =
     if order < 1:
         raise ValueError("order must be over 1")
 
-    vec = np.zeros((order-1, 6))
-
     if order > 1:
-        vec[0] = np.asarray(state[state_dict_key(owner_type, owner_name, "vel")])
+        first = np.asarray(state[state_dict_key(owner_type, owner_name, "vel")])
+        vec = np.zeros(first.shape[:-1] + (order-1, 6), dtype=first.dtype)
+        vec[..., 0, :] = first
+    else:
+        vec = np.zeros((0, 6))
     if order > 2:
-        vec[1] = np.asarray(state[state_dict_key(owner_type, owner_name, "acc")])
+        vec[..., 1, :] = np.asarray(state[state_dict_key(owner_type, owner_name, "acc")])
     if order > 3:
         for i in range(order-keys_order["acc"]):
-            vec[i+2] = np.asarray(state[state_dict_key(owner_type, owner_name, "acc")+"_diff"+str(i+1)])
+            vec[..., i+2, :] = np.asarray(state[state_dict_key(owner_type, owner_name, "acc")+"_diff"+str(i+1)])
 
     return vec
 
@@ -511,7 +516,7 @@ def state_dict_to_vecs(state : dict, owner_type : str, owner_name : str, data_ty
     if len(vecs) == 0:
         raise ValueError(f"Invalid name: {owner_name}, type_name: {owner_type} or data_type: {data_type}.")
 
-    return np.concatenate(vecs)
+    return np.concatenate(vecs, axis=-1)
 
 def state_dict_to_cmvec(state : dict, owner_name : str, owner_type : str, data_type : str, order : int) -> CMVector:
     '''
@@ -532,7 +537,7 @@ def state_dict_to_cmvec(state : dict, owner_name : str, owner_type : str, data_t
             )
         if order == cmvec._n:
             return cmvec
-        return CMVector(cmvec.vecs()[:order])
+        return CMVector(cmvec.vecs()[..., :order, :])
 
     vecs = _collect_state_vecs_fast(state, owner_name, owner_type, data_type, order=order)
     if vecs is None:
@@ -543,13 +548,13 @@ def state_dict_to_cmvec(state : dict, owner_name : str, owner_type : str, data_t
     # Backward compatibility: some internal caches keep all orders in the base key
     # as one flattened vector (without *_diffN keys).
     if len(vecs) == 1 and order > 1:
-        flat = np.asarray(vecs[0]).reshape(-1)
-        if flat.size % order != 0:
+        flat = np.asarray(vecs[0])
+        if flat.shape[-1] % order != 0:
             raise ValueError(
-                f"Invalid order: requested {order}, but packed vector size is {flat.size} for "
+                f"Invalid order: requested {order}, but packed vector size is {flat.shape[-1]} for "
                 f"{owner_name}_{owner_type}_{data_type}."
             )
-        return CMVector(flat.reshape(order, -1))
+        return CMVector(flat.reshape(flat.shape[:-1] + (order, -1)))
 
     if len(vecs) != order:
         raise ValueError(
@@ -557,7 +562,7 @@ def state_dict_to_cmvec(state : dict, owner_name : str, owner_type : str, data_t
             f"{owner_name}_{owner_type}_{data_type}."
         )
 
-    return CMVector(np.stack(vecs).reshape(order, -1))
+    return CMVector(np.stack(vecs, axis=-2))
 
 def extract_dict_link_info(state : dict, data_type : str, link_name : str, frame = None, rel_frame = 'dummy'):
     if frame != None:

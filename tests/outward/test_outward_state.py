@@ -102,6 +102,37 @@ def test_update_state_dict_caches_kinematics_outward_state():
     _assert_state_dict_allclose(cached_state_dict, state_dict)
 
 
+def test_update_state_defers_state_dict_materialization():
+    kots = Kots.from_json_file(str(MODEL_PATH), order=4)
+    motion = np.random.default_rng(8).standard_normal(kots.order() * kots.dof())
+    kots.import_motions(motion)
+
+    outward_state = kots.update_state()
+
+    assert kots.outward_state_ is outward_state
+    assert kots.state_dict_ == {}
+
+    state = StateType("link", "arm3", "jerk")
+    expected = outward_state.cmtm("link", "arm3", state.time_order).elem_vecs(state.key_order - 2)
+    np.testing.assert_allclose(kots.state_info(state), expected)
+
+    state_dict = kots.to_state_dict()
+    _assert_state_dict_allclose(state_dict, outward_state.to_state_dict(kots.robot_))
+
+
+def test_state_info_reads_outward_state_directly_when_available():
+    kots = Kots.from_json_file(str(MODEL_PATH), order=4)
+    motion = np.random.default_rng(7).standard_normal(kots.order() * kots.dof())
+    kots.import_motions(motion)
+    kots.update_state_dict()
+
+    state = StateType("link", "arm3", "jerk")
+    expected = kots.outward_state_.cmtm("link", "arm3", state.time_order).elem_vecs(state.key_order - 2)
+    kots.state_dict_[state.alliance] = np.full_like(expected, np.nan)
+
+    np.testing.assert_allclose(kots.state_info(state), expected)
+
+
 def test_update_state_dict_caches_dynamics_outward_state():
     kots = Kots.from_json_file(str(MODEL_PATH), order=5)
     motion = np.random.default_rng(6).standard_normal(kots.order() * kots.dof())

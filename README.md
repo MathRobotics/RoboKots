@@ -19,23 +19,21 @@ pip install ".[table]"
 
 ## Examples
 
-* `example/simple_example/main.py`: End-to-end kinematics and dynamics Jacobian
+See `examples/README.md` for the regular example commands.
+
+* `examples/simple_example/main.py`: End-to-end kinematics and dynamics Jacobian
   checks with a sample robot model.
-* `example/polars_example/main.py`: Demonstrates how to export state to JSONL and
+* `examples/polars_example/main.py`: Demonstrates how to export state to JSONL and
   use Polars to do fast, columnar analytics. This example requires the optional
   `table` extra or a separate `polars` installation.
-* `example/benchmark_example/main.py`: Measures runtime of kinematics/dynamics/
-  jacobian/state-update. Benchmark settings are edited in the script.
 
 Run an example from the repository root:
 ```bash
-python -m example.simple_example.main
+python -m examples.simple_example.main
 ```
 
-Runtime benchmark example:
-```bash
-python -m example.benchmark_example.main
-```
+Developer-only benchmarks live under `developer/benchmarks`; see
+`developer/README.md` for setup and commands.
 
 ## Batch Shapes and Axis-Aware Data
 

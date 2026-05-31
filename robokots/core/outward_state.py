@@ -19,7 +19,7 @@ def _truncate_cmtm_order(cmtm: CMTM, order: int) -> CMTM:
         raise ValueError(f"Invalid order: {order}. Must be <= source order {cmtm._n}.")
     if order == cmtm._n:
         return cmtm
-    return CMTM[SE3](SE3.set_mat(cmtm.elem_mat()), cmtm.vecs()[: order - 1])
+    return CMTM[SE3](SE3.set_mat(cmtm.elem_mat()), cmtm.vecs()[..., : order - 1, :])
 
 
 @dataclass
@@ -126,7 +126,7 @@ class OutwardState:
             torque = self.joint_torque.get(joint.name)
             if torque is not None:
                 torque_arr = np.asarray(torque)
-                torque_order = torque_arr.size // joint.dof if joint.dof > 0 else 0
+                torque_order = torque_arr.shape[-2] if joint.dof > 0 and torque_arr.ndim >= 2 else torque_arr.size // joint.dof if joint.dof > 0 else 0
                 if torque_order > 0:
                     state_dict.update(vecs_to_state_dict(torque_arr, "joint", joint.name, "torque", torque_order))
 
