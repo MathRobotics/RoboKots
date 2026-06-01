@@ -227,6 +227,30 @@ def test_jacobian_matvec_kinematics_matches_jacobian_product():
         np.testing.assert_allclose(actual, expected, atol=1e-10, rtol=1e-10)
 
 
+def test_jacobian_transpose_matvec_kinematics_matches_jacobian_product():
+    kots = _make_kots(order=3)
+    rng = np.random.default_rng(12)
+
+    motion = rng.standard_normal(kots.order() * kots.dof())
+    kots.import_motions(motion)
+    kots.kinematics()
+
+    states = [
+        StateType(data_type="frame", owner_type="link", owner_name=TARGET_LINK),
+        StateType(data_type="vel", owner_type="link", owner_name=TARGET_LINK),
+        StateType(data_type="acc", owner_type="link", owner_name=TARGET_LINK),
+    ]
+    jacob = kots.jacobian(states)
+    vec = rng.standard_normal(jacob.shape[0])
+
+    np.testing.assert_allclose(
+        kots.jacobian_transpose_matvec(states, vec),
+        jacob.T @ vec,
+        atol=1e-10,
+        rtol=1e-10,
+    )
+
+
 def test_jacobian_target_matvec_matches_jacobian_product():
     kots = _make_kots(order=3)
     rng = np.random.default_rng(1)
@@ -240,6 +264,75 @@ def test_jacobian_target_matvec_matches_jacobian_product():
     np.testing.assert_allclose(
         kots.jacobian_target_matvec(vec),
         kots.jacobian_target() @ vec,
+        atol=1e-10,
+        rtol=1e-10,
+    )
+
+
+def test_jacobian_target_transpose_matvec_matches_jacobian_product():
+    kots = _make_kots(order=3)
+    rng = np.random.default_rng(13)
+
+    kots.set_target_from_file(str(TARGET_PATH))
+    motion = rng.standard_normal(kots.order() * kots.dof())
+    kots.import_motions(motion)
+    kots.dynamics()
+
+    jacob = kots.jacobian_target()
+    vec = rng.standard_normal(jacob.shape[0])
+    np.testing.assert_allclose(
+        kots.jacobian_target_transpose_matvec(vec),
+        jacob.T @ vec,
+        atol=1e-10,
+        rtol=1e-10,
+    )
+
+
+def test_jacobian_transpose_matvec_dynamics_matches_jacobian_product():
+    kots = _make_kots(order=5)
+    rng = np.random.default_rng(14)
+
+    motion = rng.standard_normal(kots.order() * kots.dof())
+    kots.import_motions(motion)
+    kots.dynamics()
+
+    states = [
+        StateType("link", TARGET_LINK, "snap"),
+        StateType("link", TARGET_LINK, "momentum_diff3"),
+        StateType("joint", "joint3", "momentum_diff3"),
+        StateType("joint", "joint3", "force_diff2"),
+        StateType("joint", "joint3", "torque_diff2"),
+    ]
+    jacob = kots.jacobian(states)
+    vec = rng.standard_normal(jacob.shape[0])
+
+    np.testing.assert_allclose(
+        kots.jacobian_transpose_matvec(states, vec),
+        jacob.T @ vec,
+        atol=1e-10,
+        rtol=1e-10,
+    )
+
+
+def test_jacobian_transpose_matvec_low_order_momentum_matches_jacobian_product():
+    kots = _make_kots(order=2)
+    rng = np.random.default_rng(15)
+
+    motion = rng.standard_normal(kots.order() * kots.dof())
+    kots.import_motions(motion)
+    kots.dynamics()
+
+    states = [
+        StateType("link", TARGET_LINK, "vel"),
+        StateType("link", TARGET_LINK, "momentum"),
+        StateType("joint", "joint3", "momentum"),
+    ]
+    jacob = kots.jacobian(states)
+    vec = rng.standard_normal(jacob.shape[0])
+
+    np.testing.assert_allclose(
+        kots.jacobian_transpose_matvec(states, vec),
+        jacob.T @ vec,
         atol=1e-10,
         rtol=1e-10,
     )
@@ -443,6 +536,37 @@ def test_batched_jacobian_matvec_shape_contract_with_per_sample_vecs():
     np.testing.assert_allclose(matvec[1, 2], single.jacobian(states) @ vecs[1, 2])
 
 
+def test_batched_jacobian_transpose_matvec_shape_contract_with_per_sample_vecs():
+    order = 3
+    kots = _make_kots(order=order)
+    rng = np.random.default_rng(16)
+    motions = rng.standard_normal((2, 3, kots.dof() * order))
+    states = [
+        StateType(data_type="vel", owner_type="link", owner_name=TARGET_LINK),
+        StateType(data_type="acc", owner_type="link", owner_name=TARGET_LINK),
+    ]
+
+    kots.import_motions(motions)
+    kots.kinematics()
+
+    jacob = kots.jacobian(states)
+    vecs = rng.standard_normal(jacob.shape[:-2] + (jacob.shape[-2],))
+    transpose_matvec = kots.jacobian_transpose_matvec(states, vecs)
+
+    assert transpose_matvec.shape == (2, 3, kots.dof() * order)
+    np.testing.assert_allclose(
+        transpose_matvec,
+        (np.swapaxes(jacob, -1, -2) @ vecs[..., None])[..., 0],
+        atol=1e-10,
+        rtol=1e-10,
+    )
+
+    single = _make_kots(order=order)
+    single.import_motions(motions[1, 2])
+    single.kinematics()
+    np.testing.assert_allclose(transpose_matvec[1, 2], single.jacobian(states).T @ vecs[1, 2])
+
+
 def test_batched_target_api_shape_contract():
     kots = _make_kots(order=3)
     rng = np.random.default_rng(8)
@@ -464,6 +588,10 @@ def test_batched_target_api_shape_contract():
     shared_matvec = kots.jacobian_target_matvec(shared_vec)
     sample_matvec = kots.jacobian_target_matvec(sample_vecs)
     matvec_parts = kots.jacobian_target_matvec(sample_vecs, list_output=True)
+    shared_transpose_vec = rng.standard_normal(target_dim)
+    shared_transpose_matvec = kots.jacobian_target_transpose_matvec(shared_transpose_vec)
+    transpose_vecs = rng.standard_normal(batch_shape + (target_dim,))
+    sample_transpose_matvec = kots.jacobian_target_transpose_matvec(transpose_vecs)
 
     assert target_values.shape == batch_shape + (target_dim,)
     assert len(target_parts) == 9
@@ -476,6 +604,20 @@ def test_batched_target_api_shape_contract():
     assert len(matvec_parts) == 9
     assert all(part.shape == batch_shape + (6,) for part in matvec_parts)
     np.testing.assert_allclose(sample_matvec, np.concatenate(matvec_parts, axis=-1))
+    assert shared_transpose_matvec.shape == batch_shape + (motion_dim,)
+    assert sample_transpose_matvec.shape == batch_shape + (motion_dim,)
+    np.testing.assert_allclose(
+        shared_transpose_matvec,
+        (np.swapaxes(target_jacobian, -1, -2) @ shared_transpose_vec[..., None])[..., 0],
+        atol=1e-10,
+        rtol=1e-10,
+    )
+    np.testing.assert_allclose(
+        sample_transpose_matvec,
+        (np.swapaxes(target_jacobian, -1, -2) @ transpose_vecs[..., None])[..., 0],
+        atol=1e-10,
+        rtol=1e-10,
+    )
 
     single = _make_kots(order=3)
     single.set_target_from_file(str(TARGET_PATH))

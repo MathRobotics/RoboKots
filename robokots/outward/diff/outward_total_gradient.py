@@ -9,7 +9,7 @@ from mathrobo import CMTM, CMVector, Factorial, SE3wrench
 from robokots.core import RobotStruct
 from robokots.core.state import StateType, dim_to_dof, data_type_dof, data_type_offset
 from robokots.core.state import keys_kinematics, keys_momentum, keys_force, keys_torque
-from robokots.core.state_dict import state_dict_to_cmtm, state_dict_to_cmtm_wrench, state_dict_to_cmvec, state_dict_to_rel_cmtm
+from robokots.core.state_dict import extract_dict_total_link_cmvec, state_dict_to_cmtm, state_dict_to_cmtm_wrench, state_dict_to_cmvec, state_dict_to_rel_cmtm
 from robokots.core.models.kinematics.kinematics_matrix import joint_select_diag_mat
 
 from robokots.core.models.whole_body.total_kinematics_grad_mat import (
@@ -1860,6 +1860,7 @@ def outward_jacobian(robot : RobotStruct, state : dict, state_type_list : list[S
         return jacob_list
     else:
         return np.concatenate(jacob_list, axis=-2)
+
 
 def outward_jacobian_matvec(robot : RobotStruct, state : dict, state_type_list : list[StateType], vec : np.ndarray, max_time_order = None, dim : int = 3, list_output : bool = False) -> np.ndarray:
     if StateType.is_list_all_in_kinematics(state_type_list):

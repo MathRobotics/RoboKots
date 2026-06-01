@@ -23,6 +23,7 @@ _LAZY_API = {
     "diff_outward_numerical": "diff_outward_numerical",
     "outward_jacobian": "outward_jacobian",
     "outward_jacobian_matvec": "outward_jacobian_matvec",
+    "outward_jacobian_transpose_matvec": "outward_jacobian_transpose_matvec",
     "jacobian_numerical": "jacobian_numerical",
     "calc_link_total_point_frame": "calc_link_total_point_frame",
 }

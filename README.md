@@ -61,8 +61,13 @@ kots.state_info(state)             # shape: (..., state_dim)
 kots.state_info_list(states)       # shape: (..., total_state_dim)
 kots.jacobian(states)              # shape: (..., total_state_dim, motion_dim)
 kots.jacobian_matvec(states, vec)  # shape: (..., total_state_dim)
+kots.jacobian_transpose_matvec(states, vec)  # shape: (..., motion_dim)
 kots.target_state_info()           # shape: (..., target_state_dim)
 ```
+
+For `jacobian_matvec`, `vec` lives on the motion axis and has shape
+`(..., motion_dim)`. For `jacobian_transpose_matvec`, `vec` lives on the state
+axis and has shape `(..., total_state_dim)`.
 
 For code that needs named axes, use the tensor adapters:
 

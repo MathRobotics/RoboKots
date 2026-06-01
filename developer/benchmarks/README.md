@@ -35,10 +35,12 @@ execution on generated high-DOF models.
 ```bash
 uv run python -m developer.benchmarks.jacobian_compare
 uv run python -m developer.benchmarks.jacobian_dof_sweep
+uv run python -m developer.benchmarks.jacobian_transpose_matvec_compare
 ```
 
 These compare analytic, numerical, and JAX autodiff Jacobians, including a DOF
-sweep utility for scaling checks.
+sweep utility for scaling checks. The transpose matvec comparison measures the
+direct `jacobian_transpose_matvec` API against explicit `jacobian(...).T @ vec`.
 
 ## Pinocchio Comparison
 

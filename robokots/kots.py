@@ -6,7 +6,7 @@ import numpy as np
 from typing import List, Any, Optional, Tuple
 
 from .core.motion import RobotMotions
-from .core.state import StateType
+from .core.state import StateType, data_type_dof, dim_to_dof, keys_force, keys_kinematics, keys_momentum, keys_torque
 from .core.state_cache import StateCache
 from .core.state_batch import StateBatch
 from .core.state_tensor import JacobianTensor, StateTensor
@@ -534,7 +534,9 @@ class Kots():
       if self.batch_shape_:
         try:
           return outward_api.outward_jacobian(self.robot_, state, state_type_list, max_time_order=max_order, dim = self.dim_, list_output = list_output)
-        except Exception:
+        except (AttributeError, IndexError, TypeError, ValueError):
+          # Fall back when the cached state cannot be consumed as a batched
+          # outward state. Unexpected runtime errors should still surface.
           pass
         is_dynamics = any(st.is_dynamics for st in state_type_list)
         _, build_state = self._state_builder(max_order, is_dynamics=is_dynamics)
@@ -590,7 +592,9 @@ class Kots():
         try:
           direct_vec = vec.reshape(batch_shape + (vec.shape[-1],))
           return outward_api.outward_jacobian_matvec(self.robot_, state, state_type_list, direct_vec, max_time_order=max_order, dim = self.dim_, list_output = list_output)
-        except Exception:
+        except (AttributeError, IndexError, TypeError, ValueError):
+          # Fall back when the cached state cannot be consumed as a batched
+          # outward state. Unexpected runtime errors should still surface.
           pass
         is_dynamics = any(st.is_dynamics for st in state_type_list)
         _, build_state = self._state_builder(max_order, is_dynamics=is_dynamics)
@@ -619,6 +623,74 @@ class Kots():
       len(state_type_list),
     )
 
+  def _jacobian_output_dim(self, state_type_list) -> int:
+    dim_dof = dim_to_dof(self.dim_)
+    output_dim = 0
+    for st in state_type_list:
+      if st.data_type in keys_kinematics:
+        output_dim += data_type_dof(st.data_type, dim=self.dim_)
+      elif st.data_type in keys_momentum or st.data_type in keys_force:
+        output_dim += dim_dof
+      elif st.data_type in keys_torque:
+        if st.owner_type != "joint":
+          raise ValueError("torque can be specified only for joint owner type")
+        joint = self.robot_.joint(st.owner_name)
+        if joint is None:
+          raise ValueError(f"Invalid joint name: {st.owner_name}")
+        output_dim += joint.dof
+      else:
+        raise ValueError(f"Unsupported data_type: {st.data_type}")
+    return output_dim
+
+  def _jacobian_transpose_matvec_numerical(self, state_type_list, max_order : int, vec):
+    if not self.motions_.is_batched():
+      jacob = self._jacobian_numerical(state_type_list, max_order)
+      return jacob.T @ vec
+
+    flat_motion, batch_shape = batch_api.flatten_feature_batch(self.motion(max_order))
+    sample_results = []
+    for x, v in zip(flat_motion, vec):
+      sample_motions = self._sample_motions(x, max_order)
+      parts = [
+        outward_api.jacobian_numerical(self.robot_, sample_motions, st, max_order)
+        for st in state_type_list
+      ]
+      jacob = np.vstack(parts)
+      sample_results.append(jacob.T @ v)
+    return batch_api.stack_sample_results(sample_results, batch_shape)
+
+  def _jacobian_transpose_matvec_from_state(self, state, state_type_list, max_order : int, vec, batch_shape : tuple):
+    if not isinstance(state, list):
+      if batch_shape:
+        try:
+          direct_vec = vec.reshape(batch_shape + (vec.shape[-1],))
+          return outward_api.outward_jacobian_transpose_matvec(
+            self.robot_,
+            state,
+            state_type_list,
+            direct_vec,
+            max_time_order=max_order,
+            dim=self.dim_,
+          )
+        except Exception:
+          pass
+        is_dynamics = any(st.is_dynamics for st in state_type_list)
+        _, build_state = self._state_builder(max_order, is_dynamics=is_dynamics)
+        flat_motion, _ = batch_api.flatten_feature_batch(self.motion(max_order))
+        states = [build_state(x) for x in flat_motion]
+        sample_results = [
+          outward_api.outward_jacobian_transpose_matvec(self.robot_, st, state_type_list, v, max_time_order=max_order, dim=self.dim_)
+          for st, v in zip(states, vec)
+        ]
+        return batch_api.stack_sample_results(sample_results, batch_shape)
+      return outward_api.outward_jacobian_transpose_matvec(self.robot_, state, state_type_list, vec, dim=self.dim_)
+
+    sample_results = [
+      outward_api.outward_jacobian_transpose_matvec(self.robot_, st, state_type_list, v, max_time_order=max_order, dim=self.dim_)
+      for st, v in zip(state, vec)
+    ]
+    return batch_api.stack_sample_results(sample_results, batch_shape)
+
   def jacobian(self, state_type, numerical : bool = False, list_output : bool = False):
     state_type_list = self._state_type_list(state_type)
     max_order = StateType.max_time_order(state_type_list)
@@ -641,6 +713,25 @@ class Kots():
     state = self.outward_state_ if self.outward_state_ is not None else self.state_dict_
     return self._jacobian_matvec_from_state(state, state_type_list, max_order, vec, batch_shape, list_output)
 
+  def jacobian_transpose_matvec(self, state_type, vec : np.ndarray, numerical : bool = False):
+    """
+    Compute J.T @ vec for the Jacobian of ``state_type``.
+
+    ``vec`` is defined on the Jacobian output axis and must have shape
+    ``(total_state_dim,)`` or ``batch_shape + (total_state_dim,)``.
+    """
+    state_type_list = self._state_type_list(state_type)
+    max_order = StateType.max_time_order(state_type_list)
+    output_shape = (self._jacobian_output_dim(state_type_list),)
+    batch_shape = self.batch_shape_ if self.batch_shape_ else self.motions_.batch_shape()
+    vec = batch_api.broadcast_feature_vector(vec, batch_shape, output_shape)
+
+    if numerical:
+      return self._jacobian_transpose_matvec_numerical(state_type_list, max_order, vec)
+
+    state = self.outward_state_ if self.outward_state_ is not None else self.state_dict_
+    return self._jacobian_transpose_matvec_from_state(state, state_type_list, max_order, vec, batch_shape)
+
   def jacobian_tensor(self, state_type, numerical : bool = False) -> JacobianTensor:
     state_type_list = self._state_type_list(state_type)
     return JacobianTensor.from_array(self.jacobian(state_type_list, numerical=numerical), state_type_list)
@@ -656,6 +747,12 @@ class Kots():
       raise ValueError("target is not set")
 
     return self.jacobian_matvec(self.target_._targets, vec, numerical=numerical, list_output=list_output)
+
+  def jacobian_target_transpose_matvec(self, vec : np.ndarray, numerical : bool = False):
+    if self.target_ is None:
+      raise ValueError("target is not set")
+
+    return self.jacobian_transpose_matvec(self.target_._targets, vec, numerical=numerical)
 
   def jacobian_target_tensor(self, numerical : bool = False) -> JacobianTensor:
     if self.target_ is None:
