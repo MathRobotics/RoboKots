@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import time
+import platform
+import sys
 from pathlib import Path
 from typing import Callable
 
@@ -145,6 +147,35 @@ def _print_baseline_compare(name: str, stats: dict[str, float], baseline_mean_ms
     )
 
 
+def _version_or_missing(module_name: str) -> str:
+    try:
+        module = __import__(module_name)
+    except Exception:
+        return "not installed"
+    return str(getattr(module, "__version__", "unknown"))
+
+
+def _cpu_name() -> str:
+    cpuinfo = Path("/proc/cpuinfo")
+    if cpuinfo.exists():
+        for line in cpuinfo.read_text(encoding="utf-8", errors="replace").splitlines():
+            if line.startswith("model name"):
+                return line.split(":", 1)[1].strip()
+    processor = platform.processor()
+    if processor:
+        return processor
+    return "unknown"
+
+
+def _print_environment() -> None:
+    print(f"python     : {sys.version.split()[0]} ({sys.executable})")
+    print(f"platform   : {platform.platform()}")
+    print(f"cpu        : {_cpu_name()}")
+    print(f"numpy      : {np.__version__}")
+    print(f"jax        : {_version_or_missing('jax')}")
+    print(f"jaxlib     : {_version_or_missing('jaxlib')}")
+
+
 def main() -> None:
     model_path = Path(CONFIG["model"]).resolve()
     order = int(CONFIG["order"])
@@ -197,6 +228,7 @@ def main() -> None:
     link_diff_direction = rng.standard_normal(kots.dof())
 
     print("=== RoboKots Benchmark ===")
+    _print_environment()
     print(f"model      : {model_path}")
     print(f"order      : {order}")
     print(f"dof        : {kots.dof()}")

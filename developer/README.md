@@ -31,6 +31,10 @@ Run the regular runtime benchmark:
 uv run python -m developer.benchmarks.runtime
 ```
 
+The printed baseline values are machine- and dependency-version specific. Use
+them as a rough reference only unless the CPU, Python, NumPy, JAX, and power
+settings match the baseline environment.
+
 Run the batch API benchmark:
 
 ```bash
