@@ -334,7 +334,7 @@ def test_dynamics_jacobians():
 
 
 @pytest.mark.slow
-def test_jacobian_matvec_dynamics_matches_jacobian_product():
+def test_jacobian_mul_dynamics_matches_jacobian_product():
     kots = Kots.from_json_file(str(MODEL_PATH), order=4)
     rng = np.random.default_rng(2)
 
@@ -355,7 +355,7 @@ def test_jacobian_matvec_dynamics_matches_jacobian_product():
     vec = rng.standard_normal(kots.dof() * StateType.max_time_order(states))
 
     np.testing.assert_allclose(
-        kots.jacobian_matvec(states, vec),
+        kots.jacobian_mul(states, vec),
         kots.jacobian(states) @ vec,
         atol=1e-10,
         rtol=1e-10,
