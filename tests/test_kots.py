@@ -199,7 +199,7 @@ def test_jacobian_numerical():
         assert np.allclose(jacob, jacob_num, atol=1e-5, rtol=1e-5)
 
 
-def test_jacobian_matvec_kinematics_matches_jacobian_product():
+def test_jacobian_mul_vector_kinematics_matches_jacobian_product():
     kots = _make_kots(order=3)
     rng = np.random.default_rng(0)
 
@@ -215,19 +215,46 @@ def test_jacobian_matvec_kinematics_matches_jacobian_product():
     vec = rng.standard_normal(kots.dof() * StateType.max_time_order(states))
 
     np.testing.assert_allclose(
-        kots.jacobian_matvec(states, vec),
+        kots.jacobian_mul(states, vec),
         kots.jacobian(states) @ vec,
         atol=1e-10,
         rtol=1e-10,
     )
 
-    actual_parts = kots.jacobian_matvec(states, vec, list_output=True)
+    actual_parts = kots.jacobian_mul(states, vec, list_output=True)
     expected_parts = [jacob @ vec for jacob in kots.jacobian(states, list_output=True)]
     for actual, expected in zip(actual_parts, expected_parts):
         np.testing.assert_allclose(actual, expected, atol=1e-10, rtol=1e-10)
 
 
-def test_jacobian_transpose_matvec_kinematics_matches_jacobian_product():
+def test_jacobian_mul_matrix_kinematics_matches_jacobian_product():
+    kots = _make_kots(order=3)
+    rng = np.random.default_rng(19)
+
+    motion = rng.standard_normal(kots.order() * kots.dof())
+    kots.import_motions(motion)
+    kots.kinematics()
+
+    states = [
+        StateType(data_type="frame", owner_type="link", owner_name=TARGET_LINK),
+        StateType(data_type="vel", owner_type="link", owner_name=TARGET_LINK),
+        StateType(data_type="acc", owner_type="link", owner_name=TARGET_LINK),
+    ]
+    mat = rng.standard_normal((kots.dof() * StateType.max_time_order(states), 4))
+
+    np.testing.assert_allclose(
+        kots.jacobian_mul(states, mat),
+        kots.jacobian(states) @ mat,
+        atol=1e-10,
+        rtol=1e-10,
+    )
+    actual_parts = kots.jacobian_mul(states, mat, list_output=True)
+    expected_parts = [jacob @ mat for jacob in kots.jacobian(states, list_output=True)]
+    for actual, expected in zip(actual_parts, expected_parts):
+        np.testing.assert_allclose(actual, expected, atol=1e-10, rtol=1e-10)
+
+
+def test_jacobian_transpose_mul_vector_kinematics_matches_jacobian_product():
     kots = _make_kots(order=3)
     rng = np.random.default_rng(12)
 
@@ -244,14 +271,37 @@ def test_jacobian_transpose_matvec_kinematics_matches_jacobian_product():
     vec = rng.standard_normal(jacob.shape[0])
 
     np.testing.assert_allclose(
-        kots.jacobian_transpose_matvec(states, vec),
+        kots.jacobian_transpose_mul(states, vec),
         jacob.T @ vec,
         atol=1e-10,
         rtol=1e-10,
     )
 
 
-def test_jacobian_target_matvec_matches_jacobian_product():
+def test_jacobian_transpose_mul_matrix_kinematics_matches_jacobian_product():
+    kots = _make_kots(order=3)
+    rng = np.random.default_rng(22)
+
+    motion = rng.standard_normal(kots.order() * kots.dof())
+    kots.import_motions(motion)
+    kots.kinematics()
+
+    states = [
+        StateType(data_type="frame", owner_type="link", owner_name=TARGET_LINK),
+        StateType(data_type="vel", owner_type="link", owner_name=TARGET_LINK),
+        StateType(data_type="acc", owner_type="link", owner_name=TARGET_LINK),
+    ]
+    jacob = kots.jacobian(states)
+    mat = rng.standard_normal((jacob.shape[0], 4))
+
+    np.testing.assert_allclose(
+        kots.jacobian_transpose_mul(states, mat),
+        jacob.T @ mat,
+        atol=1e-10,
+        rtol=1e-10,
+    )
+
+def test_jacobian_target_mul_vector_matches_jacobian_product():
     kots = _make_kots(order=3)
     rng = np.random.default_rng(1)
 
@@ -262,14 +312,33 @@ def test_jacobian_target_matvec_matches_jacobian_product():
 
     vec = rng.standard_normal(kots.dof() * StateType.max_time_order(kots.target_._targets))
     np.testing.assert_allclose(
-        kots.jacobian_target_matvec(vec),
+        kots.jacobian_target_mul(vec),
         kots.jacobian_target() @ vec,
         atol=1e-10,
         rtol=1e-10,
     )
 
 
-def test_jacobian_target_transpose_matvec_matches_jacobian_product():
+def test_jacobian_target_mul_matrix_matches_jacobian_product():
+    kots = _make_kots(order=3)
+    rng = np.random.default_rng(20)
+
+    kots.set_target_from_file(str(TARGET_PATH))
+    motion = rng.standard_normal(kots.order() * kots.dof())
+    kots.import_motions(motion)
+    kots.dynamics()
+
+    jacob = kots.jacobian_target()
+    mat = rng.standard_normal((jacob.shape[-1], 5))
+    np.testing.assert_allclose(
+        kots.jacobian_target_mul(mat),
+        jacob @ mat,
+        atol=1e-10,
+        rtol=1e-10,
+    )
+
+
+def test_jacobian_target_transpose_mul_vector_matches_jacobian_product():
     kots = _make_kots(order=3)
     rng = np.random.default_rng(13)
 
@@ -281,14 +350,33 @@ def test_jacobian_target_transpose_matvec_matches_jacobian_product():
     jacob = kots.jacobian_target()
     vec = rng.standard_normal(jacob.shape[0])
     np.testing.assert_allclose(
-        kots.jacobian_target_transpose_matvec(vec),
+        kots.jacobian_target_transpose_mul(vec),
         jacob.T @ vec,
         atol=1e-10,
         rtol=1e-10,
     )
 
 
-def test_jacobian_transpose_matvec_dynamics_matches_jacobian_product():
+def test_jacobian_target_transpose_mul_matrix_matches_jacobian_product():
+    kots = _make_kots(order=3)
+    rng = np.random.default_rng(23)
+
+    kots.set_target_from_file(str(TARGET_PATH))
+    motion = rng.standard_normal(kots.order() * kots.dof())
+    kots.import_motions(motion)
+    kots.dynamics()
+
+    jacob = kots.jacobian_target()
+    mat = rng.standard_normal((jacob.shape[0], 5))
+    np.testing.assert_allclose(
+        kots.jacobian_target_transpose_mul(mat),
+        jacob.T @ mat,
+        atol=1e-10,
+        rtol=1e-10,
+    )
+
+
+def test_jacobian_transpose_mul_dynamics_matches_jacobian_product():
     kots = _make_kots(order=5)
     rng = np.random.default_rng(14)
 
@@ -307,14 +395,14 @@ def test_jacobian_transpose_matvec_dynamics_matches_jacobian_product():
     vec = rng.standard_normal(jacob.shape[0])
 
     np.testing.assert_allclose(
-        kots.jacobian_transpose_matvec(states, vec),
+        kots.jacobian_transpose_mul(states, vec),
         jacob.T @ vec,
         atol=1e-10,
         rtol=1e-10,
     )
 
 
-def test_jacobian_transpose_matvec_low_order_momentum_matches_jacobian_product():
+def test_jacobian_transpose_mul_low_order_momentum_matches_jacobian_product():
     kots = _make_kots(order=2)
     rng = np.random.default_rng(15)
 
@@ -331,7 +419,7 @@ def test_jacobian_transpose_matvec_low_order_momentum_matches_jacobian_product()
     vec = rng.standard_normal(jacob.shape[0])
 
     np.testing.assert_allclose(
-        kots.jacobian_transpose_matvec(states, vec),
+        kots.jacobian_transpose_mul(states, vec),
         jacob.T @ vec,
         atol=1e-10,
         rtol=1e-10,
@@ -353,7 +441,7 @@ def test_batched_kinematics_matches_loop():
     actual_acc = kots.state_info(acc_state)
     actual_jacob = kots.jacobian(acc_state)
     vec = rng.standard_normal(kots.dof() * order)
-    actual_matvec = kots.jacobian_matvec(acc_state, vec)
+    actual_matvec = kots.jacobian_mul(acc_state, vec)
 
     assert actual_frames.shape == (4, 4, 4)
     assert actual_acc.shape == (4, 6)
@@ -428,7 +516,7 @@ def test_batched_dynamics_and_jacobian_matches_loop():
         np.testing.assert_allclose(actual_jacob[i], single.jacobian(torque_state), atol=1e-12)
 
 
-def test_batched_dynamics_jacobian_matvec_matches_jacobian_product():
+def test_batched_dynamics_jacobian_mul_vector_matches_jacobian_product():
     order = 5
     kots = _make_kots(order=order)
     rng = np.random.default_rng(11)
@@ -445,9 +533,9 @@ def test_batched_dynamics_jacobian_matvec_matches_jacobian_product():
     kots.import_motions(motions)
     kots.dynamics()
 
-    actual = kots.jacobian_matvec(states, vecs)
+    actual = kots.jacobian_mul(states, vecs)
     expected = (kots.jacobian(states) @ vecs[..., None])[..., 0]
-    parts = kots.jacobian_matvec(states, vecs, list_output=True)
+    parts = kots.jacobian_mul(states, vecs, list_output=True)
 
     assert actual.shape == expected.shape
     assert len(parts) == len(states)
@@ -507,7 +595,7 @@ def test_batched_state_info_list_shape_contract():
     np.testing.assert_allclose(stacked[1, 2], single.state_info_list(states).reshape(-1))
 
 
-def test_batched_jacobian_matvec_shape_contract_with_per_sample_vecs():
+def test_batched_jacobian_mul_vector_shape_contract_with_per_sample_vecs():
     order = 3
     kots = _make_kots(order=order)
     rng = np.random.default_rng(7)
@@ -521,8 +609,8 @@ def test_batched_jacobian_matvec_shape_contract_with_per_sample_vecs():
     kots.import_motions(motions)
     kots.kinematics()
 
-    matvec = kots.jacobian_matvec(states, vecs)
-    parts = kots.jacobian_matvec(states, vecs, list_output=True)
+    matvec = kots.jacobian_mul(states, vecs)
+    parts = kots.jacobian_mul(states, vecs, list_output=True)
 
     assert matvec.shape == (2, 3, 12)
     assert len(parts) == 2
@@ -536,7 +624,37 @@ def test_batched_jacobian_matvec_shape_contract_with_per_sample_vecs():
     np.testing.assert_allclose(matvec[1, 2], single.jacobian(states) @ vecs[1, 2])
 
 
-def test_batched_jacobian_transpose_matvec_shape_contract_with_per_sample_vecs():
+def test_batched_jacobian_mul_matrix_shape_contract_with_per_sample_mats():
+    order = 3
+    kots = _make_kots(order=order)
+    rng = np.random.default_rng(21)
+    motions = rng.standard_normal((2, 3, kots.dof() * order))
+    states = [
+        StateType(data_type="vel", owner_type="link", owner_name=TARGET_LINK),
+        StateType(data_type="acc", owner_type="link", owner_name=TARGET_LINK),
+    ]
+    mats = rng.standard_normal((2, 3, kots.dof() * StateType.max_time_order(states), 4))
+
+    kots.import_motions(motions)
+    kots.kinematics()
+
+    matmul = kots.jacobian_mul(states, mats)
+    parts = kots.jacobian_mul(states, mats, list_output=True)
+    expected = kots.jacobian(states) @ mats
+
+    assert matmul.shape == (2, 3, 12, 4)
+    assert len(parts) == 2
+    assert parts[0].shape == (2, 3, 6, 4)
+    assert parts[1].shape == (2, 3, 6, 4)
+    np.testing.assert_allclose(matmul, expected, atol=1e-10, rtol=1e-10)
+    np.testing.assert_allclose(matmul, np.concatenate(parts, axis=-2), atol=1e-10, rtol=1e-10)
+
+    shared = rng.standard_normal((kots.dof() * StateType.max_time_order(states), 2))
+    shared_matmul = kots.jacobian_mul(states, shared)
+    np.testing.assert_allclose(shared_matmul, kots.jacobian(states) @ shared, atol=1e-10, rtol=1e-10)
+
+
+def test_batched_jacobian_transpose_mul_vector_shape_contract_with_per_sample_vecs():
     order = 3
     kots = _make_kots(order=order)
     rng = np.random.default_rng(16)
@@ -551,7 +669,7 @@ def test_batched_jacobian_transpose_matvec_shape_contract_with_per_sample_vecs()
 
     jacob = kots.jacobian(states)
     vecs = rng.standard_normal(jacob.shape[:-2] + (jacob.shape[-2],))
-    transpose_matvec = kots.jacobian_transpose_matvec(states, vecs)
+    transpose_matvec = kots.jacobian_transpose_mul(states, vecs)
 
     assert transpose_matvec.shape == (2, 3, kots.dof() * order)
     np.testing.assert_allclose(
@@ -565,6 +683,41 @@ def test_batched_jacobian_transpose_matvec_shape_contract_with_per_sample_vecs()
     single.import_motions(motions[1, 2])
     single.kinematics()
     np.testing.assert_allclose(transpose_matvec[1, 2], single.jacobian(states).T @ vecs[1, 2])
+
+
+def test_batched_jacobian_transpose_mul_matrix_shape_contract_with_per_sample_mats():
+    order = 3
+    kots = _make_kots(order=order)
+    rng = np.random.default_rng(24)
+    motions = rng.standard_normal((2, 3, kots.dof() * order))
+    states = [
+        StateType(data_type="vel", owner_type="link", owner_name=TARGET_LINK),
+        StateType(data_type="acc", owner_type="link", owner_name=TARGET_LINK),
+    ]
+
+    kots.import_motions(motions)
+    kots.kinematics()
+
+    jacob = kots.jacobian(states)
+    mats = rng.standard_normal(jacob.shape[:-2] + (jacob.shape[-2], 4))
+    transpose_matmul = kots.jacobian_transpose_mul(states, mats)
+    expected = np.swapaxes(jacob, -1, -2) @ mats
+
+    assert transpose_matmul.shape == (2, 3, kots.dof() * order, 4)
+    np.testing.assert_allclose(transpose_matmul, expected, atol=1e-10, rtol=1e-10)
+    shared = rng.standard_normal((jacob.shape[-2], 2))
+    shared_matmul = kots.jacobian_transpose_mul(states, shared)
+    np.testing.assert_allclose(
+        shared_matmul,
+        np.swapaxes(jacob, -1, -2) @ shared,
+        atol=1e-10,
+        rtol=1e-10,
+    )
+
+    single = _make_kots(order=order)
+    single.import_motions(motions[1, 2])
+    single.kinematics()
+    np.testing.assert_allclose(transpose_matmul[1, 2], single.jacobian(states).T @ mats[1, 2])
 
 
 def test_batched_target_api_shape_contract():
@@ -585,13 +738,17 @@ def test_batched_target_api_shape_contract():
     target_values = kots.target_state_info()
     target_parts = kots.target_state_info(list_output=True)
     target_jacobian = kots.jacobian_target()
-    shared_matvec = kots.jacobian_target_matvec(shared_vec)
-    sample_matvec = kots.jacobian_target_matvec(sample_vecs)
-    matvec_parts = kots.jacobian_target_matvec(sample_vecs, list_output=True)
+    shared_matvec = kots.jacobian_target_mul(shared_vec)
+    sample_matvec = kots.jacobian_target_mul(sample_vecs)
+    matvec_parts = kots.jacobian_target_mul(sample_vecs, list_output=True)
     shared_transpose_vec = rng.standard_normal(target_dim)
-    shared_transpose_matvec = kots.jacobian_target_transpose_matvec(shared_transpose_vec)
+    shared_transpose_matvec = kots.jacobian_target_transpose_mul(shared_transpose_vec)
     transpose_vecs = rng.standard_normal(batch_shape + (target_dim,))
-    sample_transpose_matvec = kots.jacobian_target_transpose_matvec(transpose_vecs)
+    sample_transpose_matvec = kots.jacobian_target_transpose_mul(transpose_vecs)
+    shared_transpose_mat = rng.standard_normal((target_dim, 3))
+    shared_transpose_matmul = kots.jacobian_target_transpose_mul(shared_transpose_mat)
+    transpose_mats = rng.standard_normal(batch_shape + (target_dim, 2))
+    sample_transpose_matmul = kots.jacobian_target_transpose_mul(transpose_mats)
 
     assert target_values.shape == batch_shape + (target_dim,)
     assert len(target_parts) == 9
@@ -615,6 +772,20 @@ def test_batched_target_api_shape_contract():
     np.testing.assert_allclose(
         sample_transpose_matvec,
         (np.swapaxes(target_jacobian, -1, -2) @ transpose_vecs[..., None])[..., 0],
+        atol=1e-10,
+        rtol=1e-10,
+    )
+    assert shared_transpose_matmul.shape == batch_shape + (motion_dim, 3)
+    assert sample_transpose_matmul.shape == batch_shape + (motion_dim, 2)
+    np.testing.assert_allclose(
+        shared_transpose_matmul,
+        np.swapaxes(target_jacobian, -1, -2) @ shared_transpose_mat,
+        atol=1e-10,
+        rtol=1e-10,
+    )
+    np.testing.assert_allclose(
+        sample_transpose_matmul,
+        np.swapaxes(target_jacobian, -1, -2) @ transpose_mats,
         atol=1e-10,
         rtol=1e-10,
     )

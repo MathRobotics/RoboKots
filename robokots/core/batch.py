@@ -77,3 +77,34 @@ def broadcast_feature_vector(vec, batch_shape: tuple[int, ...], feature_shape: t
   if arr.shape == batch_expected_shape:
     return arr.reshape((-1,) + feature_shape)
   raise ValueError(f"{name} must have shape {feature_shape} or {batch_expected_shape}, got {arr.shape}")
+
+
+def broadcast_feature_rhs(rhs, batch_shape: tuple[int, ...], row_count: int, name: str = "rhs"):
+  arr = np.asarray(rhs)
+  vector_shape = (row_count,)
+
+  if not batch_shape:
+    if arr.shape == vector_shape:
+      return arr, False
+    if arr.ndim == 2 and arr.shape[-2] == row_count:
+      return arr, True
+    raise ValueError(f"{name} must have shape {vector_shape} or ({row_count}, rhs), got {arr.shape}")
+
+  batch_vector_shape = batch_shape + vector_shape
+  if arr.shape == vector_shape:
+    return np.broadcast_to(arr, batch_vector_shape).reshape((-1,) + vector_shape), False
+  if arr.shape == batch_vector_shape:
+    return arr.reshape((-1,) + vector_shape), False
+
+  if arr.ndim >= 2 and arr.shape[-2] == row_count:
+    feature_shape = arr.shape[-2:]
+    batch_matrix_shape = batch_shape + feature_shape
+    if arr.shape == feature_shape:
+      return np.broadcast_to(arr, batch_matrix_shape).reshape((-1,) + feature_shape), True
+    if arr.shape == batch_matrix_shape:
+      return arr.reshape((-1,) + feature_shape), True
+
+  raise ValueError(
+    f"{name} must have shape {vector_shape}, {batch_vector_shape}, "
+    f"({row_count}, rhs), or {batch_shape} + ({row_count}, rhs), got {arr.shape}"
+  )

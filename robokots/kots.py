@@ -623,6 +623,36 @@ class Kots():
       len(state_type_list),
     )
 
+  def _stack_mul_columns(self, column_results, list_output : bool, item_count : int):
+    if list_output:
+      return [
+        np.stack([column[i] for column in column_results], axis=-1)
+        for i in range(item_count)
+      ]
+    return np.stack(column_results, axis=-1)
+
+  def _jacobian_mul_numerical(self, state_type_list, max_order : int, rhs, rhs_is_matrix : bool, list_output : bool = False):
+    if not rhs_is_matrix:
+      return self._jacobian_matvec_numerical(state_type_list, max_order, rhs, list_output)
+
+    rhs_count = rhs.shape[-1]
+    column_results = [
+      self._jacobian_matvec_numerical(state_type_list, max_order, rhs[..., i], list_output)
+      for i in range(rhs_count)
+    ]
+    return self._stack_mul_columns(column_results, list_output, len(state_type_list))
+
+  def _jacobian_mul_from_state(self, state, state_type_list, max_order : int, rhs, batch_shape : tuple, rhs_is_matrix : bool, list_output : bool = False):
+    if not rhs_is_matrix:
+      return self._jacobian_matvec_from_state(state, state_type_list, max_order, rhs, batch_shape, list_output)
+
+    rhs_count = rhs.shape[-1]
+    column_results = [
+      self._jacobian_matvec_from_state(state, state_type_list, max_order, rhs[..., i], batch_shape, list_output)
+      for i in range(rhs_count)
+    ]
+    return self._stack_mul_columns(column_results, list_output, len(state_type_list))
+
   def _jacobian_output_dim(self, state_type_list) -> int:
     dim_dof = dim_to_dof(self.dim_)
     output_dim = 0
@@ -672,7 +702,9 @@ class Kots():
             max_time_order=max_order,
             dim=self.dim_,
           )
-        except Exception:
+        except (AttributeError, IndexError, TypeError, ValueError):
+          # Fall back when the cached state cannot be consumed as a batched
+          # outward state. Unexpected runtime errors should still surface.
           pass
         is_dynamics = any(st.is_dynamics for st in state_type_list)
         _, build_state = self._state_builder(max_order, is_dynamics=is_dynamics)
@@ -691,6 +723,28 @@ class Kots():
     ]
     return batch_api.stack_sample_results(sample_results, batch_shape)
 
+  def _jacobian_transpose_mul_numerical(self, state_type_list, max_order : int, rhs, rhs_is_matrix : bool):
+    if not rhs_is_matrix:
+      return self._jacobian_transpose_matvec_numerical(state_type_list, max_order, rhs)
+
+    rhs_count = rhs.shape[-1]
+    column_results = [
+      self._jacobian_transpose_matvec_numerical(state_type_list, max_order, rhs[..., i])
+      for i in range(rhs_count)
+    ]
+    return np.stack(column_results, axis=-1)
+
+  def _jacobian_transpose_mul_from_state(self, state, state_type_list, max_order : int, rhs, batch_shape : tuple, rhs_is_matrix : bool):
+    if not rhs_is_matrix:
+      return self._jacobian_transpose_matvec_from_state(state, state_type_list, max_order, rhs, batch_shape)
+
+    rhs_count = rhs.shape[-1]
+    column_results = [
+      self._jacobian_transpose_matvec_from_state(state, state_type_list, max_order, rhs[..., i], batch_shape)
+      for i in range(rhs_count)
+    ]
+    return np.stack(column_results, axis=-1)
+
   def jacobian(self, state_type, numerical : bool = False, list_output : bool = False):
     state_type_list = self._state_type_list(state_type)
     max_order = StateType.max_time_order(state_type_list)
@@ -700,37 +754,45 @@ class Kots():
     state = self.outward_state_ if self.outward_state_ is not None else self.state_dict_
     return self._jacobian_from_state(state, state_type_list, max_order, list_output)
 
-  def jacobian_matvec(self, state_type, vec : np.ndarray, numerical : bool = False, list_output : bool = False):
-    state_type_list = self._state_type_list(state_type)
-    max_order = StateType.max_time_order(state_type_list)
-    expected_shape = (self.robot_.dof * max_order,)
-    batch_shape = self.batch_shape_ if self.batch_shape_ else self.motions_.batch_shape()
-    vec = batch_api.broadcast_feature_vector(vec, batch_shape, expected_shape)
-
-    if numerical:
-      return self._jacobian_matvec_numerical(state_type_list, max_order, vec, list_output)
-
-    state = self.outward_state_ if self.outward_state_ is not None else self.state_dict_
-    return self._jacobian_matvec_from_state(state, state_type_list, max_order, vec, batch_shape, list_output)
-
-  def jacobian_transpose_matvec(self, state_type, vec : np.ndarray, numerical : bool = False):
+  def jacobian_mul(self, state_type, rhs : np.ndarray, numerical : bool = False, list_output : bool = False):
     """
-    Compute J.T @ vec for the Jacobian of ``state_type``.
+    Compute J @ rhs for the Jacobian of ``state_type``.
 
-    ``vec`` is defined on the Jacobian output axis and must have shape
-    ``(total_state_dim,)`` or ``batch_shape + (total_state_dim,)``.
+    ``rhs`` may be a vector with shape ``(motion_dim,)`` or
+    ``batch_shape + (motion_dim,)``, or a matrix with shape
+    ``(motion_dim, rhs_dim)`` or ``batch_shape + (motion_dim, rhs_dim)``.
     """
     state_type_list = self._state_type_list(state_type)
     max_order = StateType.max_time_order(state_type_list)
-    output_shape = (self._jacobian_output_dim(state_type_list),)
+    input_dim = self.robot_.dof * max_order
     batch_shape = self.batch_shape_ if self.batch_shape_ else self.motions_.batch_shape()
-    vec = batch_api.broadcast_feature_vector(vec, batch_shape, output_shape)
+    rhs, rhs_is_matrix = batch_api.broadcast_feature_rhs(rhs, batch_shape, input_dim, name="rhs")
 
     if numerical:
-      return self._jacobian_transpose_matvec_numerical(state_type_list, max_order, vec)
+      return self._jacobian_mul_numerical(state_type_list, max_order, rhs, rhs_is_matrix, list_output)
 
     state = self.outward_state_ if self.outward_state_ is not None else self.state_dict_
-    return self._jacobian_transpose_matvec_from_state(state, state_type_list, max_order, vec, batch_shape)
+    return self._jacobian_mul_from_state(state, state_type_list, max_order, rhs, batch_shape, rhs_is_matrix, list_output)
+
+  def jacobian_transpose_mul(self, state_type, rhs : np.ndarray, numerical : bool = False):
+    """
+    Compute J.T @ rhs for the Jacobian of ``state_type``.
+
+    ``rhs`` may be a vector with shape ``(total_state_dim,)`` or
+    ``batch_shape + (total_state_dim,)``, or a matrix with shape
+    ``(total_state_dim, rhs_dim)`` or ``batch_shape + (total_state_dim, rhs_dim)``.
+    """
+    state_type_list = self._state_type_list(state_type)
+    max_order = StateType.max_time_order(state_type_list)
+    output_dim = self._jacobian_output_dim(state_type_list)
+    batch_shape = self.batch_shape_ if self.batch_shape_ else self.motions_.batch_shape()
+    rhs, rhs_is_matrix = batch_api.broadcast_feature_rhs(rhs, batch_shape, output_dim, name="rhs")
+
+    if numerical:
+      return self._jacobian_transpose_mul_numerical(state_type_list, max_order, rhs, rhs_is_matrix)
+
+    state = self.outward_state_ if self.outward_state_ is not None else self.state_dict_
+    return self._jacobian_transpose_mul_from_state(state, state_type_list, max_order, rhs, batch_shape, rhs_is_matrix)
 
   def jacobian_tensor(self, state_type, numerical : bool = False) -> JacobianTensor:
     state_type_list = self._state_type_list(state_type)
@@ -742,17 +804,17 @@ class Kots():
     
     return self.jacobian(self.target_._targets, numerical=numerical, list_output=list_output)
 
-  def jacobian_target_matvec(self, vec : np.ndarray, numerical : bool = False, list_output : bool = False):
+  def jacobian_target_mul(self, rhs : np.ndarray, numerical : bool = False, list_output : bool = False):
     if self.target_ is None:
       raise ValueError("target is not set")
 
-    return self.jacobian_matvec(self.target_._targets, vec, numerical=numerical, list_output=list_output)
+    return self.jacobian_mul(self.target_._targets, rhs, numerical=numerical, list_output=list_output)
 
-  def jacobian_target_transpose_matvec(self, vec : np.ndarray, numerical : bool = False):
+  def jacobian_target_transpose_mul(self, rhs : np.ndarray, numerical : bool = False):
     if self.target_ is None:
       raise ValueError("target is not set")
 
-    return self.jacobian_transpose_matvec(self.target_._targets, vec, numerical=numerical)
+    return self.jacobian_transpose_mul(self.target_._targets, rhs, numerical=numerical)
 
   def jacobian_target_tensor(self, numerical : bool = False) -> JacobianTensor:
     if self.target_ is None:
