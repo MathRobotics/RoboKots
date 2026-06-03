@@ -1,13 +1,16 @@
 import numpy as np
 import polars as pl
 import matplotlib.pyplot as plt
+from pathlib import Path
 
 from robokots.kots import Kots
 from robokots.core.state_json import iter_jsonl_rows, write_jsonl
 
+EXAMPLE_DIR = Path(__file__).resolve().parent
+
 
 def main():
-    kots = Kots.from_json_file("../model/sample_robot.json")
+    kots = Kots.from_json_file(str(EXAMPLE_DIR.parent / "model" / "sample_robot.json"))
     kots.set_order(3)
 
     n_steps = 5

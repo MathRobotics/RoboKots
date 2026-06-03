@@ -1,13 +1,16 @@
 import numpy as np
+from pathlib import Path
 
 import mathrobo as mr
 from robokots.kots import *
 
+EXAMPLE_DIR = Path(__file__).resolve().parent
+
 def main():
-    kots = Kots.from_json_file("../model/sample_robot.json")
+    kots = Kots.from_json_file(str(EXAMPLE_DIR.parent / "model" / "sample_robot.json"))
     kots.print_structure()
 
-    kots.set_target_from_file("target_list.json")
+    kots.set_target_from_file(str(EXAMPLE_DIR / "target_list.json"))
     print(kots.targets())
 
     kots.set_order(6)
@@ -46,7 +49,7 @@ def main():
     st_list = StateType.create_list('joint','joint4',["momentum_diff3", "force_diff2", "torque_diff2"])
     print("norm: ", np.linalg.norm( kots.jacobian(st_list) -  kots.jacobian(st_list, numerical=True) ))
 
-    kots.show_robot()
+    kots.show_robot(save=True)
 
 if __name__ == "__main__":
     main()

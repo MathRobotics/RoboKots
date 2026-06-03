@@ -1,7 +1,9 @@
 import numpy as np
 
 from mathrobo import SE3, CMTM
+from robokots.core.state import StateType, state_dict_key
 from robokots.core.state_dict import *
+from robokots.core.state_json import make_jsonl_row
 
 def test_extract_state_keys():
     state = {
@@ -79,6 +81,26 @@ def test_state_dict_to_frame():
     se3 = state_dict_to_frame(state, name)
     assert np.allclose(se3.rot(), np.eye(3))
     assert np.allclose(se3.pos(), [1.0, 2.0, 3.0])
+
+
+def test_state_type_and_state_dict_key_share_storage_name():
+    state_type = StateType("link", "arm", "jerk")
+
+    assert state_type.alliance == "arm_link_acc_diff1"
+    assert state_dict_key("link", "arm", "jerk") == state_type.alliance
+
+
+def test_state_memo_does_not_mutate_or_export_payload():
+    state = {
+        "arm_link_pos": [1.0, 2.0, 3.0],
+        "arm_link_rot": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
+    }
+
+    state_dict_to_frame(state, "arm")
+    row = make_jsonl_row(state)
+
+    assert "__robokots_state_memo__" not in state
+    assert "__robokots_state_memo__" not in row
 
 def test_state_dict_to_cmtm():
     state = {

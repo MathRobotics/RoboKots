@@ -15,9 +15,13 @@ _lazy_attributes: Dict[str, str] = {
     "RobotStruct": "robokots.core.robot",
     "JointStruct": "robokots.core.robot",
     "LinkStruct": "robokots.core.robot",
-    # State table helpers
-    "RobotDF": "robokots.core.state_table",
-    "RobotState": "robokots.core.state_table",
+    "OutwardState": "robokots.core.outward_state",
+    "MotionLayoutOwner": "robokots.core.motion",
+    "MotionTensor": "robokots.core.motion",
+    "RobotMotions": "robokots.core.motion",
+    # Optional Polars-backed state table helpers
+    "RobotDF": "robokots.contrib.polars.state_table",
+    "RobotState": "robokots.contrib.polars.state_table",
     # State dictionary helpers
     "state_dict_to_cmtm": "robokots.core.state_dict",
     "state_dict_to_cmtm_wrench": "robokots.core.state_dict",
@@ -31,6 +35,14 @@ _lazy_attributes: Dict[str, str] = {
     "state_dict_to_vecs": "robokots.core.state_dict",
     # State cache utility
     "StateCache": "robokots.core.state_cache",
+    # Axis-aware tensor adapters
+    "AlgorithmSpec": "robokots.core.axis_tensor",
+    "AxisTensor": "robokots.core.axis_tensor",
+    "LayoutPolicy": "robokots.core.axis_tensor",
+    "PhysicalLayout": "robokots.core.axis_tensor",
+    "JacobianTensor": "robokots.core.state_tensor",
+    "StateBatch": "robokots.core.state_batch",
+    "StateTensor": "robokots.core.state_tensor",
 }
 
 __all__ = sorted(_lazy_attributes)

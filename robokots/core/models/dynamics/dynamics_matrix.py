@@ -5,7 +5,7 @@
 
 import numpy as np
 from mathrobo import Factorial, CMVector
-from mathrobo import SO3wrench, SE3wrench, CMTM
+from mathrobo import SE3wrench, CMTM
 
 from robokots.core.state import dim_to_dof
 from .dynamics import link_momentum_cmvec

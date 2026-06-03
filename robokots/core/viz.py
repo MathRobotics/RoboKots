@@ -3,16 +3,27 @@
 # 2025.04.06 Created by T.Ishigaki
 
 import numpy as np
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 
 class RobotColor:
   def __init__(self, link_color = 'blue', joint_color = 'red'):
     self.link_color = link_color
     self.joint_color = joint_color
 
+def _get_pyplot():
+  try:
+    import matplotlib.pyplot as plt
+  except ImportError as exc:
+    raise ImportError(
+      "matplotlib is required for visualization. Install robokots with the "
+      "'viz' extra, for example: uv add 'robokots[viz]'. If you are working "
+      "from this repository, run: uv sync --extra viz"
+    ) from exc
+  return plt
+
+def _is_3d_axes(ax):
+  return getattr(ax, "name", None) == "3d"
+
 def set_equall_aspect(ax, data, margin):
-  margin = 0.1
   ax_min = np.zeros(2)
   ax_max = np.zeros(2)
   box_length = np.zeros(2)
@@ -31,7 +42,6 @@ def set_equall_aspect(ax, data, margin):
   ax.set_ylim(ax_ave[1] - box_length[1]*box_ratio[1]*0.5, ax_ave[1] + box_length[1]*box_ratio[1]*0.5)
 
 def set_equall_aspect_3d(ax, data, margin):
-  margin = 0.1
   ax_min = np.zeros(3)
   ax_max = np.zeros(3)
   box_length = np.zeros(3)
@@ -51,6 +61,9 @@ def set_equall_aspect_3d(ax, data, margin):
   ax.set_zlim3d(ax_ave[2] - box_length[2]*box_ratio[2]*0.5, ax_ave[2] + box_length[2]*box_ratio[2]*0.5)
   
 def show_robot(joint_conectivity, marker_pos, save = False, ax = None, color : RobotColor = None):
+  plt = _get_pyplot()
+  owns_axes = ax is None
+
   if ax is None:
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
@@ -77,13 +90,15 @@ def show_robot(joint_conectivity, marker_pos, save = False, ax = None, color : R
   
   set_equall_aspect_3d(ax, marker_pos, 0.1)
 
-  if ax is None:
-    plt.show()
-    
   if save:  
     plt.savefig('simple_draw.png')
+  elif owns_axes:
+    plt.show()
 
 def show_robot_traj(joint_conectivity, marker_pos_list, save = False, ax = None, color : RobotColor = None):
+  plt = _get_pyplot()
+  owns_axes = ax is None
+
   if ax is None:
     fig = plt.figure()
     ax_ = fig.add_subplot(111, projection='3d')
@@ -95,7 +110,7 @@ def show_robot_traj(joint_conectivity, marker_pos_list, save = False, ax = None,
 
   arr_swapped = marker_pos_list.transpose(1, 0, 2)
 
-  if isinstance(ax, Axes3D):
+  if _is_3d_axes(ax_):
     for marker_pos in arr_swapped:
       ax_.scatter(marker_pos[:,0], marker_pos[:,1], marker_pos[:,2], c=color.joint_color, marker='o', alpha=0.1)
       for c in joint_conectivity:
@@ -133,13 +148,14 @@ def show_robot_traj(joint_conectivity, marker_pos_list, save = False, ax = None,
     set_equall_aspect(ax_, marker_pos, 0.1)
     
 
-  if ax is None:
-    plt.show()
-
   if save:  
     plt.savefig('simple_draw.png')
+  elif owns_axes:
+    plt.show()
 
 def show_link_points(link_pos, ax = None, dimension=3):
+  plt = _get_pyplot()
+
   if ax is None:
     plot = plt.figure()
     if dimension == 2:
@@ -155,5 +171,10 @@ def show_link_points(link_pos, ax = None, dimension=3):
       ax.set_ylabel('Y')
       ax.set_zlabel('Z')
       
-  ax.scatter(link_pos[:,0], link_pos[:,1], c='r', marker='o')  
+  if dimension == 2:
+    ax.scatter(link_pos[:,0], link_pos[:,1], c='r', marker='o')
+  elif dimension == 3:
+    ax.scatter(link_pos[:,0], link_pos[:,1], link_pos[:,2], c='r', marker='o')
+  else:
+    raise ValueError("dimension must be 2 or 3")
   plt.show()

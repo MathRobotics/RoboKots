@@ -19,6 +19,11 @@ from robokots.core.models.whole_body.total_dynamics_grad_mat import (
     total_coord_to_link_momentum_grad_mat,
     total_coord_to_link_momentum_grad_matvec,
 )
+from robokots.outward.diff.outward_transpose_matvec import (
+    _transpose_total_coord_to_link_momentum_grad_matvec,
+    _transpose_total_coord_to_link_tan_vel_grad_matvec,
+    _transpose_total_coord_to_link_vel_grad_matvec,
+)
 
 
 TEST_DIR = Path(__file__).resolve().parents[2]
@@ -84,6 +89,43 @@ def test_total_link_momentum_grad_matvec_matches_matrix_product():
     np.testing.assert_allclose(
         total_coord_to_link_momentum_grad_matvec(kots.robot_, state, vec, order=order),
         total_coord_to_link_momentum_grad_mat(kots.robot_, state, order=order) @ vec,
+        atol=1e-10,
+        rtol=1e-10,
+    )
+
+
+def test_total_kinematics_transpose_matvec_matches_matrix_product():
+    order = 4
+    kots = Kots.from_json_file(str(MODEL_PATH), order=order)
+    rng = np.random.default_rng(17)
+    kots.import_motions(rng.standard_normal(kots.order() * kots.dof()))
+    state = build_kinematics_state(kots.robot_, kots.motion(kots.order()), kots.order())
+
+    link_vel_mat = total_coord_to_link_vel_grad_mat(kots.robot_, state, order=order)
+    link_tan_mat = total_coord_to_link_tan_vel_grad_mat(kots.robot_, state, out_order=order-1, in_order=order)
+    link_mom_mat = total_coord_to_link_momentum_grad_mat(kots.robot_, state, order=order)
+
+    link_vel_vec = rng.standard_normal(link_vel_mat.shape[0])
+    link_tan_vec = rng.standard_normal(link_tan_mat.shape[0])
+    link_mom_vec = rng.standard_normal(link_mom_mat.shape[0])
+
+    np.testing.assert_allclose(
+        _transpose_total_coord_to_link_vel_grad_matvec(kots.robot_, state, link_vel_vec, order=order),
+        link_vel_mat.T @ link_vel_vec,
+        atol=1e-10,
+        rtol=1e-10,
+    )
+    np.testing.assert_allclose(
+        _transpose_total_coord_to_link_tan_vel_grad_matvec(
+            kots.robot_, state, link_tan_vec, out_order=order-1, in_order=order
+        ),
+        link_tan_mat.T @ link_tan_vec,
+        atol=1e-10,
+        rtol=1e-10,
+    )
+    np.testing.assert_allclose(
+        _transpose_total_coord_to_link_momentum_grad_matvec(kots.robot_, state, link_mom_vec, order=order),
+        link_mom_mat.T @ link_mom_vec,
         atol=1e-10,
         rtol=1e-10,
     )

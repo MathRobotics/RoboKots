@@ -1,9 +1,27 @@
 from typing import List
-from mathrobo import SO3, SE3, CMTM
 
 frame_names = ("world","local")
 
 data_owner_types = ("joint","link","total_link","total_joint","total")
+total_owner_names = ("total_link", "total_joint", "total")
+
+
+def state_data_name(data_type: str) -> str:
+    try:
+        return keys_name[data_type]
+    except KeyError as e:
+        raise KeyError(f"Invalid data_type: {data_type}") from e
+
+
+def state_dict_key(owner_type: str, owner_name: str, data_type: str) -> str:
+    data_name = state_data_name(data_type)
+    return state_storage_key(owner_type, owner_name, data_name)
+
+
+def state_storage_key(owner_type: str, owner_name: str, data_name: str) -> str:
+    if owner_name in total_owner_names:
+        return f"{owner_name}_{data_name}"
+    return f"{owner_name}_{owner_type}_{data_name}"
 
 class StateType:
     owner_type : str
@@ -20,10 +38,7 @@ class StateType:
         self.time_order = keys_time_order.get(data_type, 1)
         self.key_order = keys_order.get(data_type, 1)
         self.is_dynamics = is_in_keys_dynamics([data_type])
-        if owner_name in ["total_link", "total_joint", "total"]:
-            self.alliance = f"{owner_name}_{keys_name[data_type]}"
-        else:
-            self.alliance = f"{owner_name}_{owner_type}_{keys_name[data_type]}"
+        self.alliance = state_dict_key(owner_type, owner_name, data_type)
 
     def __repr__(self):
         return f"StateType(\n  owner type: {self.owner_type}\n  owner name: {self.owner_name}\n  data type: {self.data_type}\n  frame name: {self.frame_name}\n  time order: {self.time_order}\n  key order: {self.key_order}\n  is dynamics: {self.is_dynamics}\n  alliance: {self.alliance}\n)"
@@ -259,10 +274,13 @@ keys_name = {
 
 def data_type_to_sub_func(data_type : str):
     if data_type == "rot":
+        from mathrobo import SO3
         return SO3.sub_tan_vec
     elif data_type == "frame":
+        from mathrobo import SE3
         return SE3.sub_tan_vec
     elif data_type == "cmtm":
+        from mathrobo import CMTM
         return CMTM.sub_vec
     elif data_type in ["pos", "vel", "acc"] \
         or data_type in ["jerk", "snap", "crackle", "pop", "lock", "drop", "shot", "put"]  \

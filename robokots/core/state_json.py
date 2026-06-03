@@ -4,6 +4,8 @@ from typing import Any, Iterable, Optional, Iterator
 import json
 import numpy as np
 
+from .state_dict import is_state_payload_key
+
 
 # ============================================================
 # JSONL helpers (flat schema rows)
@@ -47,6 +49,8 @@ def make_jsonl_row(
     if meta:
         row.update(_to_jsonable(meta))
     for k, v in state.items():
+        if not is_state_payload_key(k):
+            continue
         row[str(k)] = _to_jsonable(v)
     return row
 

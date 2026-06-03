@@ -2,15 +2,31 @@
 # -*- coding: utf-8 -*-
 # 2024.12.11 Created by T.Ishigaki
 
+from __future__ import annotations
+
 import numpy as np
-import jax.numpy as jnp
 
 import warnings
+from dataclasses import dataclass
 from typing import List, Dict
 
-from mathrobo import SE3
-
 warnings.simplefilter("always", UserWarning)
+
+
+def _array_module(lib: str):
+  if lib == "numpy":
+    return np
+  if lib == "jax":
+    import jax.numpy as jnp
+    return jnp
+  raise ValueError(f"Unsupported library: {lib}. Use 'jax' or 'numpy'.")
+
+
+@dataclass(frozen=True)
+class MotionOwner:
+  dof: int
+  dof_index: int
+
 
 class RobotStruct:
   def __init__(self, links_: List["LinkStruct"], joints_: List["JointStruct"]):
@@ -44,6 +60,14 @@ class RobotStruct:
   
   def is_joint(self, name : str) -> bool:
     return name in self._joints_by_name
+
+  def motion_owners(self) -> tuple[MotionOwner, ...]:
+    owners = [owner for owner in (*self.links, *self.joints) if owner.dof > 0]
+    owners.sort(key=lambda owner: owner.dof_index)
+    return tuple(MotionOwner(owner.dof, owner.dof_index) for owner in owners)
+
+  def motion_owner_dofs(self) -> list[int]:
+    return [owner.dof for owner in self.motion_owners()]
 
   def robot_init(self):
     self.joint_num = len(self.joints)  
@@ -97,18 +121,15 @@ class RobotStruct:
     
   @staticmethod
   def from_dict(data: Dict, lib: str = "numpy") -> "RobotStruct":  
+    from mathrobo import SE3
+
     if not isinstance(data, dict):
         raise ValueError("Input data must be a dictionary.")
     
     joints = []
     links = []
 
-    if lib == "jax":
-      xp = jnp
-    elif lib == "numpy":
-      xp = np
-    else:
-        raise ValueError(f"Unsupported library: {lib}. Use 'jax' or 'numpy'.")
+    xp = _array_module(lib)
     
     links = [LinkStruct(
         id=link["id"],
@@ -244,12 +265,7 @@ class LinkStruct:
   #specific for rigid link or soft link
   @staticmethod
   def _select_mat(type: str, lib: str = "numpy") -> np.ndarray:
-      if lib == "jax":
-          xp = jnp
-      elif lib == "numpy":
-          xp = np
-      else:
-          raise ValueError(f"Unsupported library: {lib}. Use 'jax' or 'numpy'")
+      xp = _array_module(lib)
       mat = xp.zeros((6, 1))
       if type == "rigid":
           return mat
@@ -262,12 +278,7 @@ class LinkStruct:
 class JointStruct:
     dof_index : int = 0
     def __init__(self, id: int, name: str, type: str, axis: np.ndarray, parent_link_id: int, child_link_id: int, origin: SE3, lib: str = "numpy"):
-        if lib == "jax":
-            xp = jnp
-        elif lib == "numpy":
-            xp = np
-        else:
-            raise ValueError(f"Unsupported library: {lib}. Use 'jax' or 'numpy'")
+        xp = _array_module(lib)
         self.id = id
         self.name = name
         self.type = type
@@ -299,12 +310,8 @@ class JointStruct:
     #specific for 1 DOF joint or fix joint
     @staticmethod
     def _select_mat(type: str, axis: np.ndarray, lib: str = "numpy") -> np.ndarray:
-        if lib == "jax":
-            mat = jnp.zeros((6, 1))
-        elif lib == "numpy":
-            mat = np.zeros((6, 1))
-        else:
-            raise ValueError(f"Unsupported library: {lib}. Use 'jax' or 'numpy'")
+        xp = _array_module(lib)
+        mat = xp.zeros((6, 1))
 
         if type == "fix":
             return mat

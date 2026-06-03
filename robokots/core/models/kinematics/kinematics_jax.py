@@ -7,7 +7,6 @@ from typing import List
 
 import jax
 import jax.numpy as jnp
-from jax import lax
 from mathrobo import SE3, CMTM
 from .base import JointData
 
