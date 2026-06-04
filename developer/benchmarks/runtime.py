@@ -21,6 +21,10 @@ OPS = (
     "link_diff_numerical",
     "jacobian_analytic",
     "jacobian_numerical",
+    "jacobian_mul_vector",
+    "jacobian_mul_matrix",
+    "jacobian_transpose_mul_vector",
+    "jacobian_transpose_mul_matrix",
     "dynamics_jacobian_analytic",
     "dynamics_jacobian_numerical",
     "update_state_cached",
@@ -41,6 +45,7 @@ CONFIG = {
     "repeat_numerical": 10,
     "warmup": 5,
     "seed": 0,
+    "rhs_cols": 8,
     "ops": list(OPS),
     # Baseline mean values [ms] for this repository/config.
     # Update these after intentional performance changes.
@@ -190,6 +195,7 @@ def main() -> None:
     dynamics_jacobian_owner_type = str(CONFIG.get("dynamics_jacobian_owner_type", "joint"))
     link_diff_data_type = str(CONFIG.get("link_diff_data_type", "frame"))
     link_diff_link_count = int(CONFIG.get("link_diff_link_count", 3))
+    rhs_cols = int(CONFIG.get("rhs_cols", 8))
 
     if not model_path.exists():
         raise FileNotFoundError(f"Model file not found: {model_path}")
@@ -214,6 +220,12 @@ def main() -> None:
     end_link = kots.link_name_list()[-1]
     end_joint = kots.joint_name_list()[-1]
     st_jacobian = StateType("link", end_link, jacobian_data_type)
+    kots.kinematics(order=order)
+    jacobian_output_dim = kots.jacobian(st_jacobian, numerical=False).shape[-2]
+    jacobian_rhs_vector = rng.standard_normal(kots.dof() * st_jacobian.time_order)
+    jacobian_rhs_matrix = rng.standard_normal((kots.dof() * st_jacobian.time_order, rhs_cols))
+    jacobian_transpose_rhs_vector = rng.standard_normal(jacobian_output_dim)
+    jacobian_transpose_rhs_matrix = rng.standard_normal((jacobian_output_dim, rhs_cols))
     dynamics_jacobian_owner_name = CONFIG.get("dynamics_jacobian_owner_name")
     if dynamics_jacobian_owner_name is None:
         dynamics_jacobian_owner_name = end_joint if dynamics_jacobian_owner_type == "joint" else end_link
@@ -236,6 +248,7 @@ def main() -> None:
     print(f"warmup     : {warmup}")
     print(f"repeat     : {repeat}")
     print(f"repeat_num : {repeat_numerical}")
+    print(f"rhs_cols   : {rhs_cols}")
     print(f"jacobian   : state={end_link}_link_{jacobian_data_type} order={st_jacobian.time_order}")
     print(
         "dyn_jacob  : "
@@ -272,6 +285,22 @@ def main() -> None:
 
     def op_jacobian_numerical() -> None:
         _ = kots.jacobian(st_jacobian, numerical=True)
+
+    def op_jacobian_mul_vector() -> None:
+        kots.kinematics(order=order)
+        _ = kots.jacobian_mul(st_jacobian, jacobian_rhs_vector, numerical=False)
+
+    def op_jacobian_mul_matrix() -> None:
+        kots.kinematics(order=order)
+        _ = kots.jacobian_mul(st_jacobian, jacobian_rhs_matrix, numerical=False)
+
+    def op_jacobian_transpose_mul_vector() -> None:
+        kots.kinematics(order=order)
+        _ = kots.jacobian_transpose_mul(st_jacobian, jacobian_transpose_rhs_vector, numerical=False)
+
+    def op_jacobian_transpose_mul_matrix() -> None:
+        kots.kinematics(order=order)
+        _ = kots.jacobian_transpose_mul(st_jacobian, jacobian_transpose_rhs_matrix, numerical=False)
 
     def op_dynamics_jacobian_analytic() -> None:
         kots.dynamics(order=order)
@@ -327,6 +356,10 @@ def main() -> None:
         "link_diff_numerical": op_link_diff_numerical,
         "jacobian_analytic": op_jacobian_analytic,
         "jacobian_numerical": op_jacobian_numerical,
+        "jacobian_mul_vector": op_jacobian_mul_vector,
+        "jacobian_mul_matrix": op_jacobian_mul_matrix,
+        "jacobian_transpose_mul_vector": op_jacobian_transpose_mul_vector,
+        "jacobian_transpose_mul_matrix": op_jacobian_transpose_mul_matrix,
         "dynamics_jacobian_analytic": op_dynamics_jacobian_analytic,
         "dynamics_jacobian_numerical": op_dynamics_jacobian_numerical,
         "update_state_cached": op_update_state_cached,

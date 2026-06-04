@@ -9,8 +9,9 @@ normal RoboKots runtime path.
 uv run python -m developer.benchmarks.runtime
 ```
 
-Measures kinematics, dynamics, Jacobian, numerical Jacobian, and cached state
-update runtime on the sample model.
+Measures kinematics, dynamics, Jacobian, numerical Jacobian, Jacobian
+vector/matrix products, Jacobian-transpose vector/matrix products, and cached
+state update runtime on the sample model.
 
 ## Batch API Benchmark
 

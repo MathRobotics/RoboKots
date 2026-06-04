@@ -4,12 +4,13 @@
 
 import dataclasses
 from typing import List, Dict
-from .state import StateType, keys_time_order
+from .state import StateType, is_in_keys_dynamics, keys_time_order
 
 @dataclasses.dataclass
 class RobotNames:
   joint_names: List[str]
   link_names: List[str]
+  active_joint_names: List[str] = None
   
 class TargetList:
   def __init__(self, targets: List["StateType"]):
@@ -29,6 +30,7 @@ class TargetList:
         data_types = [target.get("data_type")]
       else:
         data_types = list(target.get("data_type"))
+      owner_type = target["owner_type"]
       owner_names = []
       if target["owner_type"] == "joint":
         if target["owner_name"] not in robot.joint_names:
@@ -43,12 +45,17 @@ class TargetList:
       elif target["owner_type"] == "total_link":
         owner_names.append(robot.link_names)
       elif target["owner_type"] == "total_joint":
-        owner_names.append(robot.joint_names)
+        if not is_in_keys_dynamics(data_types):
+          raise ValueError("TargetList.from_dict: total_joint targets support only dynamics data types")
+        if robot.active_joint_names is None:
+          raise ValueError("TargetList.from_dict: total_joint targets require active_joint_names")
+        owner_type = "joint"
+        owner_names.extend(robot.active_joint_names)
 
       for dt in data_types:
         for owner_name in owner_names:
           st = StateType(
-            owner_type=target["owner_type"],
+            owner_type=owner_type,
             owner_name=owner_name,
             data_type=dt,
             frame_name=target.get("frame_name")

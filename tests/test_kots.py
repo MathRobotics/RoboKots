@@ -1,9 +1,11 @@
+import json
 import numpy as np
 import pytest
 from pathlib import Path
 
 import mathrobo as mr
 from robokots.kots import *
+from robokots.core.target import TargetList, RobotNames
 from robokots.core.models.kinematics.kinematics_jax import *
 from robokots.outward.diff.outward_jax import kinematics_jax as outward_kinematics_jax
 
@@ -402,6 +404,32 @@ def test_jacobian_transpose_mul_dynamics_matches_jacobian_product():
     )
 
 
+def test_jacobian_transpose_mul_matrix_dynamics_matches_jacobian_product():
+    kots = _make_kots(order=5)
+    rng = np.random.default_rng(25)
+
+    motion = rng.standard_normal(kots.order() * kots.dof())
+    kots.import_motions(motion)
+    kots.dynamics()
+
+    states = [
+        StateType("link", TARGET_LINK, "snap"),
+        StateType("link", TARGET_LINK, "momentum_diff3"),
+        StateType("joint", "joint3", "momentum_diff3"),
+        StateType("joint", "joint3", "force_diff2"),
+        StateType("joint", "joint3", "torque_diff2"),
+    ]
+    jacob = kots.jacobian(states)
+    mat = rng.standard_normal((jacob.shape[0], 4))
+
+    np.testing.assert_allclose(
+        kots.jacobian_transpose_mul(states, mat),
+        jacob.T @ mat,
+        atol=1e-10,
+        rtol=1e-10,
+    )
+
+
 def test_jacobian_transpose_mul_low_order_momentum_matches_jacobian_product():
     kots = _make_kots(order=2)
     rng = np.random.default_rng(15)
@@ -424,6 +452,129 @@ def test_jacobian_transpose_mul_low_order_momentum_matches_jacobian_product():
         atol=1e-10,
         rtol=1e-10,
     )
+
+    mat = rng.standard_normal((jacob.shape[0], 3))
+    np.testing.assert_allclose(
+        kots.jacobian_transpose_mul(states, mat),
+        jacob.T @ mat,
+        atol=1e-10,
+        rtol=1e-10,
+    )
+
+
+def test_total_joint_dynamics_expands_to_joint_refs_for_jacobian_apis():
+    kots = _make_kots(order=5)
+    rng = np.random.default_rng(26)
+
+    motion = rng.standard_normal(kots.order() * kots.dof())
+    kots.import_motions(motion)
+    kots.dynamics()
+
+    total = StateType("total_joint", "total_joint", "torque_diff2")
+    joint_refs = [
+        StateType("joint", joint.name, "torque_diff2")
+        for joint in kots.robot_.joints
+        if joint.dof > 0
+    ]
+
+    np.testing.assert_allclose(
+        kots.state_info(total),
+        kots.state_info_list(joint_refs).reshape(-1),
+        atol=1e-12,
+        rtol=1e-12,
+    )
+
+    jacob = kots.jacobian(joint_refs)
+    np.testing.assert_allclose(kots.jacobian(total), jacob, atol=1e-12, rtol=1e-12)
+
+    rhs = rng.standard_normal(jacob.shape[1])
+    np.testing.assert_allclose(
+        kots.jacobian_mul(total, rhs),
+        kots.jacobian_mul(joint_refs, rhs),
+        atol=1e-10,
+        rtol=1e-10,
+    )
+
+    rhs_matrix = rng.standard_normal((jacob.shape[1], 4))
+    np.testing.assert_allclose(
+        kots.jacobian_mul(total, rhs_matrix),
+        kots.jacobian_mul(joint_refs, rhs_matrix),
+        atol=1e-10,
+        rtol=1e-10,
+    )
+
+    transpose_rhs = rng.standard_normal(jacob.shape[0])
+    np.testing.assert_allclose(
+        kots.jacobian_transpose_mul(total, transpose_rhs),
+        kots.jacobian_transpose_mul(joint_refs, transpose_rhs),
+        atol=1e-10,
+        rtol=1e-10,
+    )
+
+    transpose_rhs_matrix = rng.standard_normal((jacob.shape[0], 3))
+    np.testing.assert_allclose(
+        kots.jacobian_transpose_mul(total, transpose_rhs_matrix),
+        kots.jacobian_transpose_mul(joint_refs, transpose_rhs_matrix),
+        atol=1e-10,
+        rtol=1e-10,
+    )
+
+    state_tensor = kots.state_tensor(total)
+    jacobian_tensor = kots.jacobian_tensor(total)
+    assert [st.owner_name for st in state_tensor.state_types] == [st.owner_name for st in joint_refs]
+    assert [st.owner_name for st in jacobian_tensor.state_types] == [st.owner_name for st in joint_refs]
+
+
+def test_total_joint_target_from_file_expands_to_joint_refs(tmp_path: Path):
+    target_path = tmp_path / "total_joint_target.json"
+    target_path.write_text(
+        json.dumps(
+            {
+                "targets": [
+                    {
+                        "data_type": "torque_diff2",
+                        "owner_type": "total_joint",
+                        "owner_name": "total_joint",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    kots = _make_kots(order=5)
+    rng = np.random.default_rng(27)
+    kots.set_target_from_file(str(target_path))
+    kots.import_motions(rng.standard_normal(kots.order() * kots.dof()))
+    kots.dynamics()
+
+    joint_refs = [
+        StateType("joint", joint.name, "torque_diff2")
+        for joint in kots.robot_.joints
+        if joint.dof > 0
+    ]
+
+    assert [st.owner_type for st in kots.target_._targets] == ["joint"] * len(joint_refs)
+    assert [st.owner_name for st in kots.target_._targets] == [st.owner_name for st in joint_refs]
+
+    np.testing.assert_allclose(kots.target_state_info().reshape(-1), kots.state_info_list(joint_refs).reshape(-1))
+    np.testing.assert_allclose(kots.jacobian_target(), kots.jacobian(joint_refs), atol=1e-12, rtol=1e-12)
+
+
+def test_total_joint_target_requires_active_joint_names_for_direct_target_list():
+    with pytest.raises(ValueError, match="active_joint_names"):
+        TargetList.from_dict(
+            {
+                "targets": [
+                    {
+                        "data_type": "torque_diff2",
+                        "owner_type": "total_joint",
+                        "owner_name": "total_joint",
+                    }
+                ]
+            },
+            RobotNames(["root", "joint1"], ["world", "link1"]),
+        )
 
 
 def test_batched_kinematics_matches_loop():
