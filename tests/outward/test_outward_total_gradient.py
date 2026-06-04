@@ -26,6 +26,109 @@ def _unexpected_builder(name: str):
     return wrapped
 
 
+def test_internal_matvec_helpers_have_explicit_shape_contracts():
+    mat = np.arange(6.0).reshape(2, 3)
+    vec = np.arange(3.0)
+    batched_vec = np.arange(12.0).reshape(4, 3)
+    rhs = np.arange(15.0).reshape(3, 5)
+
+    np.testing.assert_allclose(
+        outward_total_gradient._batched_matvec(mat, vec),
+        mat @ vec,
+    )
+    np.testing.assert_allclose(
+        outward_total_gradient._batched_matvec(mat, batched_vec),
+        (mat @ batched_vec[..., None])[..., 0],
+    )
+    np.testing.assert_allclose(
+        outward_total_gradient._matmul_rhs(mat, rhs),
+        mat @ rhs,
+    )
+
+    try:
+        outward_total_gradient._batched_matvec(mat, rhs)
+    except ValueError as exc:
+        assert "vec last dimension" in str(exc)
+    else:
+        raise AssertionError("_batched_matvec should reject matrix RHS layout")
+
+
+def test_outward_kinematics_jacobian_matmul_rhs_matches_jacobian_product():
+    kots = Kots.from_json_file(str(MODEL_PATH), order=3)
+    rng = np.random.default_rng(20)
+    kots.import_motions(rng.standard_normal(kots.order() * kots.dof()))
+    kots.kinematics()
+
+    states = [
+        StateType("link", "arm3", "frame"),
+        StateType("link", "arm3", "vel"),
+        StateType("link", "arm3", "acc"),
+    ]
+    rhs = rng.standard_normal((kots.dof() * StateType.max_time_order(states), 4))
+
+    actual = outward_total_gradient.outward_jacobian_matmul_rhs(
+        kots.robot_,
+        kots.state_dict_,
+        states,
+        rhs,
+    )
+    expected = outward_total_gradient.outward_jacobian(kots.robot_, kots.state_dict_, states) @ rhs
+    np.testing.assert_allclose(actual, expected, atol=1e-10, rtol=1e-10)
+
+    actual_parts = outward_total_gradient.outward_jacobian_matmul_rhs(
+        kots.robot_,
+        kots.state_dict_,
+        states,
+        rhs,
+        list_output=True,
+    )
+    expected_parts = [
+        jacob @ rhs
+        for jacob in outward_total_gradient.outward_jacobian(kots.robot_, kots.state_dict_, states, list_output=True)
+    ]
+    for actual_part, expected_part in zip(actual_parts, expected_parts):
+        np.testing.assert_allclose(actual_part, expected_part, atol=1e-10, rtol=1e-10)
+
+
+def test_outward_dynamics_jacobian_matmul_rhs_matches_jacobian_product(monkeypatch):
+    kots = Kots.from_json_file(str(MODEL_PATH), order=5)
+    rng = np.random.default_rng(21)
+    kots.import_motions(rng.standard_normal(kots.order() * kots.dof()))
+    kots.dynamics()
+
+    states = [
+        StateType("link", "arm3", "momentum"),
+        StateType("joint", "joint3", "force"),
+        StateType("joint", "joint3", "torque"),
+    ]
+    rhs = rng.standard_normal((kots.dof() * StateType.max_time_order(states), 3))
+    expected = outward_total_gradient.outward_jacobian(kots.robot_, kots.state_dict_, states) @ rhs
+    expected_parts = [
+        jacob @ rhs
+        for jacob in outward_total_gradient.outward_jacobian(kots.robot_, kots.state_dict_, states, list_output=True)
+    ]
+
+    monkeypatch.setattr(outward_total_gradient, "outward_jacobian", _unexpected_builder("outward_jacobian"))
+
+    actual = outward_total_gradient.outward_jacobian_matmul_rhs(
+        kots.robot_,
+        kots.state_dict_,
+        states,
+        rhs,
+    )
+    np.testing.assert_allclose(actual, expected, atol=1e-10, rtol=1e-10)
+
+    actual_parts = outward_total_gradient.outward_jacobian_matmul_rhs(
+        kots.robot_,
+        kots.state_dict_,
+        states,
+        rhs,
+        list_output=True,
+    )
+    for actual_part, expected_part in zip(actual_parts, expected_parts):
+        np.testing.assert_allclose(actual_part, expected_part, atol=1e-10, rtol=1e-10)
+
+
 def test_outward_jacobian_link_momentum_uses_only_needed_builder(monkeypatch):
     kots = Kots.from_json_file(str(MODEL_PATH), order=5)
     robot = kots.robot_
@@ -321,4 +424,3 @@ def test_outward_jacobian_joint_torque_matches_full_builder():
     expected = full[start:stop, :]
 
     np.testing.assert_allclose(actual, expected)
-
