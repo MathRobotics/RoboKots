@@ -47,6 +47,7 @@ direct `jacobian_transpose_mul` API against explicit `jacobian(...).T @ vec`.
 
 ```bash
 uv run --extra developer python -m developer.benchmarks.pinocchio_compare
+uv run --extra developer python -m developer.benchmarks.fast_minimal_compare
 ```
 
 Pinocchio is optional and intentionally not listed as a normal project
@@ -56,3 +57,7 @@ The Pinocchio comparison measures runtime categories on a generated model with
 the same topology. The outputs are not exactly equivalent to RoboKots CMTM
 state/Jacobian outputs, so use the numbers as a performance reference rather
 than a strict numerical equivalence test.
+
+The minimal fast comparison strips RoboKots semantics down to q/v/a array-only
+kernels for FK, inverse dynamics, and joint Jacobian timing. It is intended to
+measure the lower bound for a compiled fast path, not to replace public APIs.
