@@ -285,7 +285,7 @@ def robokots_operation_call(
     if op_name.endswith("matvec"):
         if vec is None:
             raise ValueError(f"{op_name} requires vec")
-        return kots.jacobian_matvec(states, vec)
+        return kots.jacobian_mul(states, vec)
     raise ValueError(f"Invalid op_name: {op_name}")
 
 

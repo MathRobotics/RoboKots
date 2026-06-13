@@ -118,7 +118,7 @@ def _run_one(
 
     jacob = kots.jacobian(states)
     vec = rng.standard_normal(jacob.shape[:-2] + (jacob.shape[-2],))
-    direct = kots.jacobian_transpose_matvec(states, vec)
+    direct = kots.jacobian_transpose_mul(states, vec)
     explicit = (np.swapaxes(jacob, -1, -2) @ vec[..., None])[..., 0]
     error_norm = float(np.linalg.norm(direct - explicit))
 
@@ -126,7 +126,7 @@ def _run_one(
         np.testing.assert_allclose(direct, explicit, rtol=rtol, atol=atol)
 
     direct_stats = measure(
-        lambda: kots.jacobian_transpose_matvec(states, vec),
+        lambda: kots.jacobian_transpose_mul(states, vec),
         repeats=repeat,
         warmup=warmup,
     )
@@ -147,8 +147,8 @@ def _run_one(
         "order": order,
         "target_count": len(states),
         "required_order": required_order,
-        "jacobian_rows": jacob.shape[0],
-        "jacobian_cols": jacob.shape[1],
+        "jacobian_rows": jacob.shape[-2],
+        "jacobian_cols": jacob.shape[-1],
         "direct_mean_ms": direct_stats["mean_ms"],
         "direct_std_ms": direct_stats["std_ms"],
         "direct_min_ms": direct_stats["min_ms"],
