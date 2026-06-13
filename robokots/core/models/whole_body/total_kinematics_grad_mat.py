@@ -3,6 +3,7 @@ import numpy as np
 from robokots.core import RobotStruct
 from robokots.core.state import dim_to_dof
 from robokots.core.state_dict import state_dict_to_cmtm, state_dict_to_rel_cmtm
+from robokots.core.models.cmtm_apply import apply_mat_adj, apply_tangent_mat
 from ..kinematics.kinematics_matrix import joint_select_diag_mat
 
 from .total_kinematics_mat import total_coord_arrange
@@ -43,7 +44,7 @@ def total_joint_tan_vel_to_link_tan_vel_grad_matvec(r : RobotStruct, state : dic
         for j in joint_route:
             joint = r.joints[j]
             rel_cmtm = state_dict_to_rel_cmtm(state, link.name, r.links[joint.child_link_id].name, "link", order)
-            result[out_start:out_start+n_] += rel_cmtm.mat_adj() @ vec[j*n_:(j+1)*n_]
+            result[out_start:out_start+n_] += apply_mat_adj(rel_cmtm, vec[j*n_:(j+1)*n_])
     return result
 
 def total_joint_tan_vel_to_link_vel_grad_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 3) -> np.ndarray:
@@ -75,7 +76,7 @@ def total_joint_tan_vel_to_link_vel_grad_matvec(r : RobotStruct, state : dict, v
         for j in joint_route:
             joint = r.joints[j]
             rel_cmtm = state_dict_to_rel_cmtm(state, link.name, r.links[joint.child_link_id].name, "link", order)
-            result[out_start:out_start+n_] += tangent_mat_inv @ rel_cmtm.mat_adj() @ vec[j*n_:(j+1)*n_]
+            result[out_start:out_start+n_] += tangent_mat_inv @ apply_mat_adj(rel_cmtm, vec[j*n_:(j+1)*n_])
     return result
 
 def total_joint_tan_vel_to_link_sp_vel_grad_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 3) -> np.ndarray:
@@ -110,7 +111,7 @@ def total_joint_tan_vel_to_link_sp_vel_grad_matvec(r : RobotStruct, state : dict
         for j in joint_route:
             joint = r.joints[j]
             rel_cmtm = state_dict_to_rel_cmtm(state, link.name, r.links[joint.child_link_id].name, "link", order)
-            result[out_start:out_start+n_l] += tangent_mat_inv_sp @ rel_cmtm.mat_adj() @ vec[j*n_j:(j+1)*n_j]
+            result[out_start:out_start+n_l] += tangent_mat_inv_sp @ apply_mat_adj(rel_cmtm, vec[j*n_j:(j+1)*n_j])
     return result
 
 def total_coord_to_joint_tan_vel_grad_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 3) -> np.ndarray:
@@ -136,7 +137,8 @@ def total_coord_to_joint_tan_vel_grad_matvec(r : RobotStruct, state : dict, vec 
         joint_cmtm = state_dict_to_cmtm(state, joint.name, "joint", order)
         coord_start = joint.dof_index * order
         joint_vec = vec[coord_start:coord_start + joint.dof*order]
-        result[i*n_:(i+1)*n_] = joint_cmtm.tangent_mat() @ joint_select_diag_mat(joint.select_mat, order) @ joint_vec
+        selected = joint_select_diag_mat(joint.select_mat, order) @ joint_vec
+        result[i*n_:(i+1)*n_] = apply_tangent_mat(joint_cmtm, selected)
 
     return result
 

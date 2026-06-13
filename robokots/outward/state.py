@@ -30,6 +30,7 @@ from ..core.models.dynamics.dynamics import (
     link_force_cmvec,
     link_momentum_cmvec,
 )
+from ..core.models.cmtm_apply import apply_mat_adj
 
 
 def _batch_eye_cmtm(batch_shape: tuple[int, ...], order: int) -> CMTM:
@@ -85,10 +86,7 @@ def _left_matmul(mat: np.ndarray, value: np.ndarray) -> np.ndarray:
 
 
 def _cmtm_matvec(cmtm: CMTM, vec: np.ndarray) -> np.ndarray:
-  vec = np.asarray(vec)
-  if vec.ndim == 1:
-    return cmtm.mat_adj() @ vec
-  return (cmtm.mat_adj() @ vec[..., None])[..., 0]
+  return apply_mat_adj(cmtm, vec)
 
 
 def _joint_local_and_rel_cmtm(joint_data, joint_motions: np.ndarray, order: int) -> tuple[CMTM, CMTM]:
@@ -410,7 +408,7 @@ def build_dynamics_outward_state(robot : RobotStruct, motions, dynamics_order = 
       c_joint_rel_cmtm = momentum_link_cmtm_dict[child.name].inv() @ momentum_link_cmtm_dict[c_joint_link.name]
       c_joint_cmtm_wrench = CMTM.change_elemclass(c_joint_rel_cmtm, SE3wrench)
 
-      transported = (c_joint_cmtm_wrench.mat_adj() @ c_joint_momentum.cm_vec()[..., None])[..., 0]
+      transported = apply_mat_adj(c_joint_cmtm_wrench, c_joint_momentum.cm_vec())
       joint_momentums += _left_matmul(factor_mat, transported)
 
     # calculate joint force and torque

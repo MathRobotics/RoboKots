@@ -54,6 +54,7 @@ from robokots.core.models.dynamics.base import spatial_inertia
 from robokots.core.models.dynamics.dynamics_matrix import (
     inertia_diag_mat,
 )
+from robokots.core.models.cmtm_apply import apply_mat_adj, apply_mat_inv_adj
 
 
 def _selected_coord_to_link_vel_grad_mat(
@@ -269,7 +270,7 @@ def _batch_total_joint_tan_vel_to_link_tan_vel_grad_matvec(
         for j in joint_route:
             joint = robot.joints[j]
             rel_cmtm = state_dict_to_rel_cmtm(state, link.name, robot.links[joint.child_link_id].name, "link", order)
-            result[..., out_start:out_start+n_] += _batched_matvec(rel_cmtm.mat_adj(), vec[..., j*n_:(j+1)*n_])
+            result[..., out_start:out_start+n_] += apply_mat_adj(rel_cmtm, vec[..., j*n_:(j+1)*n_])
     return result
 
 
@@ -680,7 +681,7 @@ def _batch_total_world_link_cmtm_wrench_matvec(
     for i, link in enumerate(robot.links):
         start = i * n_
         cmtm_wrench = state_dict_to_cmtm_wrench(state, link.name, "link", order)
-        result[..., start:start+n_] = _batched_matvec(cmtm_wrench.mat_adj(), vec[..., start:start+n_])
+        result[..., start:start+n_] = apply_mat_adj(cmtm_wrench, vec[..., start:start+n_])
     return result
 
 
@@ -716,7 +717,7 @@ def _batch_total_world_joint_cmtm_wrench_inv_matvec(
     for i, joint in enumerate(robot.joints):
         start = i * n_
         cmtm_wrench = state_dict_to_cmtm_wrench(state, robot.links[joint.child_link_id].name, "link", order)
-        result[..., start:start+n_] = _batched_matvec(cmtm_wrench.mat_inv_adj(), vec[..., start:start+n_])
+        result[..., start:start+n_] = apply_mat_inv_adj(cmtm_wrench, vec[..., start:start+n_])
     return result
 
 
@@ -1455,7 +1456,7 @@ def _batch_selected_coord_to_joint_momentum_grad_mat(
         cmtm_wrench = state_dict_to_cmtm_wrench(state, child_link.name, "link", order - 1)
         block_world = factorial @ cmtm_wrench.mat_inv_adj() @ factorial_inv
         local_joint_momentum = state_dict_to_cmvec(state, joint.name, "joint", "momentum", order - 1)
-        world_vec = _batched_matvec(factorial @ cmtm_wrench.mat_adj(), local_joint_momentum.cm_vec())
+        world_vec = _batched_matvec(factorial, apply_mat_adj(cmtm_wrench, local_joint_momentum.cm_vec()))
         world_joint_momentum = CMVector(world_vec.reshape(world_vec.shape[:-1] + (order - 1, -1)))
         block_tan = factorial @ cmtm_wrench.mat_inv_var_x_arb_vec_jacob(world_joint_momentum, frame="bframe")
         mat[..., row:row+n_m, :] = (
@@ -1633,7 +1634,7 @@ def _selected_coord_to_joint_momentum_grad_mat(
         block_world = factorial @ cmtm_wrench.mat_inv_adj() @ factorial_inv
         local_joint_momentum = state_dict_to_cmvec(state, joint.name, "joint", "momentum", order - 1)
         world_joint_momentum = CMVector(
-            (factorial @ cmtm_wrench.mat_adj() @ local_joint_momentum.cm_vec()).reshape(order - 1, -1)
+            (factorial @ apply_mat_adj(cmtm_wrench, local_joint_momentum.cm_vec())).reshape(order - 1, -1)
         )
         block_tan = factorial @ cmtm_wrench.mat_inv_var_x_arb_vec_jacob(world_joint_momentum, frame="bframe")
         mat[row:row+n_m, :] = (

@@ -4,6 +4,7 @@ from robokots.core import RobotStruct
 from robokots.core.state import dim_to_dof
 from robokots.core.state_dict import state_dict_to_cmtm
 from robokots.core.state_dict import state_dict_to_cmtm_wrench, state_dict_to_rel_cmtm_wrench
+from robokots.core.models.cmtm_apply import apply_mat_adj, apply_mat_inv_adj
 
 from ..kinematics.kinematics_matrix import joint_select_diag_mat
 from ..dynamics.base import spatial_inertia
@@ -50,7 +51,7 @@ def total_world_link_cmtm_wrench_matvec(r : RobotStruct, state : dict, vec : np.
     for i, link in enumerate(r.links):
         start = i * n_
         cmtm_wrench = state_dict_to_cmtm_wrench(state, link.name, "link", order)
-        result[start:start+n_] = cmtm_wrench.mat_adj() @ vec[start:start+n_]
+        result[start:start+n_] = apply_mat_adj(cmtm_wrench, vec[start:start+n_])
     return result
 
 def total_world_link_cmtm_wrench_inv(r : RobotStruct, state : dict, order : int = 1, dim : int = 3) -> np.ndarray:
@@ -87,7 +88,7 @@ def total_world_joint_cmtm_wrench_inv_matvec(r : RobotStruct, state : dict, vec 
     for i, joint in enumerate(r.joints):
         start = i * n_
         cmtm_wrench = state_dict_to_cmtm_wrench(state, r.links[joint.child_link_id].name, "link", order)
-        result[start:start+n_] = cmtm_wrench.mat_inv_adj() @ vec[start:start+n_]
+        result[start:start+n_] = apply_mat_inv_adj(cmtm_wrench, vec[start:start+n_])
     return result
 
 def total_joint_wrench_to_link_wrench_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 3) -> np.ndarray:
