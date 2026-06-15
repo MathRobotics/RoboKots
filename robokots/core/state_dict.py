@@ -278,7 +278,7 @@ def state_dict_to_frame_wrench(state : dict, owner_name : str, owner_type : str 
     '''
     if hasattr(state, "cmtm_wrench"):
         mat = state.cmtm_wrench(owner_type, owner_name, 1).elem_mat()
-        return SE3wrench(mat[:3, :3], mat[:3, 3])
+        return SE3wrench(mat[..., :3, :3], mat[..., :3, 3])
 
     cache_key = (owner_name, owner_type)
     frame_cache = _state_bucket(state, "frame_wrench")
@@ -537,6 +537,9 @@ def state_dict_to_cmvec(state : dict, owner_name : str, owner_type : str, data_t
             )
         if order == cmvec._n:
             return cmvec
+        truncate = getattr(cmvec, "truncate", None)
+        if truncate is not None:
+            return truncate(order)
         return CMVector(cmvec.vecs()[..., :order, :])
 
     vecs = _collect_state_vecs_fast(state, owner_name, owner_type, data_type, order=order)

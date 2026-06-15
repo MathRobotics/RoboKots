@@ -24,6 +24,7 @@ from Python as `pinocchio`.
 ## Benchmarks
 
 All performance and comparison scripts live in `developer/benchmarks`.
+See `developer/benchmarks/README.md` for the full benchmark list and notes.
 
 Run the regular runtime benchmark:
 
@@ -64,3 +65,9 @@ If Pinocchio is not installed, the comparison script exits with a skip message.
 The comparison measures runtime categories on generated models with the same
 topology; it is not a strict numerical equivalence test for RoboKots CMTM
 outputs.
+
+Run the fixed Rust comparison used for optimization work:
+
+```bash
+uv run --extra developer python -m developer.benchmarks.fixed_rust_compare --profile quick
+```

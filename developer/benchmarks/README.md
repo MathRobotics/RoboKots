@@ -61,3 +61,27 @@ than a strict numerical equivalence test.
 The minimal fast comparison strips RoboKots semantics down to q/v/a array-only
 kernels for FK, inverse dynamics, and joint Jacobian timing. It is intended to
 measure the lower bound for a compiled fast path, not to replace public APIs.
+
+## Fixed Rust Comparison
+
+```bash
+uv run --extra developer python -m developer.benchmarks.fixed_rust_compare --profile quick
+uv run --extra developer python -m developer.benchmarks.fixed_rust_compare --profile full
+```
+
+This is the stable comparison suite for Rust optimization work. It uses fixed
+DOF counts, batch sizes, random seed, and output columns so results can be
+compared across implementation changes.
+
+The core section compares Pinocchio, the Rust Pinocchio-like q/v/a path, CMTM
+full dynamics, CMTM torque-only dynamics, and higher-order CMTM dynamics. The
+public section compares Python and Rust RoboKots API calls for torque and
+second-order torque derivatives, including a mixed `total_joint` output with
+joint coord/velocity/acceleration/jerk and torque/dtorque/ddtorque. The selected
+section measures already-computed state kernels (`STATE`, `J`, `JM8`, and
+`JTM4`) for total torque, local link dynamics, and the mixed `total_joint`
+case, so regressions in Rust fast paths are visible without state update
+overhead. The mixed selected case is intentionally downsampled in `quick`
+because `torque_diff1/torque_diff2` still exercise the general outward
+transpose/Jacobian paths; use `full` when you need the 64-DOF mixed selected
+numbers. Results are written to CSV with a matching JSON metadata file.

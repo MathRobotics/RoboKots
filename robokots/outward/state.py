@@ -113,6 +113,13 @@ def get_dof(robot : RobotStruct, state_type : StateType, dim : int = 3) -> int:
         return data_type_dof(state_type.data_type, dim = dim)
 
 def get_value(robot : RobotStruct, state_dict : dict, state_type : StateType):
+    if hasattr(state_dict, "state_value"):
+        try:
+            return state_dict.state_value(state_type)
+        except NotImplementedError:
+            if not isinstance(state_dict, dict) and not hasattr(state_dict, "cmtm"):
+                raise
+
     if state_type.owner_type == "link":
         link_name = state_type.owner_name
     elif state_type.owner_type == "joint":

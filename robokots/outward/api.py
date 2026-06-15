@@ -24,6 +24,8 @@ from .diff.outward_jacobians import jacobian_numerical
 _LAZY_API = {
     "build_kinematics_state_jax": ".diff.outward_jax",
     "kinematics_jax": ".diff.outward_jax",
+    "build_kinematics_outward_state_rust": ".rust",
+    "build_dynamics_outward_state_rust": ".rust",
 }
 
 
@@ -41,6 +43,8 @@ __all__ = [
     "build_kinematics_state",
     "build_kinematics_outward_state",
     "build_dynamics_outward_state",
+    "build_kinematics_outward_state_rust",
+    "build_dynamics_outward_state_rust",
     "build_dynamics_cmtm_state",
     "build_kinematics_state_jax",
     "kinematics_jax",

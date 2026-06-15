@@ -33,6 +33,20 @@ def _transpose_apply(mat: np.ndarray, vec: np.ndarray) -> np.ndarray:
     return (mat.T @ np.asarray(vec)[..., None])[..., 0]
 
 
+def _cmtm_var_jacob_transpose_matvec(cmtm, arb_vec, vec: np.ndarray, inverse: bool = False) -> np.ndarray:
+    if inverse:
+        fast = getattr(cmtm, "mat_inv_var_x_arb_vec_matvec", None)
+        if fast is not None:
+            return fast(arb_vec, vec, frame="bframe", transpose=True)
+        mat = cmtm.mat_inv_var_x_arb_vec_jacob(arb_vec, frame="bframe")
+    else:
+        fast = getattr(cmtm, "mat_var_x_arb_vec_matvec", None)
+        if fast is not None:
+            return fast(arb_vec, vec, frame="bframe", transpose=True)
+        mat = cmtm.mat_var_x_arb_vec_jacob(arb_vec, frame="bframe")
+    return _transpose_apply(mat, vec)
+
+
 def _transpose_total_coord_arrange_vec(
     robot: RobotStruct,
     vec: np.ndarray,
@@ -454,8 +468,12 @@ def _transpose_total_partial_link_tan_vel_to_world_link_momentum_grad_matvec(
     for i, link in enumerate(robot.links):
         start = i * n_
         arb_v = CMVector.set_cmvecs(total_cm_vecs[i].reshape(order-1, -1))
-        mat = state_dict_to_cmtm_wrench(state, link.name, "link", order-1).mat_var_x_arb_vec_jacob(arb_v, frame="bframe")
-        result[..., start:start+n_] = _transpose_apply(mat, adj_factor[..., start:start+n_])
+        cmtm_wrench = state_dict_to_cmtm_wrench(state, link.name, "link", order-1)
+        result[..., start:start+n_] = _cmtm_var_jacob_transpose_matvec(
+            cmtm_wrench,
+            arb_v,
+            adj_factor[..., start:start+n_],
+        )
     return result
 
 
@@ -492,8 +510,12 @@ def _transpose_total_partial_link_tan_vel_to_joint_momentum_grad_matvec(
         arb_v = CMVector.set_cmvecs(total_cm_vecs[i].reshape(order-1, -1))
         c_link = robot.links[joint.child_link_id]
         cmtm_wrench = state_dict_to_cmtm_wrench(state, c_link.name, "link", order-1)
-        mat = cmtm_wrench.mat_inv_var_x_arb_vec_jacob(arb_v, frame="bframe")
-        result[..., start:start+n_] = _transpose_apply(mat, adj_factor[..., start:start+n_])
+        result[..., start:start+n_] = _cmtm_var_jacob_transpose_matvec(
+            cmtm_wrench,
+            arb_v,
+            adj_factor[..., start:start+n_],
+            inverse=True,
+        )
     return result
 
 

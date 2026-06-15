@@ -104,6 +104,9 @@ class StateType:
 keys_kinematics = \
     ("pos", "rot", "frame", "vel", "acc", "jerk", "snap", "crackle", "pop", "lock", "drop", "shot", "put")
 
+keys_joint_motion = \
+    ("coord", "veloc", "accel", "jerk")
+
 keys_momentum = \
     ("momentum","momentum_diff1", "momentum_diff2", "momentum_diff3", "momentum_diff4", "momentum_diff5", "momentum_diff6", "momentum_diff7", "momentum_diff8")
 
@@ -113,7 +116,7 @@ keys_force = \
 keys_torque = \
     ("torque", "torque_diff1", "torque_diff2", "torque_diff3", "torque_diff4", "torque_diff5", "torque_diff6", "torque_diff7")
 
-keys = keys_kinematics + keys_momentum + keys_force + keys_torque
+keys = keys_kinematics + keys_joint_motion + keys_momentum + keys_force + keys_torque
 
 def is_in_keys_kinematics(keys_list):
     for k in keys_list:
@@ -154,6 +157,15 @@ def is_in_keys(keys_list):
 def filter_keys_kinematics(keys_list):
     return [k for k in keys_list if k in keys_kinematics]
 
+def is_in_keys_joint_motion(keys_list):
+    for k in keys_list:
+        if k not in keys_joint_motion:
+            return False
+    return True
+
+def filter_keys_joint_motion(keys_list):
+    return [k for k in keys_list if k in keys_joint_motion]
+
 def filter_keys_momentum(keys_list):
     return [k for k in keys_list if k in keys_momentum]
 
@@ -164,6 +176,9 @@ def filter_keys_torque(keys_list):
     return [k for k in keys_list if k in keys_torque]
 
 keys_time_order = {
+    "coord": 1,
+    "veloc": 2,
+    "accel": 3,
     "pos": 1,
     "rot": 1,
     "frame": 1,
@@ -192,6 +207,9 @@ keys_time_order = {
 }
 
 keys_order_kinematics = {
+    "coord": 1,
+    "veloc": 2,
+    "accel": 3,
     "frame": 1,
     "vel": 2,
     "acc": 3,
@@ -232,6 +250,9 @@ keys_order_torque = {
 keys_order = {**keys_order_kinematics, **keys_order_momentum, **keys_order_force, **keys_order_torque}
 
 keys_name = {
+    "coord" : "coord",
+    "veloc" : "veloc",
+    "accel" : "accel",
     "pos" : "pos",
     "rot" : "rot",
     "frame" : "frame",
@@ -282,6 +303,8 @@ def data_type_to_sub_func(data_type : str):
     elif data_type == "cmtm":
         from mathrobo import CMTM
         return CMTM.sub_vec
+    elif data_type in ["coord", "veloc", "accel"]:
+        return None
     elif data_type in ["pos", "vel", "acc"] \
         or data_type in ["jerk", "snap", "crackle", "pop", "lock", "drop", "shot", "put"]  \
         or data_type in ["force", "force_diff1", "force_diff2", "force_diff3"] \
@@ -300,7 +323,9 @@ def data_type_offset(data_type : str):
         return 0
 
 def data_type_dof(data_type : str, order = None, dim = 3):
-    if data_type == "pos" or data_type == "rot":
+    if data_type in ("coord", "veloc", "accel") or data_type in keys_torque:
+        return 1
+    elif data_type == "pos" or data_type == "rot":
         return dim
     elif data_type in ["vel", "acc"] \
         or data_type in ["jerk", "snap", "crackle", "pop", "lock", "drop", "shot", "put"]  \

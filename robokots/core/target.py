@@ -4,7 +4,7 @@
 
 import dataclasses
 from typing import List, Dict
-from .state import StateType, is_in_keys_dynamics, keys_time_order
+from .state import StateType, is_in_keys_dynamics, keys_joint_motion, keys_time_order
 
 @dataclasses.dataclass
 class RobotNames:
@@ -45,8 +45,8 @@ class TargetList:
       elif target["owner_type"] == "total_link":
         owner_names.append(robot.link_names)
       elif target["owner_type"] == "total_joint":
-        if not is_in_keys_dynamics(data_types):
-          raise ValueError("TargetList.from_dict: total_joint targets support only dynamics data types")
+        if not all(dt in keys_joint_motion or is_in_keys_dynamics([dt]) for dt in data_types):
+          raise ValueError("TargetList.from_dict: total_joint targets support only joint motion or dynamics data types")
         if robot.active_joint_names is None:
           raise ValueError("TargetList.from_dict: total_joint targets require active_joint_names")
         owner_type = "joint"

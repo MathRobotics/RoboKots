@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["maturin>=1.8,<2"]
+build-backend = "maturin"
 
 [project]
 name = "robokots"
@@ -37,6 +37,17 @@ developer = ["pin>=3.4.0"]
 
 [project.urls]
 Homepage = "https://github.com/MathRobotics/RoboKots"
+
+[tool.maturin]
+manifest-path = "robokots/_rust/Cargo.toml"
+module-name = "robokots._rust_core"
+python-source = "."
+exclude = [
+  "dist",
+  "dist/**",
+  "robokots/_rust/target",
+  "robokots/_rust/target/**",
+]
 
 [tool.pytest.ini_options]
 addopts = "-m 'not slow'"

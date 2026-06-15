@@ -124,6 +124,34 @@ def _batched_matvec(mat: np.ndarray, vec: np.ndarray) -> np.ndarray:
     return (mat @ vec[..., None])[..., 0]
 
 
+def _cmtm_var_jacob_matvec(cmtm, arb_vec, vec: np.ndarray, inverse: bool = False) -> np.ndarray:
+    if inverse:
+        fast = getattr(cmtm, "mat_inv_var_x_arb_vec_matvec", None)
+        if fast is not None:
+            return fast(arb_vec, vec, frame="bframe")
+        mat = cmtm.mat_inv_var_x_arb_vec_jacob(arb_vec, frame="bframe")
+    else:
+        fast = getattr(cmtm, "mat_var_x_arb_vec_matvec", None)
+        if fast is not None:
+            return fast(arb_vec, vec, frame="bframe")
+        mat = cmtm.mat_var_x_arb_vec_jacob(arb_vec, frame="bframe")
+    return _batched_matvec(mat, vec)
+
+
+def _cmtm_var_jacob_matmul_rhs(cmtm, arb_vec, rhs: np.ndarray, inverse: bool = False) -> np.ndarray:
+    if inverse:
+        fast = getattr(cmtm, "mat_inv_var_x_arb_vec_matmul_rhs", None)
+        if fast is not None:
+            return fast(arb_vec, rhs, frame="bframe")
+        mat = cmtm.mat_inv_var_x_arb_vec_jacob(arb_vec, frame="bframe")
+    else:
+        fast = getattr(cmtm, "mat_var_x_arb_vec_matmul_rhs", None)
+        if fast is not None:
+            return fast(arb_vec, rhs, frame="bframe")
+        mat = cmtm.mat_var_x_arb_vec_jacob(arb_vec, frame="bframe")
+    return _matmul_rhs(mat, rhs)
+
+
 def _matmul_rhs(mat: np.ndarray, rhs: np.ndarray) -> np.ndarray:
     mat = np.asarray(mat)
     rhs = np.asarray(rhs)
@@ -820,8 +848,12 @@ def _batch_total_link_cmtm_wrench_var_x_arb_vec_matvec(
     for i, link in enumerate(robot.links):
         start = i * n_
         arb_v = CMVector.set_cmvecs(total_cm_vecs[..., i, :].reshape(total_cm_vecs.shape[:-2] + (order, -1)))
-        mat = state_dict_to_cmtm_wrench(state, link.name, "link", order).mat_var_x_arb_vec_jacob(arb_v, frame="bframe")
-        result[..., start:start+n_] = _batched_matvec(mat, vec[..., start:start+n_])
+        cmtm_wrench = state_dict_to_cmtm_wrench(state, link.name, "link", order)
+        result[..., start:start+n_] = _cmtm_var_jacob_matvec(
+            cmtm_wrench,
+            arb_v,
+            vec[..., start:start+n_],
+        )
     return result
 
 
@@ -840,8 +872,12 @@ def _batch_total_link_cmtm_wrench_var_x_arb_vec_matmul_rhs(
     for i, link in enumerate(robot.links):
         start = i * n_
         arb_v = CMVector.set_cmvecs(total_cm_vecs[..., i, :].reshape(total_cm_vecs.shape[:-2] + (order, -1)))
-        mat = state_dict_to_cmtm_wrench(state, link.name, "link", order).mat_var_x_arb_vec_jacob(arb_v, frame="bframe")
-        result[..., start:start+n_, :] = _matmul_rhs(mat, rhs[..., start:start+n_, :])
+        cmtm_wrench = state_dict_to_cmtm_wrench(state, link.name, "link", order)
+        result[..., start:start+n_, :] = _cmtm_var_jacob_matmul_rhs(
+            cmtm_wrench,
+            arb_v,
+            rhs[..., start:start+n_, :],
+        )
     return result
 
 
@@ -862,8 +898,12 @@ def _batch_total_joint_cmtm_wrench_inv_var_x_arb_vec_matvec(
         arb_v = CMVector.set_cmvecs(total_cm_vecs[..., i, :].reshape(total_cm_vecs.shape[:-2] + (order, -1)))
         child_link = robot.links[joint.child_link_id]
         cmtm_wrench = state_dict_to_cmtm_wrench(state, child_link.name, "link", order)
-        mat = cmtm_wrench.mat_inv_var_x_arb_vec_jacob(arb_v, frame="bframe")
-        result[..., start:start+n_] = _batched_matvec(mat, vec[..., start:start+n_])
+        result[..., start:start+n_] = _cmtm_var_jacob_matvec(
+            cmtm_wrench,
+            arb_v,
+            vec[..., start:start+n_],
+            inverse=True,
+        )
     return result
 
 
@@ -884,8 +924,12 @@ def _batch_total_joint_cmtm_wrench_inv_var_x_arb_vec_matmul_rhs(
         arb_v = CMVector.set_cmvecs(total_cm_vecs[..., i, :].reshape(total_cm_vecs.shape[:-2] + (order, -1)))
         child_link = robot.links[joint.child_link_id]
         cmtm_wrench = state_dict_to_cmtm_wrench(state, child_link.name, "link", order)
-        mat = cmtm_wrench.mat_inv_var_x_arb_vec_jacob(arb_v, frame="bframe")
-        result[..., start:start+n_, :] = _matmul_rhs(mat, rhs[..., start:start+n_, :])
+        result[..., start:start+n_, :] = _cmtm_var_jacob_matmul_rhs(
+            cmtm_wrench,
+            arb_v,
+            rhs[..., start:start+n_, :],
+            inverse=True,
+        )
     return result
 
 

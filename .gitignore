@@ -3,3 +3,6 @@ __pycache__
 .python-version
 *.csv
 .DS_Store
+*.so
+target/
+developer/benchmarks/*.json

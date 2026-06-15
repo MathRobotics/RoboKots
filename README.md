@@ -12,6 +12,12 @@ Install RoboKots
 pip install .
 ```
 
+This builds the Python package and the experimental Rust backend extension.
+With uv, RoboKots can also be added directly from Git:
+```
+uv add "robokots @ git+https://github.com/MathRobotics/RoboKots.git"
+```
+
 Install optional table support for Polars-backed state tables:
 ```
 pip install ".[table]"

@@ -7,6 +7,7 @@ import numpy as np
 
 from .common import build_model, format_time, measure, select_unit, write_csv
 from .pinocchio_compare import _optional_pinocchio, build_pinocchio_model
+from robokots.kots import Kots
 
 
 DEFAULT_CSV_PATH = Path(__file__).resolve().with_name("fast_minimal_compare_results.csv")
@@ -18,6 +19,9 @@ CONFIG = {
     "seed": 0,
     "model_kind": "humanoid",
     "ops": ["kinematics", "dynamics", "joint_jacobians"],
+    "include_rust": True,
+    "include_rust_data": True,
+    "include_kots_fast": True,
     "csv_path": DEFAULT_CSV_PATH,
 }
 
@@ -238,23 +242,28 @@ def fast_rnea(
     workspace: FastWorkspace | None = None,
 ) -> np.ndarray:
     ws = workspace if workspace is not None else make_workspace(robot)
-    R, _p, w, lin_v, alpha, lin_a = fast_forward_kinematics(robot, q, v, a, ws)
+    R, p, w, lin_v, alpha, lin_a = fast_forward_kinematics(robot, q, v, a, ws)
     forces = ws.forces
     tau = ws.tau
     forces.fill(0.0)
     tau.fill(0.0)
 
     for link_id in range(1, robot.link_num):
-        inertia_world_rot = R[link_id] @ robot.link_inertia[link_id, :3, :3] @ R[link_id].T
-        mass = robot.link_inertia[link_id, 3, 3]
-        spatial_v = np.concatenate([w[link_id], lin_v[link_id]])
+        rot_t = R[link_id].T
+        spatial_v = np.concatenate([rot_t @ w[link_id], rot_t @ lin_v[link_id]])
+        spatial_a = np.concatenate(
+            [
+                rot_t @ alpha[link_id],
+                rot_t @ lin_a[link_id] - np.cross(spatial_v[:3], spatial_v[3:]),
+            ]
+        )
         force = np.empty(6, dtype=float)
-        force[:3] = inertia_world_rot @ alpha[link_id]
-        force[3:] = mass * lin_a[link_id]
-        momentum = np.empty(6, dtype=float)
-        momentum[:3] = inertia_world_rot @ w[link_id]
-        momentum[3:] = mass * lin_v[link_id]
-        forces[link_id] = force + _spatial_cross_force(spatial_v, momentum)
+        force_local = robot.link_inertia[link_id] @ spatial_a
+        momentum = robot.link_inertia[link_id] @ spatial_v
+        force_local = force_local + _spatial_cross_force(spatial_v, momentum)
+        force[:3] = R[link_id] @ force_local[:3]
+        force[3:] = R[link_id] @ force_local[3:]
+        forces[link_id] = force
 
     for j in range(robot.joint_num - 1, -1, -1):
         parent = robot.parent_link[j]
@@ -263,7 +272,9 @@ def fast_rnea(
         if qi >= 0:
             axis_world = R[parent] @ robot.origin_R[j] @ robot.axis[j]
             tau[qi] = axis_world @ forces[child, :3]
-        forces[parent] += forces[child]
+        rel = p[child] - p[parent]
+        forces[parent, :3] += forces[child, :3] + np.cross(rel, forces[child, 3:])
+        forces[parent, 3:] += forces[child, 3:]
     return tau
 
 
@@ -306,6 +317,14 @@ def _pinocchio_runner(pin, model, q, v, a, op_name: str):
     raise ValueError(f"invalid op: {op_name}")
 
 
+def _optional_rust_backend():
+    try:
+        from robokots._rust import RustCompiledRobot
+    except ImportError:
+        return None
+    return RustCompiledRobot
+
+
 def _fast_runner(robot: CompiledRobot, q: np.ndarray, v: np.ndarray, a: np.ndarray, op_name: str):
     workspace = make_workspace(robot)
     if op_name == "kinematics":
@@ -317,8 +336,53 @@ def _fast_runner(robot: CompiledRobot, q: np.ndarray, v: np.ndarray, a: np.ndarr
     raise ValueError(f"invalid op: {op_name}")
 
 
-def _print_result(dof: int, op_name: str, pin_stats: dict[str, float], fast_stats: dict[str, float]) -> None:
-    unit = select_unit([pin_stats["mean_ms"], fast_stats["mean_ms"]])
+def _rust_runner(robot, q: np.ndarray, v: np.ndarray, a: np.ndarray, op_name: str):
+    if op_name == "kinematics":
+        return lambda: robot.forward_kinematics(q, v, a)
+    if op_name == "dynamics":
+        return lambda: robot.rnea(q, v, a)
+    if op_name == "joint_jacobians":
+        return lambda: robot.joint_jacobians(q)
+    raise ValueError(f"invalid op: {op_name}")
+
+
+def _rust_data_runner(data, q: np.ndarray, v: np.ndarray, a: np.ndarray, op_name: str):
+    if op_name == "kinematics":
+        return lambda: data.compute_kinematics(q, v, a)
+    if op_name == "dynamics":
+        return lambda: data.compute_dynamics(q, v, a)
+    if op_name == "joint_jacobians":
+        return lambda: data.compute_joint_jacobians(q)
+    raise ValueError(f"invalid op: {op_name}")
+
+
+def _kots_fast_runner(kots: Kots, q: np.ndarray, v: np.ndarray, a: np.ndarray, op_name: str):
+    if op_name == "kinematics":
+        return lambda: kots._rust_fast_forward_kinematics(q, v, a)
+    if op_name == "dynamics":
+        return lambda: kots._rust_fast_rnea(q, v, a)
+    if op_name == "joint_jacobians":
+        return lambda: kots._rust_fast_joint_jacobians(q)
+    raise ValueError(f"invalid op: {op_name}")
+
+
+def _print_result(
+    dof: int,
+    op_name: str,
+    pin_stats: dict[str, float],
+    fast_stats: dict[str, float],
+    rust_stats: dict[str, float] | None = None,
+    rust_data_stats: dict[str, float] | None = None,
+    kots_fast_stats: dict[str, float] | None = None,
+) -> None:
+    timing_values = [pin_stats["mean_ms"], fast_stats["mean_ms"]]
+    if rust_stats is not None:
+        timing_values.append(rust_stats["mean_ms"])
+    if rust_data_stats is not None:
+        timing_values.append(rust_data_stats["mean_ms"])
+    if kots_fast_stats is not None:
+        timing_values.append(kots_fast_stats["mean_ms"])
+    unit = select_unit(timing_values)
     ratio = fast_stats["mean_ms"] / pin_stats["mean_ms"] if pin_stats["mean_ms"] > 0 else float("inf")
     print(f"{op_name:16s} dof={dof:4d}", flush=True)
     print(
@@ -336,6 +400,46 @@ def _print_result(dof: int, op_name: str, pin_stats: dict[str, float], fast_stat
         f"ratio(fast/pinocchio)={ratio:8.2f}",
         flush=True,
     )
+    if rust_stats is not None:
+        rust_ratio = rust_stats["mean_ms"] / pin_stats["mean_ms"] if pin_stats["mean_ms"] > 0 else float("inf")
+        rust_vs_fast = fast_stats["mean_ms"] / rust_stats["mean_ms"] if rust_stats["mean_ms"] > 0 else float("inf")
+        print(
+            "  rust      "
+            f"mean={format_time(rust_stats['mean_ms'], unit)} "
+            f"std={format_time(rust_stats['std_ms'], unit)} "
+            f"min={format_time(rust_stats['min_ms'], unit)} "
+            f"ratio(rust/pinocchio)={rust_ratio:8.2f} "
+            f"speedup(fast/rust)={rust_vs_fast:8.2f}",
+            flush=True,
+        )
+    if rust_data_stats is not None:
+        rust_data_ratio = rust_data_stats["mean_ms"] / pin_stats["mean_ms"] if pin_stats["mean_ms"] > 0 else float("inf")
+        print(
+            "  rust_data "
+            f"mean={format_time(rust_data_stats['mean_ms'], unit)} "
+            f"std={format_time(rust_data_stats['std_ms'], unit)} "
+            f"min={format_time(rust_data_stats['min_ms'], unit)} "
+            f"ratio(rust_data/pinocchio)={rust_data_ratio:8.2f}",
+            flush=True,
+        )
+    if kots_fast_stats is not None:
+        kots_fast_ratio = (
+            kots_fast_stats["mean_ms"] / pin_stats["mean_ms"] if pin_stats["mean_ms"] > 0 else float("inf")
+        )
+        kots_fast_vs_rust = (
+            kots_fast_stats["mean_ms"] / rust_stats["mean_ms"]
+            if rust_stats is not None and rust_stats["mean_ms"] > 0
+            else float("inf")
+        )
+        print(
+            "  kots_fast "
+            f"mean={format_time(kots_fast_stats['mean_ms'], unit)} "
+            f"std={format_time(kots_fast_stats['std_ms'], unit)} "
+            f"min={format_time(kots_fast_stats['min_ms'], unit)} "
+            f"ratio(kots_fast/pinocchio)={kots_fast_ratio:8.2f} "
+            f"overhead(kots_fast/rust)={kots_fast_vs_rust:8.2f}",
+            flush=True,
+        )
 
 
 def main() -> None:
@@ -348,6 +452,10 @@ def main() -> None:
     repeat = int(CONFIG["repeat"])
     warmup = int(CONFIG["warmup"])
     selected_ops = [str(op) for op in CONFIG["ops"]]
+    include_rust = bool(CONFIG.get("include_rust", True))
+    include_rust_data = bool(CONFIG.get("include_rust_data", True))
+    include_kots_fast = bool(CONFIG.get("include_kots_fast", True))
+    rust_backend = _optional_rust_backend() if include_rust else None
     model_kind = str(CONFIG["model_kind"])
     csv_path = Path(CONFIG.get("csv_path", DEFAULT_CSV_PATH)).resolve()
     rng = np.random.default_rng(int(CONFIG["seed"]))
@@ -358,6 +466,9 @@ def main() -> None:
     print(f"ops        : {', '.join(selected_ops)}", flush=True)
     print(f"warmup     : {warmup}", flush=True)
     print(f"repeat     : {repeat}", flush=True)
+    print(f"rust       : {'enabled' if rust_backend is not None else 'disabled'}", flush=True)
+    print(f"rust_data  : {'enabled' if rust_backend is not None and include_rust_data else 'disabled'}", flush=True)
+    print(f"kots_fast  : {'enabled' if include_kots_fast else 'disabled'}", flush=True)
     print(f"csv_path   : {csv_path}", flush=True)
     print("note       : q/v/a array-only kernels; no CMTM/state-dict materialization.", flush=True)
     print(flush=True)
@@ -367,6 +478,9 @@ def main() -> None:
         model_data = build_model(dof, model_kind)
         pin_model = build_pinocchio_model(pin, model_data)
         fast_model = compile_model(model_data)
+        rust_model = rust_backend.from_model_data(model_data) if rust_backend is not None else None
+        rust_data = rust_model.create_fast_data() if rust_model is not None and include_rust_data else None
+        kots_fast = Kots.from_json_data(model_data, order=3) if include_kots_fast else None
         q = rng.standard_normal(pin_model.nq)
         v = rng.standard_normal(pin_model.nv)
         a = rng.standard_normal(pin_model.nv)
@@ -378,7 +492,22 @@ def main() -> None:
         for op_name in selected_ops:
             pin_stats = measure(_pinocchio_runner(pin, pin_model, q, v, a, op_name), repeats=repeat, warmup=warmup)
             fast_stats = measure(_fast_runner(fast_model, q, v, a, op_name), repeats=repeat, warmup=warmup)
-            _print_result(dof, op_name, pin_stats, fast_stats)
+            rust_stats = (
+                measure(_rust_runner(rust_model, q, v, a, op_name), repeats=repeat, warmup=warmup)
+                if rust_model is not None
+                else None
+            )
+            rust_data_stats = (
+                measure(_rust_data_runner(rust_data, q, v, a, op_name), repeats=repeat, warmup=warmup)
+                if rust_data is not None
+                else None
+            )
+            kots_fast_stats = (
+                measure(_kots_fast_runner(kots_fast, q, v, a, op_name), repeats=repeat, warmup=warmup)
+                if kots_fast is not None
+                else None
+            )
+            _print_result(dof, op_name, pin_stats, fast_stats, rust_stats, rust_data_stats, kots_fast_stats)
             rows.append(
                 {
                     "op": op_name,
@@ -392,8 +521,42 @@ def main() -> None:
                     "pinocchio_mean_ms": pin_stats["mean_ms"],
                     "pinocchio_std_ms": pin_stats["std_ms"],
                     "pinocchio_min_ms": pin_stats["min_ms"],
+                    "rust_mean_ms": rust_stats["mean_ms"] if rust_stats is not None else "",
+                    "rust_std_ms": rust_stats["std_ms"] if rust_stats is not None else "",
+                    "rust_min_ms": rust_stats["min_ms"] if rust_stats is not None else "",
+                    "rust_data_mean_ms": rust_data_stats["mean_ms"] if rust_data_stats is not None else "",
+                    "rust_data_std_ms": rust_data_stats["std_ms"] if rust_data_stats is not None else "",
+                    "rust_data_min_ms": rust_data_stats["min_ms"] if rust_data_stats is not None else "",
+                    "kots_fast_mean_ms": kots_fast_stats["mean_ms"] if kots_fast_stats is not None else "",
+                    "kots_fast_std_ms": kots_fast_stats["std_ms"] if kots_fast_stats is not None else "",
+                    "kots_fast_min_ms": kots_fast_stats["min_ms"] if kots_fast_stats is not None else "",
                     "ratio_fast_over_pinocchio": (
                         fast_stats["mean_ms"] / pin_stats["mean_ms"] if pin_stats["mean_ms"] > 0 else float("inf")
+                    ),
+                    "ratio_rust_over_pinocchio": (
+                        rust_stats["mean_ms"] / pin_stats["mean_ms"]
+                        if rust_stats is not None and pin_stats["mean_ms"] > 0
+                        else ""
+                    ),
+                    "ratio_kots_fast_over_pinocchio": (
+                        kots_fast_stats["mean_ms"] / pin_stats["mean_ms"]
+                        if kots_fast_stats is not None and pin_stats["mean_ms"] > 0
+                        else ""
+                    ),
+                    "ratio_rust_data_over_pinocchio": (
+                        rust_data_stats["mean_ms"] / pin_stats["mean_ms"]
+                        if rust_data_stats is not None and pin_stats["mean_ms"] > 0
+                        else ""
+                    ),
+                    "overhead_kots_fast_over_rust": (
+                        kots_fast_stats["mean_ms"] / rust_stats["mean_ms"]
+                        if kots_fast_stats is not None and rust_stats is not None and rust_stats["mean_ms"] > 0
+                        else ""
+                    ),
+                    "speedup_fast_over_rust": (
+                        fast_stats["mean_ms"] / rust_stats["mean_ms"]
+                        if rust_stats is not None and rust_stats["mean_ms"] > 0
+                        else ""
                     ),
                     "note": "minimal q/v/a benchmark; not RoboKots public API semantics",
                 }

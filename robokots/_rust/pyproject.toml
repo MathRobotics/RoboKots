@@ -1,0 +1,13 @@
+[build-system]
+requires = ["maturin>=1.8,<2"]
+build-backend = "maturin"
+
+[project]
+name = "robokots-rust"
+version = "0.0.1"
+requires-python = ">=3.11"
+
+[tool.maturin]
+manifest-path = "Cargo.toml"
+module-name = "robokots._rust_core"
+python-source = "../.."
