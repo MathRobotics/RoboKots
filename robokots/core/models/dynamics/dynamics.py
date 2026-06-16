@@ -114,5 +114,5 @@ def joint_dynamics_cmvec(joint : JointStruct, rel_cmtm : CMTM, p_joint_force : n
     joint_force = apply_mat_inv_adj(rel_cmtm, p_joint_force) - link_force
     joint_torque = np.zeros(joint.dof*rel_cmtm._n)
     for i in range(rel_cmtm._n):
-        joint_torque[i*joint.dof:(i+1)*joint.dof] = (joint_force[i*6:(i+1)*6])[joint.select_indeces]
+        joint_torque[i*joint.dof:(i+1)*joint.dof] = joint.select_mat.T @ joint_force[i*6:(i+1)*6]
     return joint_torque, joint_force

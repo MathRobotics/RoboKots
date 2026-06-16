@@ -16,6 +16,17 @@ pub(crate) fn get_string(dict: &Bound<'_, PyDict>, key: &str) -> PyResult<String
         .extract::<String>()
 }
 
+pub(crate) fn get_f64_default(
+    dict: &Bound<'_, PyDict>,
+    key: &str,
+    default: f64,
+) -> PyResult<f64> {
+    match dict.get_item(key)? {
+        Some(value) => value.extract::<f64>(),
+        None => Ok(default),
+    }
+}
+
 pub(crate) fn get_vec3_default(
     dict: &Bound<'_, PyDict>,
     key: &str,
@@ -58,11 +69,15 @@ pub(crate) fn spatial_inertia_from_link(link: &Bound<'_, PyDict>) -> PyResult<[[
     let cog = get_vec3_default(link, "cog", [0.0, 0.0, 0.0])?;
     let iv = match link.get_item("inertia")? {
         Some(value) => {
-            let vec = value.extract::<Vec<f64>>()?;
-            if vec.len() != 6 {
-                return Err(PyValueError::new_err("inertia must have length 6"));
-            }
-            [vec[0], vec[1], vec[2], vec[3], vec[4], vec[5]]
+            let inertia = value.downcast::<PyDict>()?;
+            [
+                get_f64_default(inertia, "ixx", 1.0)?,
+                get_f64_default(inertia, "iyy", 1.0)?,
+                get_f64_default(inertia, "izz", 1.0)?,
+                get_f64_default(inertia, "ixy", 0.0)?,
+                get_f64_default(inertia, "ixz", 0.0)?,
+                get_f64_default(inertia, "iyz", 0.0)?,
+            ]
         }
         None => [1.0, 1.0, 1.0, 0.0, 0.0, 0.0],
     };

@@ -5,9 +5,22 @@ import pytest
 from robokots.robot_io import *
 
 test_data = {
+    "schema_version": "0.0.2",
     "links": [
-        {"id":0,"name": "link1", "mass": 1.0, "cog": [0.0, 0.0, 0.0], "inertia": [1.0, 1.0, 1.0]},
-        {"id":1,"name": "link2", "mass": 2.0, "cog": [1.0, 1.0, 1.0], "inertia": [2.0, 2.0, 2.0]},
+        {
+            "id": 0,
+            "name": "link1",
+            "mass": 1.0,
+            "cog": [0.0, 0.0, 0.0],
+            "inertia": {"ixx": 1.0, "ixy": 0.0, "ixz": 0.0, "iyy": 1.0, "iyz": 0.0, "izz": 1.0},
+        },
+        {
+            "id": 1,
+            "name": "link2",
+            "mass": 2.0,
+            "cog": [1.0, 1.0, 1.0],
+            "inertia": {"ixx": 2.0, "ixy": 0.0, "ixz": 0.0, "iyy": 2.0, "iyz": 0.0, "izz": 2.0},
+        },
     ],
     "joints": [
         {"id":0,"name": "joint1", "type": "revolute", "parent_link_id": 0, "child_link_id": 1, "axis": [0, 0, 1]},
@@ -119,7 +132,14 @@ def test_load_urdf_file(tmp_path: Path):
 
     base = next(link for link in model["links"] if link["name"] == "base")
     assert base["mass"] == 2.5
-    assert base["inertia"] == [1.0, 2.0, 3.0, 0.1, 0.2, 0.3]
+    assert base["inertia"] == {
+        "ixx": 1.0,
+        "ixy": 0.1,
+        "ixz": 0.2,
+        "iyy": 2.0,
+        "iyz": 0.3,
+        "izz": 3.0,
+    }
 
     joint1 = next(j for j in model["joints"] if j["name"] == "joint1")
     assert joint1["type"] == "revolute"
@@ -131,7 +151,7 @@ def test_load_urdf_file(tmp_path: Path):
     assert quat[2] == pytest.approx(0.0, abs=1e-12)
     assert quat[3] == pytest.approx(math.sqrt(0.5), abs=1e-12)
 
-    world_joint = next(j for j in model["joints"] if j["type"] == "fix" and j["parent_link_id"] == 0)
+    world_joint = next(j for j in model["joints"] if j["type"] == "fixed" and j["parent_link_id"] == 0)
     assert world_joint["child_link_id"] == base["id"]
 
 

@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 
 from robokots.core.state import StateType
+from robokots.core.robot import inertia_dict_to_vector
 from robokots.kots import Kots
 
 from .common import build_model, format_time, leaf_link_names, measure, select_unit, write_csv
@@ -55,7 +56,7 @@ def _placement_from_origin(pin, origin: dict):
 def _inertia_from_link(pin, link: dict):
     mass = float(link.get("mass", 0.0))
     cog = np.asarray(link.get("cog", [0.0, 0.0, 0.0]), dtype=float)
-    inertia_values = np.asarray(link.get("inertia", [1.0, 1.0, 1.0, 0.0, 0.0, 0.0]), dtype=float)
+    inertia_values = np.asarray(inertia_dict_to_vector(link.get("inertia")), dtype=float)
     inertia = np.array(
         [
             [inertia_values[0], inertia_values[3], inertia_values[4]],
@@ -77,7 +78,7 @@ def build_pinocchio_model(pin, model_data: dict):
         parent_joint_id = link_to_joint_id[parent_link_id]
         placement = _placement_from_origin(pin, joint.get("origin", {}))
 
-        if joint["type"] == "fix":
+        if joint["type"] == "fixed":
             link_to_joint_id[child_link_id] = parent_joint_id
             continue
 

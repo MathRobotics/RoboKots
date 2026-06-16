@@ -781,7 +781,10 @@ class RustOutwardState:
     key_order = int(state_type.key_order)
 
     if data_type == "frame":
-      return SE3.set_mat(self._mat(owner_type, name))
+      mat = self._mat(owner_type, name)
+      if mat.ndim > 2:
+        return mat
+      return SE3.set_mat(mat)
     if data_type == "pos":
       return self._mat(owner_type, name)[..., :3, 3]
     if data_type == "rot":

@@ -126,8 +126,14 @@ def urdf_root_to_model_data(root: ET.Element, add_world_link: bool = True) -> Di
                 iyy = float(inertia_elem.attrib.get("iyy", 1.0))
                 iyz = float(inertia_elem.attrib.get("iyz", 0.0))
                 izz = float(inertia_elem.attrib.get("izz", 1.0))
-                # RoboKots inertia order: [ixx, iyy, izz, ixy, ixz, iyz]
-                link_data["inertia"] = [ixx, iyy, izz, ixy, ixz, iyz]
+                link_data["inertia"] = {
+                    "ixx": ixx,
+                    "ixy": ixy,
+                    "ixz": ixz,
+                    "iyy": iyy,
+                    "iyz": iyz,
+                    "izz": izz,
+                }
 
         links.append(link_data)
 
@@ -135,7 +141,7 @@ def urdf_root_to_model_data(root: ET.Element, add_world_link: bool = True) -> Di
     urdf_type_to_kots = {
         "revolute": "revolute",
         "continuous": "revolute",
-        "fixed": "fix",
+        "fixed": "fixed",
         "prismatic": "prismatic",
     }
     child_link_names = set()
@@ -209,7 +215,7 @@ def urdf_root_to_model_data(root: ET.Element, add_world_link: bool = True) -> Di
             world_joints.append(
                 {
                     "name": candidate,
-                    "type": "fix",
+                    "type": "fixed",
                     "parent_link_id": 0,
                     "child_link_id": int(root_link["id"]),
                     "origin": {
@@ -226,7 +232,7 @@ def urdf_root_to_model_data(root: ET.Element, add_world_link: bool = True) -> Di
     for idx, joint in enumerate(joints):
         joint["id"] = idx
 
-    return {"links": links, "joints": joints}
+    return {"schema_version": "0.0.2", "links": links, "joints": joints}
 
 
 def urdf_xml_to_model_data(urdf_xml: str, add_world_link: bool = True) -> Dict:

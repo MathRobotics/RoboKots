@@ -30,7 +30,7 @@ def _ensure_supported_robot(robot: RobotStruct) -> None:
   unsupported_joints = [
     joint.name
     for joint in robot.joints
-    if joint.type not in ("fix", "revolute")
+    if joint.type not in ("fixed", "revolute")
   ]
   if unsupported_joints:
     raise NotImplementedError(
@@ -46,6 +46,8 @@ def _to_list(value: Any):
     return [_to_list(item) for item in value]
   if isinstance(value, list):
     return [_to_list(item) for item in value]
+  if isinstance(value, dict):
+    return {key: _to_list(item) for key, item in value.items()}
   return value
 
 
@@ -53,7 +55,7 @@ def _model_data_from_robot(robot: RobotStruct) -> dict:
   data = robot.to_dict()
   for link in data["links"]:
     link["cog"] = _to_list(link.get("cog", [0.0, 0.0, 0.0]))
-    link["inertia"] = _to_list(link.get("inertia", [1.0, 1.0, 1.0, 0.0, 0.0, 0.0]))
+    link["inertia"] = _to_list(link.get("inertia"))
   for joint in data["joints"]:
     joint["axis"] = _to_list(joint.get("axis", [0.0, 0.0, 1.0]))
     origin = joint.get("origin", {})

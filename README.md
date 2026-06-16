@@ -99,3 +99,15 @@ from robokots.kots import Kots
 
 kots = Kots.from_urdf_file("robot.urdf", order=3)
 ```
+
+## Model JSON
+
+RoboKots model JSON is documented in `docs/model_json.md`. Decoded model data
+can be validated with:
+
+```python
+from robokots.robot_io import load_json_file, validate_model_data
+
+model_data = load_json_file("robot.json")
+validate_model_data(model_data)
+```

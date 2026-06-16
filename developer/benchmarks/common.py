@@ -82,7 +82,7 @@ def add_revolute_chain(
                 "name": f"{prefix}{i + 1}",
                 "mass": 4.0,
                 "cog": [0.0, 0.0, 0.0],
-                "inertia": [0.05, 0.05, 0.02, 0.0, 0.0, 0.0],
+                "inertia": {"ixx": 0.05, "ixy": 0.0, "ixz": 0.0, "iyy": 0.05, "iyz": 0.0, "izz": 0.02},
                 "geometry": "generated_link.stl",
             }
         )
@@ -116,7 +116,7 @@ def build_humanoid_like_model(dof: int) -> dict:
             "name": "pelvis",
             "mass": 12.0,
             "cog": [0.0, 0.0, 0.0],
-            "inertia": [0.2, 0.2, 0.2, 0.0, 0.0, 0.0],
+            "inertia": {"ixx": 0.2, "ixy": 0.0, "ixz": 0.0, "iyy": 0.2, "iyz": 0.0, "izz": 0.2},
             "geometry": "generated_pelvis.stl",
         },
     ]
@@ -124,7 +124,7 @@ def build_humanoid_like_model(dof: int) -> dict:
         {
             "id": 0,
             "name": "root",
-            "type": "fix",
+            "type": "fixed",
             "parent_link_id": 0,
             "child_link_id": 1,
             "origin": {
@@ -156,7 +156,7 @@ def build_humanoid_like_model(dof: int) -> dict:
     add("left_leg", 6, 1, (0.12, -0.08, -0.28))
     add("right_leg", 6, 1, (-0.12, -0.08, -0.28))
     add("extra", remaining, spine_end, (0.0, 0.18, 0.0))
-    return {"links": links, "joints": joints}
+    return {"schema_version": "0.0.2", "links": links, "joints": joints}
 
 
 def build_serial_chain_model(dof: int) -> dict:
@@ -170,7 +170,7 @@ def build_serial_chain_model(dof: int) -> dict:
             "name": "base",
             "mass": 10.0,
             "cog": [0.0, 0.0, 0.0],
-            "inertia": [0.1, 0.1, 0.1, 0.0, 0.0, 0.0],
+            "inertia": {"ixx": 0.1, "ixy": 0.0, "ixz": 0.0, "iyy": 0.1, "iyz": 0.0, "izz": 0.1},
             "geometry": "generated_base.stl",
         },
     ]
@@ -178,7 +178,7 @@ def build_serial_chain_model(dof: int) -> dict:
         {
             "id": 0,
             "name": "root",
-            "type": "fix",
+            "type": "fixed",
             "parent_link_id": 0,
             "child_link_id": 1,
             "origin": {
@@ -196,7 +196,7 @@ def build_serial_chain_model(dof: int) -> dict:
         axes=((0.0, 0.0, 1.0), (0.0, 1.0, 0.0), (1.0, 0.0, 0.0)),
         offset=(0.2, 0.0, 0.05),
     )
-    return {"links": links, "joints": joints}
+    return {"schema_version": "0.0.2", "links": links, "joints": joints}
 
 
 def build_model(dof: int, model_kind: str) -> dict:

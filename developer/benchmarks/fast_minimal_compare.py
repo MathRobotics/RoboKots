@@ -7,6 +7,7 @@ import numpy as np
 
 from .common import build_model, format_time, measure, select_unit, write_csv
 from .pinocchio_compare import _optional_pinocchio, build_pinocchio_model
+from robokots.core.robot import inertia_dict_to_vector
 from robokots.kots import Kots
 
 
@@ -95,7 +96,7 @@ def _quat_to_rot(quat_values) -> np.ndarray:
 def _spatial_inertia(link: dict) -> np.ndarray:
     mass = float(link.get("mass", 0.0))
     cog = np.asarray(link.get("cog", [0.0, 0.0, 0.0]), dtype=float)
-    iv = np.asarray(link.get("inertia", [1.0, 1.0, 1.0, 0.0, 0.0, 0.0]), dtype=float)
+    iv = np.asarray(inertia_dict_to_vector(link.get("inertia")), dtype=float)
     inertia = np.array(
         [
             [iv[0], iv[3], iv[4]],
@@ -131,7 +132,7 @@ def compile_model(model_data: dict) -> CompiledRobot:
         origin = joint.get("origin", {})
         origin_R[i] = _quat_to_rot(origin.get("orientation", [1.0, 0.0, 0.0, 0.0]))
         origin_p[i] = np.asarray(origin.get("position", [0.0, 0.0, 0.0]), dtype=float)
-        if joint["type"] == "fix":
+        if joint["type"] == "fixed":
             axis[i] = np.array([1.0, 0.0, 0.0])
             link_ancestor_lists[child_link[i]] = list(link_ancestor_lists[parent_link[i]])
             continue

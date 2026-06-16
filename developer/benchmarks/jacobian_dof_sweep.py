@@ -58,7 +58,7 @@ def build_serial_arm_model(
             "name": "base",
             "mass": 10.0,
             "cog": [0.0, 0.0, 0.0],
-            "inertia": [0.1, 0.1, 0.1, 0.0, 0.0, 0.0],
+            "inertia": {"ixx": 0.1, "ixy": 0.0, "ixz": 0.0, "iyy": 0.1, "iyz": 0.0, "izz": 0.1},
             "geometry": "base_mesh.stl",
         },
     ]
@@ -69,7 +69,7 @@ def build_serial_arm_model(
                 "name": f"arm{i}",
                 "mass": 5.0,
                 "cog": [0.0, 0.0, 0.0],
-                "inertia": [0.05, 0.05, 0.02, 0.0, 0.0, 0.0],
+                "inertia": {"ixx": 0.05, "ixy": 0.0, "ixz": 0.0, "iyy": 0.05, "iyz": 0.0, "izz": 0.02},
                 "geometry": "arm_mesh.stl",
             }
         )
@@ -78,7 +78,7 @@ def build_serial_arm_model(
         {
             "id": 0,
             "name": "root",
-            "type": "fix",
+            "type": "fixed",
             "parent_link_id": 0,
             "child_link_id": 1,
             "origin": {
@@ -104,7 +104,7 @@ def build_serial_arm_model(
             }
         )
 
-    return {"links": links, "joints": joints}
+    return {"schema_version": "0.0.2", "links": links, "joints": joints}
 
 
 def _pair_metrics(lhs: np.ndarray, rhs: np.ndarray) -> tuple[float, float]:

@@ -257,7 +257,7 @@ impl RustCompiledRobot {
                 )?);
             }
 
-            if joint_type == "fix" {
+            if joint_type == "fixed" {
                 link_ancestors[child_link[i]] = link_ancestors[parent_link[i]].clone();
                 continue;
             }
