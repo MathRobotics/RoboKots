@@ -336,7 +336,7 @@ def test_outward_jacobian_world_link_momentum_matches_full_builder():
     link = kots.robot_.link(state.owner_name)
     expected = full[link.id * 6 : (link.id + 1) * 6, :]
 
-    np.testing.assert_allclose(actual, expected)
+    np.testing.assert_allclose(actual, expected, atol=1e-12)
 
 
 def test_outward_jacobian_link_force_matches_full_builder():
@@ -387,7 +387,7 @@ def test_outward_jacobian_world_joint_momentum_matches_full_builder():
     joint = kots.robot_.joint(state.owner_name)
     expected = full[joint.id * 6 : (joint.id + 1) * 6, :]
 
-    np.testing.assert_allclose(actual, expected)
+    np.testing.assert_allclose(actual, expected, atol=1e-12)
 
 
 def test_outward_jacobian_joint_force_matches_full_builder():

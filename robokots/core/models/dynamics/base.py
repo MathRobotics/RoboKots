@@ -36,8 +36,8 @@ def spatial_inertia(m : float, i : np.ndarray, c : np.ndarray) -> np.ndarray:
     i_mat = np.zeros((6,6))
 
     c_hat = SO3.hat(c)
-    i_mat[0:3,0:3] = inertia(i) - c_hat@c_hat
+    i_mat[0:3,0:3] = inertia(i) - m * c_hat@c_hat
     i_mat[3:6,3:6] = m * np.eye(3)
-    i_mat[3:6,0:3] = m * c_hat
-    i_mat[0:3,3:6] = -m * c_hat
+    i_mat[3:6,0:3] = -m * c_hat
+    i_mat[0:3,3:6] = m * c_hat
     return i_mat

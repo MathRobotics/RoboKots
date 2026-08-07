@@ -30,10 +30,10 @@ def test_spatial_inertia():
     # Check the shape of the output
     assert inertia_matrix.shape == (6, 6)
     # Check the values of the output
-    assert np.allclose(inertia_matrix[0:3,0:3], inertia(i_vec) - SO3.hat(c) @ SO3.hat(c))
+    assert np.allclose(inertia_matrix[0:3,0:3], inertia(i_vec) - m * SO3.hat(c) @ SO3.hat(c))
     assert np.allclose(inertia_matrix[3:6,3:6], m * np.eye(3))
-    assert np.allclose(inertia_matrix[0:3,3:6], -m * SO3.hat(c))
-    assert np.allclose(inertia_matrix[3:6,0:3], m * SO3.hat(c))
+    assert np.allclose(inertia_matrix[0:3,3:6], m * SO3.hat(c))
+    assert np.allclose(inertia_matrix[3:6,0:3], -m * SO3.hat(c))
 
 def test_link_dynamics():
     inertia_matrix = np.eye(6)

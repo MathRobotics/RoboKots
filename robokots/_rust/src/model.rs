@@ -93,8 +93,8 @@ pub(crate) fn spatial_inertia_from_link(link: &Bound<'_, PyDict>) -> PyResult<[[
         for c in 0..3 {
             out[r][c] = inertia[r][c] - mass * c2[r][c];
             out[r + 3][c + 3] = if r == c { mass } else { 0.0 };
-            out[r + 3][c] = mass * c_hat[r][c];
-            out[r][c + 3] = -mass * c_hat[r][c];
+            out[r + 3][c] = -mass * c_hat[r][c];
+            out[r][c + 3] = mass * c_hat[r][c];
         }
     }
     Ok(out)
