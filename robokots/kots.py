@@ -88,6 +88,7 @@ class Kots():
     self.lib_ = lib
     self.batch_shape_ = ()
     self._rust_compiled_robot_ = None
+    self._rust_inverse_dynamics_robot_ = None
     self._rust_outward_data_cache_ = {}
     self._rust_outward_data_cache_state_ = {}
 
@@ -108,6 +109,7 @@ class Kots():
     self.state_batch_ = None
     self.batch_shape_ = ()
     self._rust_compiled_robot_ = None
+    self._rust_inverse_dynamics_robot_ = None
     self._rust_outward_data_cache_ = {}
     self._rust_outward_data_cache_state_ = {}
 
@@ -385,6 +387,16 @@ class Kots():
       self._rust_compiled_robot_ = _rust_compiled_robot(self.robot_)
     return self._rust_compiled_robot_
 
+  def _rust_inverse_dynamics_robot(self):
+    if self._rust_inverse_dynamics_robot_ is None:
+      if all(joint.type in ("fixed", "revolute") for joint in self.robot_.joints):
+        self._rust_inverse_dynamics_robot_ = self._rust_compiled_robot()
+      else:
+        from .outward.rust.model import _rust_inverse_dynamics_robot
+
+        self._rust_inverse_dynamics_robot_ = _rust_inverse_dynamics_robot(self.robot_)
+    return self._rust_inverse_dynamics_robot_
+
   def _fast_backend(self, backend : str = "rust") -> str:
     if backend != "rust":
       raise ValueError(f"Unsupported fast backend: {backend}. Use 'rust'.")
@@ -419,6 +431,34 @@ class Kots():
     if q.ndim == 1:
       return rust_robot.rnea(q, v, a)
     return rust_robot.rnea_batch(q, v, a)
+
+  def inverse_dynamics(
+      self,
+      q,
+      v,
+      a,
+      gravity=(0.0, 0.0, -9.81),
+      backend: str = "rust",
+  ):
+    """Compute RNEA joint torques, including gravity in the world frame.
+
+    The default gravity matches Pinocchio's fixed-base model default. Pass
+    ``gravity=(0, 0, 0)`` for the historical gravity-free RoboKots result.
+    This API supports fixed, revolute, and prismatic joints. Higher-order
+    force and torque derivatives remain available through :meth:`dynamics`
+    without gravity; its Rust backend does not yet support prismatic joints.
+    """
+    self._fast_backend(backend)
+    q, v, a = self._fast_qva(q, v, a)
+    gravity = np.asarray(gravity, dtype=float)
+    if gravity.shape != (3,):
+      raise ValueError(f"gravity must have shape (3,), got {gravity.shape}.")
+    if not np.all(np.isfinite(gravity)):
+      raise ValueError("gravity must contain only finite values.")
+    rust_robot = self._rust_inverse_dynamics_robot()
+    if q.ndim == 1:
+      return rust_robot.rnea(q, v, a, gravity)
+    return rust_robot.rnea_batch(q, v, a, gravity)
 
   def _rust_fast_joint_jacobians(self, q, backend : str = "rust"):
     self._fast_backend(backend)

@@ -108,6 +108,37 @@ impl RustCompiledRobot {
             if qi >= 0 {
                 let qi = qi as usize;
                 let axis_world = mat3_vec(joint_r0, self.axis[j]);
+                if self.is_prismatic[j] {
+                    let child_p = add3(joint_p, scale3(axis_world, q[qi]));
+                    let rel = sub3(child_p, parent_p);
+                    set_mat3(&mut ws.r, child, joint_r0);
+                    set_flat3(&mut ws.p, child, child_p);
+                    set_flat3(&mut ws.w, child, parent_w);
+                    set_flat3(
+                        &mut ws.lin_v,
+                        child,
+                        add3(
+                            add3(parent_lin_v, cross(parent_w, rel)),
+                            scale3(axis_world, v[qi]),
+                        ),
+                    );
+                    set_flat3(&mut ws.alpha, child, parent_alpha);
+                    set_flat3(
+                        &mut ws.lin_a,
+                        child,
+                        add3(
+                            add3(
+                                add3(parent_lin_a, cross(parent_alpha, rel)),
+                                cross(parent_w, cross(parent_w, rel)),
+                            ),
+                            add3(
+                                scale3(cross(parent_w, axis_world), 2.0 * v[qi]),
+                                scale3(axis_world, a[qi]),
+                            ),
+                        ),
+                    );
+                    continue;
+                }
                 let rj = rot_axis(self.axis[j], q[qi]);
                 set_mat3(&mut ws.r, child, mat3_mul(joint_r0, rj));
                 set_flat3(&mut ws.p, child, joint_p);
@@ -158,6 +189,17 @@ impl RustCompiledRobot {
     }
 
     pub(crate) fn rnea_into(&self, q: &[f64], v: &[f64], a: &[f64], ws: &mut Workspace) {
+        self.rnea_with_gravity_into(q, v, a, [0.0; 3], ws);
+    }
+
+    pub(crate) fn rnea_with_gravity_into(
+        &self,
+        q: &[f64],
+        v: &[f64],
+        a: &[f64],
+        gravity: [f64; 3],
+        ws: &mut Workspace,
+    ) {
         self.forward_kinematics_into(q, v, a, ws);
         ws.forces.fill(0.0);
         ws.tau.fill(0.0);
@@ -169,7 +211,12 @@ impl RustCompiledRobot {
             let a_world = [flat3(&ws.alpha, link_id), flat3(&ws.lin_a, link_id)];
             let v_local = [mat3_vec(rt, v_world[0]), mat3_vec(rt, v_world[1])];
             let a_local_ang = mat3_vec(rt, a_world[0]);
-            let a_local_lin = sub3(mat3_vec(rt, a_world[1]), cross(v_local[0], v_local[1]));
+            // RNEA represents gravity as the opposite acceleration of the
+            // inertial frame. `gravity` is expressed in the world frame.
+            let a_local_lin = sub3(
+                sub3(mat3_vec(rt, a_world[1]), mat3_vec(rt, gravity)),
+                cross(v_local[0], v_local[1]),
+            );
             let a_local = [a_local_ang, a_local_lin];
             let momentum = mat6_vec(self.link_inertia[link_id], v_local);
             let inertial = mat6_vec(self.link_inertia[link_id], a_local);
@@ -198,7 +245,12 @@ impl RustCompiledRobot {
             if qi >= 0 {
                 let parent_r = mat3_from_flat(&ws.r, parent);
                 let axis_world = mat3_vec(mat3_mul(parent_r, self.origin_r[j]), self.axis[j]);
-                ws.tau[qi as usize] = dot3(axis_world, force_torque(&ws.forces, child));
+                let projected_force = if self.is_prismatic[j] {
+                    force_force(&ws.forces, child)
+                } else {
+                    force_torque(&ws.forces, child)
+                };
+                ws.tau[qi as usize] = dot3(axis_world, projected_force);
             }
             let rel = sub3(flat3(&ws.p, child), flat3(&ws.p, parent));
             add_shifted_force_parent(&mut ws.forces, parent, child, rel);

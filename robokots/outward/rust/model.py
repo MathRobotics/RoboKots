@@ -19,6 +19,34 @@ def _rust_compiled_robot(robot: RobotStruct):
   return RustCompiledRobot.from_model_data(_model_data_from_robot(robot))
 
 
+def _rust_inverse_dynamics_robot(robot: RobotStruct):
+  """Compile the fixed/revolute/prismatic subset used by the RNEA API."""
+  try:
+    from robokots._rust import RustCompiledRobot
+  except ImportError as exc:
+    raise ImportError(
+      "RoboKots Rust backend is not built. Run "
+      "`uvx maturin develop --release --manifest-path robokots/_rust/Cargo.toml` "
+      "or install a package that includes the Rust extension."
+    ) from exc
+
+  unsupported_links = [link.name for link in robot.links if link.dof != 0 or link.type != "rigid"]
+  if unsupported_links:
+    raise NotImplementedError(
+      "Rust inverse dynamics currently supports rigid links only; unsupported links: "
+      + ", ".join(unsupported_links)
+    )
+  unsupported_joints = [
+    joint.name for joint in robot.joints if joint.type not in ("fixed", "revolute", "prismatic")
+  ]
+  if unsupported_joints:
+    raise NotImplementedError(
+      "Rust inverse dynamics supports fixed/revolute/prismatic joints only; unsupported joints: "
+      + ", ".join(unsupported_joints)
+    )
+  return RustCompiledRobot.from_model_data(_model_data_from_robot(robot), True)
+
+
 def _ensure_supported_robot(robot: RobotStruct) -> None:
   unsupported_links = [link.name for link in robot.links if link.dof != 0 or link.type != "rigid"]
   if unsupported_links:

@@ -12,6 +12,7 @@ pub struct RustCompiledRobot {
     pub(crate) parent_link: Vec<usize>,
     pub(crate) child_link: Vec<usize>,
     pub(crate) q_index: Vec<isize>,
+    pub(crate) is_prismatic: Vec<bool>,
     pub(crate) axis: Vec<[f64; 3]>,
     pub(crate) origin_r: Vec<[[f64; 3]; 3]>,
     pub(crate) origin_p: Vec<[f64; 3]>,

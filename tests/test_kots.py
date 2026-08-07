@@ -442,6 +442,75 @@ def test_rust_private_fast_kots_helpers_validate_shapes_and_backend():
         kots._rust_fast_forward_kinematics(q, np.zeros((2, kots.dof())), q)
 
 
+def test_inverse_dynamics_gravity_api_preserves_zero_gravity_and_batches():
+    pytest.importorskip("robokots._rust")
+    rng = np.random.default_rng(47)
+    kots = _make_kots(order=3)
+    q = rng.standard_normal((3, kots.dof()))
+    v = rng.standard_normal(q.shape)
+    a = rng.standard_normal(q.shape)
+    gravity = np.array([0.7, -1.3, -9.2])
+
+    np.testing.assert_allclose(
+        kots.inverse_dynamics(q, v, a, gravity=gravity),
+        np.stack([kots.inverse_dynamics(q[i], v[i], a[i], gravity=gravity) for i in range(q.shape[0])]),
+        atol=0.0,
+        rtol=0.0,
+    )
+    np.testing.assert_allclose(
+        kots.inverse_dynamics(q, v, a, gravity=np.zeros(3)),
+        kots._rust_fast_rnea(q, v, a),
+        atol=0.0,
+        rtol=0.0,
+    )
+
+    with pytest.raises(ValueError, match="gravity must have shape"):
+        kots.inverse_dynamics(q, v, a, gravity=np.zeros(2))
+    with pytest.raises(ValueError, match="finite"):
+        kots.inverse_dynamics(q, v, a, gravity=[0.0, np.nan, 0.0])
+
+
+def test_inverse_dynamics_prismatic_matches_numpy_backend(tmp_path):
+    pytest.importorskip("robokots._rust")
+    urdf = """<robot name="prismatic_inverse_dynamics">
+      <link name="base"/>
+      <link name="body">
+        <inertial>
+          <origin xyz="0.1 -0.2 0.05" rpy="0.2 -0.1 0.3"/>
+          <mass value="2.5"/>
+          <inertia ixx="0.1" ixy="0.01" ixz="-0.005"
+                   iyy="0.2" iyz="0.008" izz="0.3"/>
+        </inertial>
+      </link>
+      <joint name="slide" type="prismatic">
+        <parent link="base"/>
+        <child link="body"/>
+        <origin xyz="0.2 0.1 -0.1" rpy="0.1 -0.2 0.3"/>
+        <axis xyz="1 2 3"/>
+        <limit lower="-0.5" upper="0.8" effort="100" velocity="10"/>
+      </joint>
+    </robot>"""
+    urdf_path = tmp_path / "prismatic.urdf"
+    urdf_path.write_text(urdf, encoding="utf-8")
+    kots = Kots.from_urdf_file(str(urdf_path), order=3)
+    q = np.array([0.3])
+    v = np.array([0.4])
+    a = np.array([-0.5])
+
+    kots.import_motion_array(np.stack([q, v, a], axis=-1))
+    kots.dynamics(backend="numpy", materialize_dict=False)
+    expected = np.asarray(
+        kots.state_info(StateType("total_joint", "total_joint", "torque"))
+    ).reshape(-1)
+
+    np.testing.assert_allclose(
+        kots.inverse_dynamics(q, v, a, gravity=np.zeros(3)),
+        expected,
+        rtol=1e-12,
+        atol=1e-12,
+    )
+
+
 def test_rust_fast_data_matches_allocating_private_fast_helpers():
     pytest.importorskip("robokots._rust")
     order = 3

@@ -126,6 +126,17 @@ impl RustCompiledRobot {
         a: &[f64],
         ws: &mut PinocchioLikeWorkspace,
     ) {
+        self.pinocchio_rnea_with_gravity_into(q, v, a, [0.0; 3], ws);
+    }
+
+    pub(crate) fn pinocchio_rnea_with_gravity_into(
+        &self,
+        q: &[f64],
+        v: &[f64],
+        a: &[f64],
+        gravity: [f64; 3],
+        ws: &mut PinocchioLikeWorkspace,
+    ) {
         self.pinocchio_forward_kinematics_into(q, v, a, ws);
         ws.forces.fill(0.0);
         ws.tau.fill(0.0);
@@ -137,7 +148,10 @@ impl RustCompiledRobot {
             let a_world = [flat3(&ws.alpha, link_id), flat3(&ws.lin_a, link_id)];
             let v_local = [mat3_vec(rt, v_world[0]), mat3_vec(rt, v_world[1])];
             let a_local_ang = mat3_vec(rt, a_world[0]);
-            let a_local_lin = sub3(mat3_vec(rt, a_world[1]), cross(v_local[0], v_local[1]));
+            let a_local_lin = sub3(
+                sub3(mat3_vec(rt, a_world[1]), mat3_vec(rt, gravity)),
+                cross(v_local[0], v_local[1]),
+            );
             let a_local = [a_local_ang, a_local_lin];
             let momentum = mat6_vec(self.link_inertia[link_id], v_local);
             let inertial = mat6_vec(self.link_inertia[link_id], a_local);

@@ -12,6 +12,22 @@ use crate::spatial::*;
 use crate::types::{RustBatchOutwardData, RustCompiledRobot, RustFastData, RustOutwardData};
 use crate::workspace::{BulkDerivativeWorkspace, CmtmWorkspace, DynamicsCmtmWorkspace, Workspace};
 
+fn gravity_vec3(gravity: Option<PyReadonlyArray1<'_, f64>>) -> PyResult<[f64; 3]> {
+    let Some(gravity) = gravity else {
+        return Ok([0.0; 3]);
+    };
+    let gravity = gravity.as_slice()?;
+    if gravity.len() != 3 {
+        return Err(PyValueError::new_err("gravity must have shape (3,)"));
+    }
+    if !gravity.iter().all(|value| value.is_finite()) {
+        return Err(PyValueError::new_err(
+            "gravity must contain only finite values",
+        ));
+    }
+    Ok([gravity[0], gravity[1], gravity[2]])
+}
+
 fn cmtm_world_wrench_value(
     elem_mat: [[f64; 4]; 4],
     elem_vecs: &[f64],
@@ -217,8 +233,9 @@ fn fill_link_local_jacobian(
 
 #[pymethods]
 impl RustCompiledRobot {
+    #[pyo3(signature = (model_data, allow_prismatic = false))]
     #[staticmethod]
-    fn from_model_data(model_data: &Bound<'_, PyDict>) -> PyResult<Self> {
+    fn from_model_data(model_data: &Bound<'_, PyDict>, allow_prismatic: bool) -> PyResult<Self> {
         let links_any = model_data
             .get_item("links")?
             .ok_or_else(|| PyValueError::new_err("model_data must contain links"))?;
@@ -233,6 +250,7 @@ impl RustCompiledRobot {
         let mut parent_link = vec![0usize; joint_num];
         let mut child_link = vec![0usize; joint_num];
         let mut q_index = vec![-1isize; joint_num];
+        let mut is_prismatic = vec![false; joint_num];
         let mut axis = vec![[1.0, 0.0, 0.0]; joint_num];
         let mut origin_r = vec![eye3(); joint_num];
         let mut origin_p = vec![[0.0, 0.0, 0.0]; joint_num];
@@ -289,11 +307,17 @@ impl RustCompiledRobot {
                     "Rust backend currently supports fixed/revolute joints only; spherical/floating joints are supported by the Python backend",
                 ));
             }
-            if joint_type != "revolute" {
+            if joint_type == "prismatic" && !allow_prismatic {
                 return Err(PyValueError::new_err(
                     "Rust backend currently supports fixed/revolute joints only; use the Python backend for prismatic or multi-DoF joints",
                 ));
             }
+            if joint_type != "revolute" && joint_type != "prismatic" {
+                return Err(PyValueError::new_err(
+                    "Rust RNEA supports fixed/revolute/prismatic joints only; use the Python backend for multi-DoF joints",
+                ));
+            }
+            is_prismatic[i] = joint_type == "prismatic";
             axis[i] = normalize(get_vec3_default(joint, "axis", [0.0, 0.0, 1.0])?);
             q_index[i] = dof as isize;
             let mut ancestors = link_ancestors[parent_link[i]].clone();
@@ -335,6 +359,7 @@ impl RustCompiledRobot {
             parent_link,
             child_link,
             q_index,
+            is_prismatic,
             axis,
             origin_r,
             origin_p,
@@ -506,39 +531,51 @@ impl RustCompiledRobot {
         ))
     }
 
+    #[pyo3(signature = (q, v, a, gravity = None))]
     fn rnea<'py>(
         &self,
         py: Python<'py>,
         q: PyReadonlyArray1<'py, f64>,
         v: PyReadonlyArray1<'py, f64>,
         a: PyReadonlyArray1<'py, f64>,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
     ) -> PyResult<Bound<'py, PyArray1<f64>>> {
         let q = q.as_slice()?;
         let v = v.as_slice()?;
         let a = a.as_slice()?;
         self.check_motion(q, v, a)?;
+        let gravity = gravity_vec3(gravity)?;
         let mut ws = Workspace::new(self);
-        self.rnea_into(q, v, a, &mut ws);
+        self.rnea_with_gravity_into(q, v, a, gravity, &mut ws);
         Ok(ws.tau.into_pyarray(py))
     }
 
+    #[pyo3(signature = (q, v, a, gravity = None))]
     fn rnea_batch<'py>(
         &self,
         py: Python<'py>,
         q: PyReadonlyArray2<'py, f64>,
         v: PyReadonlyArray2<'py, f64>,
         a: PyReadonlyArray2<'py, f64>,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
     ) -> PyResult<Bound<'py, PyArray2<f64>>> {
         let batch = self.check_motion_batch(q.shape(), v.shape(), a.shape())?;
         let q = q.as_slice()?;
         let v = v.as_slice()?;
         let a = a.as_slice()?;
+        let gravity = gravity_vec3(gravity)?;
         let mut out = vec![0.0; batch * self.dof];
         let mut ws = Workspace::new(self);
         for sample in 0..batch {
             let start = sample * self.dof;
             let end = start + self.dof;
-            self.rnea_into(&q[start..end], &v[start..end], &a[start..end], &mut ws);
+            self.rnea_with_gravity_into(
+                &q[start..end],
+                &v[start..end],
+                &a[start..end],
+                gravity,
+                &mut ws,
+            );
             out[start..end].copy_from_slice(&ws.tau);
         }
         Ok(out.into_pyarray(py).reshape([batch, self.dof])?)

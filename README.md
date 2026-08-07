@@ -100,6 +100,19 @@ from robokots.kots import Kots
 kots = Kots.from_urdf_file("robot.urdf", order=3)
 ```
 
+For conventional inverse dynamics with gravity, pass joint position,
+velocity, and acceleration arrays to `inverse_dynamics`. Gravity is expressed
+in the world frame and defaults to Pinocchio's fixed-base convention:
+
+```python
+tau = kots.inverse_dynamics(q, v, a)  # gravity = [0, 0, -9.81]
+tau_zero_g = kots.inverse_dynamics(q, v, a, gravity=[0, 0, 0])
+```
+
+The gravity-aware API uses the Rust fixed/revolute/prismatic RNEA backend.
+`dynamics()` continues to provide the existing gravity-free higher-order force
+and torque derivatives; its Rust backend does not yet support prismatic joints.
+
 ## Model JSON
 
 RoboKots model JSON is documented in `docs/model_json.md`. Decoded model data
