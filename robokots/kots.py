@@ -414,7 +414,7 @@ class Kots():
       raise ValueError(f"v shape must match q shape: expected {q.shape}, got {v.shape}.")
     if a.shape != q.shape:
       raise ValueError(f"a shape must match q shape: expected {q.shape}, got {a.shape}.")
-    return q, v, a
+    return tuple(np.ascontiguousarray(value) for value in (q, v, a))
 
   def _rust_fast_forward_kinematics(self, q, v = None, a = None, backend : str = "rust"):
     self._fast_backend(backend)
@@ -467,6 +467,7 @@ class Kots():
       raise ValueError("q must have shape (dof,) or (batch, dof)")
     if q.shape[-1] != self.robot_.dof:
       raise ValueError(f"q length must match robot dof: expected {self.robot_.dof}, got {q.shape[-1]}.")
+    q = np.ascontiguousarray(q)
     rust_robot = self._rust_compiled_robot()
     if q.ndim == 1:
       return rust_robot.joint_jacobians(q)

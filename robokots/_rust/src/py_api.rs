@@ -1,16 +1,71 @@
 use numpy::{
-    IntoPyArray, PyArray1, PyArray2, PyArray3, PyArray4, PyArrayMethods, PyReadonlyArray1,
-    PyReadonlyArray2, PyReadonlyArray3, PyUntypedArrayMethods,
+    ndarray::{Array, Dimension, Ix1, Ix2, Ix3},
+    Element, IntoPyArray, PyArray1, PyArray2, PyArray3, PyArray4, PyArrayMethods,
+    PyReadonlyArray as NumpyReadonlyArray, PyUntypedArrayMethods,
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
+use pyo3::types::{PyAny, PyDict, PyList};
 
 use crate::model::*;
 use crate::pinocchio_like::PinocchioLikeWorkspace;
 use crate::spatial::*;
 use crate::types::{RustBatchOutwardData, RustCompiledRobot, RustFastData, RustOutwardData};
 use crate::workspace::{BulkDerivativeWorkspace, CmtmWorkspace, DynamicsCmtmWorkspace, Workspace};
+
+/// Read-only NumPy input with a guaranteed row-major logical layout.
+///
+/// Standard-layout arrays remain zero-copy. Fortran-order and strided arrays
+/// are copied once, in logical index order, before algorithms consume them as
+/// flat row-major slices.
+struct RowMajorArray<'py, T, D>
+where
+    T: Element + Clone,
+    D: Dimension,
+{
+    source: NumpyReadonlyArray<'py, T, D>,
+    owned: Option<Array<T, D>>,
+}
+
+impl<'py, T, D> FromPyObject<'py> for RowMajorArray<'py, T, D>
+where
+    T: Element + Clone,
+    D: Dimension,
+{
+    fn extract_bound(obj: &Bound<'py, PyAny>) -> PyResult<Self> {
+        let source = NumpyReadonlyArray::extract_bound(obj)?;
+        let view = source.as_array();
+        let owned = (!view.is_standard_layout()).then(|| view.as_standard_layout().into_owned());
+        Ok(Self { source, owned })
+    }
+}
+
+impl<T, D> RowMajorArray<'_, T, D>
+where
+    T: Element + Clone,
+    D: Dimension,
+{
+    fn shape(&self) -> &[usize] {
+        self.source.shape()
+    }
+
+    fn len(&self) -> usize {
+        self.source.len()
+    }
+
+    fn as_slice(&self) -> PyResult<&[T]> {
+        if let Some(owned) = &self.owned {
+            return Ok(owned
+                .as_slice()
+                .expect("owned row-major NumPy input must have a contiguous slice"));
+        }
+        Ok(self.source.as_slice()?)
+    }
+}
+
+type PyReadonlyArray1<'py, T> = RowMajorArray<'py, T, Ix1>;
+type PyReadonlyArray2<'py, T> = RowMajorArray<'py, T, Ix2>;
+type PyReadonlyArray3<'py, T> = RowMajorArray<'py, T, Ix3>;
 
 fn gravity_vec3(gravity: Option<PyReadonlyArray1<'_, f64>>) -> PyResult<[f64; 3]> {
     let Some(gravity) = gravity else {

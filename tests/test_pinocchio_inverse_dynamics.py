@@ -245,9 +245,11 @@ def test_batched_inverse_dynamics_matches_pinocchio(tmp_path):
     pin_data = pin_model.createData()
 
     rng = np.random.default_rng(17)
-    q = rng.uniform(-1.0, 1.0, (4, pin_model.nq))
-    v = rng.normal(size=(4, pin_model.nv))
-    a = rng.normal(size=(4, pin_model.nv))
+    permutation = np.arange(pin_model.nq)[::-1]
+    q = rng.uniform(-1.0, 1.0, (4, pin_model.nq))[:, permutation]
+    v = rng.normal(size=(4, pin_model.nv))[:, permutation]
+    a = rng.normal(size=(4, pin_model.nv))[:, permutation]
+    assert q.flags.f_contiguous and not q.flags.c_contiguous
 
     expected = np.stack(
         [pin.rnea(pin_model, pin_data, q[i], v[i], a[i]).copy() for i in range(q.shape[0])]

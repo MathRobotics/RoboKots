@@ -430,6 +430,68 @@ def test_rust_private_fast_kots_batch_helpers_match_sample_loop():
     )
 
 
+@pytest.mark.parametrize("layout", ["fortran", "permuted", "strided", "negative_stride"])
+def test_rust_batch_inputs_accept_non_c_layouts(layout):
+    rust_module = pytest.importorskip("robokots._rust")
+    rng = np.random.default_rng(34)
+    kots = _make_kots(order=3)
+    model_data = json.loads(MODEL_PATH.read_text(encoding="utf-8"))
+    rust_robot = rust_module.RustCompiledRobot.from_model_data(model_data)
+
+    def arrange(values):
+        if layout == "fortran":
+            return np.asfortranarray(values)
+        if layout == "permuted":
+            permutation = np.arange(values.shape[1])[::-1]
+            return values[:, permutation]
+        if layout == "strided":
+            storage = np.empty((values.shape[0], values.shape[1] * 2))
+            storage[:, ::2] = values
+            return storage[:, ::2]
+        return values[:, ::-1]
+
+    inputs = tuple(arrange(rng.standard_normal((5, kots.dof()))) for _ in range(3))
+    contiguous = tuple(np.ascontiguousarray(value) for value in inputs)
+    assert not all(value.flags.c_contiguous for value in inputs)
+    normalized = kots._fast_qva(*inputs)
+    assert all(value.flags.c_contiguous for value in normalized)
+    for actual, expected in zip(normalized, contiguous):
+        np.testing.assert_array_equal(actual, expected)
+
+    expected_tau = rust_robot.rnea_batch(*contiguous)
+    np.testing.assert_allclose(rust_robot.rnea_batch(*inputs), expected_tau, atol=0.0, rtol=0.0)
+    np.testing.assert_allclose(kots._rust_fast_rnea(*inputs), expected_tau, atol=0.0, rtol=0.0)
+    np.testing.assert_allclose(
+        kots.inverse_dynamics(*inputs, gravity=np.zeros(3)),
+        expected_tau,
+        atol=0.0,
+        rtol=0.0,
+    )
+
+    expected_fk = rust_robot.forward_kinematics_batch(*contiguous)
+    for actual, expected in zip(rust_robot.forward_kinematics_batch(*inputs), expected_fk):
+        np.testing.assert_allclose(actual, expected, atol=0.0, rtol=0.0)
+
+    expected_jacobians = rust_robot.joint_jacobians_batch(contiguous[0])
+    np.testing.assert_allclose(
+        rust_robot.joint_jacobians_batch(inputs[0]),
+        expected_jacobians,
+        atol=0.0,
+        rtol=0.0,
+    )
+    np.testing.assert_allclose(
+        kots._rust_fast_joint_jacobians(inputs[0]),
+        expected_jacobians,
+        atol=0.0,
+        rtol=0.0,
+    )
+
+    scalar_tau = np.stack(
+        [rust_robot.rnea(inputs[0][i], inputs[1][i], inputs[2][i]) for i in range(inputs[0].shape[0])]
+    )
+    np.testing.assert_allclose(scalar_tau, expected_tau, atol=0.0, rtol=0.0)
+
+
 def test_rust_private_fast_kots_helpers_validate_shapes_and_backend():
     pytest.importorskip("robokots._rust")
     kots = _make_kots(order=3)
