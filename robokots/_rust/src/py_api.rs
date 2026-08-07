@@ -261,9 +261,37 @@ impl RustCompiledRobot {
                 link_ancestors[child_link[i]] = link_ancestors[parent_link[i]].clone();
                 continue;
             }
+            if joint_type == "spherical" {
+                let q_representation = match joint.get_item("q_representation")? {
+                    Some(value) => value.extract::<String>()?,
+                    None => String::new(),
+                };
+                if q_representation != "rotation_vector" {
+                    return Err(PyValueError::new_err(format!(
+                        "spherical joints require q_representation='rotation_vector'"
+                    )));
+                }
+                return Err(PyValueError::new_err(
+                    "Rust backend currently supports fixed/revolute joints only; spherical/floating joints are supported by the Python backend",
+                ));
+            }
+            if joint_type == "floating" {
+                let q_representation = match joint.get_item("q_representation")? {
+                    Some(value) => value.extract::<String>()?,
+                    None => String::new(),
+                };
+                if q_representation != "expmap" {
+                    return Err(PyValueError::new_err(
+                        "floating joints require q_representation='expmap'",
+                    ));
+                }
+                return Err(PyValueError::new_err(
+                    "Rust backend currently supports fixed/revolute joints only; spherical/floating joints are supported by the Python backend",
+                ));
+            }
             if joint_type != "revolute" {
                 return Err(PyValueError::new_err(
-                    "Rust backend currently supports fixed/revolute joints only",
+                    "Rust backend currently supports fixed/revolute joints only; use the Python backend for prismatic or multi-DoF joints",
                 ));
             }
             axis[i] = normalize(get_vec3_default(joint, "axis", [0.0, 0.0, 1.0])?);

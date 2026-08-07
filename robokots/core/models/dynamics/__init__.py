@@ -7,6 +7,7 @@ _LAZY_ATTRIBUTES = {
     "spatial_inertia": ".base",
     "link_dynamics": ".dynamics",
     "joint_dynamics": ".dynamics",
+    "joint_project_wrench": ".dynamics",
     "link_momentum_cmvec": ".dynamics",
     "link_force_cmvec": ".dynamics",
     "link_dynamics_cmvec": ".dynamics",

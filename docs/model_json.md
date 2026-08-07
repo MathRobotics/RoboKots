@@ -88,6 +88,8 @@ Supported joint types in schema `0.0.2`:
 - `fixed`
 - `revolute`
 - `prismatic`
+- `spherical`
+- `floating`
 
 `fix` is not accepted. Use `fixed`.
 
@@ -103,7 +105,59 @@ link to itself.
 
 It must be a 3-element, finite, non-zero vector.
 
-`axis` is not required for `fixed`.
+`axis` is not required for `fixed`, `spherical`, or `floating`.
+
+For `spherical`, `axis.angular` can optionally specify the 3 angular basis
+vectors used by the rotation-vector coordinates:
+
+```json
+{
+  "type": "spherical",
+  "q_representation": "rotation_vector",
+  "axis": {
+    "angular": [
+      [1.0, 0.0, 0.0],
+      [0.0, 1.0, 0.0],
+      [0.0, 0.0, 1.0]
+    ]
+  }
+}
+```
+
+The `angular` matrix must be 3x3, finite, and full rank. If omitted,
+RoboKots uses the identity angular basis.
+
+### Multi-DoF Joints
+
+`spherical` joints use SO(3) rotation-vector coordinates:
+
+```json
+{
+  "type": "spherical",
+  "q_representation": "rotation_vector",
+  "dof": 3
+}
+```
+
+`q` is a 3-element rotation vector. Its direction is the rotation axis, and its
+norm is the rotation angle.
+
+`floating` joints use SE(3) exponential-map coordinates:
+
+```json
+{
+  "type": "floating",
+  "q_representation": "expmap",
+  "dof": 6
+}
+```
+
+If `dof` is present, it must match the joint type: `0` for
+`fixed`, `1` for `revolute`/`prismatic`, `3` for `spherical`, and `6` for
+`floating`.
+
+The Python backend supports these joint types. The Rust backend currently
+supports only `fixed` and `revolute`.
 
 ### Origin
 
@@ -127,15 +181,5 @@ as invalid.
 The following names are reserved for future schema versions and are not
 implemented in schema `0.0.2`:
 
-- `spherical`
-- `floating`
 - `planar`
 - `custom`
-
-The intended first representation is:
-
-- `spherical`: 3 DoF, `q_representation: "expmap"`
-- `floating`: 6 DoF se(3), `q_representation: "expmap"`
-
-These are documented as direction, not accepted input in schema `0.0.2`.
-

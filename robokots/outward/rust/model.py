@@ -34,7 +34,8 @@ def _ensure_supported_robot(robot: RobotStruct) -> None:
   ]
   if unsupported_joints:
     raise NotImplementedError(
-      "Rust backend currently supports fixed/revolute joints only; unsupported joints: "
+      "Rust backend currently supports fixed/revolute joints only. "
+      "Use the Python backend for prismatic, spherical, or floating joints; unsupported joints: "
       + ", ".join(unsupported_joints)
     )
 

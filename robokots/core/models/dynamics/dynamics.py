@@ -10,6 +10,34 @@ from mathrobo import SE3, SE3wrench, CMTM
 
 from robokots.core import JointStruct
 from robokots.core.models.cmtm_apply import apply_mat_inv_adj
+from robokots.core.models.kinematics.kinematics import local_tangent_mat
+
+
+def joint_project_wrench(joint: JointStruct, wrench: np.ndarray, joint_coord: np.ndarray = None) -> np.ndarray:
+    """Project spatial wrench values to generalized joint forces.
+
+    The common 1-DoF joint types avoid dense ``select_mat`` multiplication.
+    Multi-DoF and future custom joints can still fall back to the motion
+    subspace matrix.
+    """
+    wrench = np.asarray(wrench)
+    if joint.dof == 0:
+        return np.zeros(wrench.shape[:-1] + (0,), dtype=wrench.dtype)
+    if joint_coord is not None:
+        select_mat = np.asarray(joint.select_mat, dtype=wrench.dtype)
+        joint_coord = np.asarray(joint_coord, dtype=wrench.dtype)
+        if joint_coord.ndim == 1:
+            tangent_mat = local_tangent_mat(select_mat, joint_coord)
+            return wrench @ tangent_mat
+        tan = joint_coord @ select_mat.T
+        tangent_mat = SE3.exp_integ_adj(-tan, 1.0) @ select_mat
+        return np.einsum("...i,...ij->...j", wrench, tangent_mat)
+    axis = np.asarray(joint.axis, dtype=wrench.dtype)
+    if joint.type == "revolute" and joint.dof == 1:
+        return np.sum(wrench[..., :3] * axis, axis=-1)[..., None]
+    if joint.type == "prismatic" and joint.dof == 1:
+        return np.sum(wrench[..., 3:6] * axis, axis=-1)[..., None]
+    return wrench @ np.asarray(joint.select_mat, dtype=wrench.dtype)
 
 def link_momentum(inertia : np.ndarray, veloc : np.ndarray) -> np.ndarray:
     """
@@ -114,5 +142,5 @@ def joint_dynamics_cmvec(joint : JointStruct, rel_cmtm : CMTM, p_joint_force : n
     joint_force = apply_mat_inv_adj(rel_cmtm, p_joint_force) - link_force
     joint_torque = np.zeros(joint.dof*rel_cmtm._n)
     for i in range(rel_cmtm._n):
-        joint_torque[i*joint.dof:(i+1)*joint.dof] = joint.select_mat.T @ joint_force[i*6:(i+1)*6]
+        joint_torque[i*joint.dof:(i+1)*joint.dof] = joint_project_wrench(joint, joint_force[i*6:(i+1)*6])
     return joint_torque, joint_force

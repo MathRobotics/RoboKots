@@ -14,7 +14,8 @@ warnings.simplefilter("always", UserWarning)
 
 MODEL_SCHEMA_VERSION = "0.0.2"
 SUPPORTED_LINK_TYPES = frozenset({"rigid", "soft"})
-SUPPORTED_JOINT_TYPES = frozenset({"fixed", "revolute", "prismatic"})
+SUPPORTED_JOINT_TYPES = frozenset({"fixed", "revolute", "prismatic", "spherical", "floating"})
+SUPPORTED_Q_REPRESENTATIONS = frozenset({"rotation_vector", "expmap"})
 INERTIA_KEYS = ("ixx", "ixy", "ixz", "iyy", "iyz", "izz")
 
 
@@ -51,6 +52,36 @@ def _require_list4(value, field_name: str) -> list[float]:
   if np.linalg.norm(result) <= 0.0:
     raise ValueError(f"{field_name} must be non-zero.")
   return result
+
+
+def _require_matrix(value, field_name: str, shape: tuple[int, int]) -> list[list[float]]:
+  rows, cols = shape
+  if not isinstance(value, (list, tuple)) or len(value) != rows:
+    raise ValueError(f"{field_name} must be a {rows}x{cols} matrix of numbers.")
+  result = []
+  for row_index, row in enumerate(value):
+    if not isinstance(row, (list, tuple)) or len(row) != cols:
+      raise ValueError(f"{field_name}[{row_index}] must be a list of {cols} numbers.")
+    try:
+      result.append([float(v) for v in row])
+    except (TypeError, ValueError) as exc:
+      raise ValueError(f"{field_name}[{row_index}] must be a list of {cols} numbers.") from exc
+  if not np.all(np.isfinite(result)):
+    raise ValueError(f"{field_name} must contain only finite numbers.")
+  return result
+
+
+def _joint_axis_value(joint: dict):
+  axis = joint.get("axis")
+  if joint.get("type") == "spherical" and isinstance(axis, dict):
+    return axis.get("angular", np.eye(3).tolist())
+  return axis
+
+
+def _joint_axis_to_dict(joint: "JointStruct"):
+  if joint.type == "spherical":
+    return {"angular": joint.axis.tolist() if hasattr(joint.axis, "tolist") else joint.axis}
+  return joint.axis.tolist() if hasattr(joint.axis, "tolist") else joint.axis
 
 
 def inertia_dict_to_vector(inertia: dict | None) -> list[float]:
@@ -223,12 +254,46 @@ def validate_model_data(data: Dict) -> None:
       raise ValueError(f"Unsupported joint type 'fix' for joint '{joint_name}'. Use 'fixed' instead.")
     if joint_type not in SUPPORTED_JOINT_TYPES:
       raise ValueError(f"Unsupported joint type '{joint_type}' for joint '{joint_name}'.")
+    expected_dof_by_type = {
+      "fixed": 0,
+      "revolute": 1,
+      "prismatic": 1,
+      "spherical": 3,
+      "floating": 6,
+    }
+    if "dof" in joint and joint["dof"] != expected_dof_by_type[joint_type]:
+      raise ValueError(
+        f"joint '{joint_name}'.dof must be {expected_dof_by_type[joint_type]} for {joint_type} joints."
+      )
+    q_representation = joint.get("q_representation")
+    if joint_type == "spherical":
+      if q_representation != "rotation_vector":
+        raise ValueError(
+          f"joint '{joint_name}'.q_representation must be 'rotation_vector' for spherical joints."
+        )
+    elif joint_type == "floating":
+      if q_representation != "expmap":
+        raise ValueError(
+          f"joint '{joint_name}'.q_representation must be 'expmap' for floating joints."
+        )
+    elif q_representation is not None and q_representation not in SUPPORTED_Q_REPRESENTATIONS:
+      raise ValueError(f"Unsupported q_representation '{q_representation}' for joint '{joint_name}'.")
     if joint_type in ("revolute", "prismatic"):
       if "axis" not in joint:
         raise ValueError(f"joint '{joint_name}'.axis is required for {joint_type} joints.")
       axis = _require_list3(joint["axis"], f"joint '{joint_name}'.axis")
       if np.linalg.norm(axis) <= 0.0:
         raise ValueError(f"joint '{joint_name}'.axis must be non-zero.")
+    if joint_type == "spherical" and "axis" in joint:
+      axis = joint["axis"]
+      if not isinstance(axis, dict):
+        raise ValueError(f"joint '{joint_name}'.axis must be a dictionary for spherical joints.")
+      extra = [key for key in axis if key != "angular"]
+      if extra:
+        raise ValueError(f"joint '{joint_name}'.axis contains unsupported keys: " + ", ".join(extra))
+      angular = _require_matrix(axis.get("angular"), f"joint '{joint_name}'.axis.angular", (3, 3))
+      if np.linalg.matrix_rank(np.asarray(angular, dtype=float)) < 3:
+        raise ValueError(f"joint '{joint_name}'.axis.angular must be full rank.")
     origin = joint.get("origin", {})
     if origin is not None:
       if not isinstance(origin, dict):
@@ -369,9 +434,10 @@ class RobotStruct:
         id=joint["id"],
         name=joint["name"],
         type=joint["type"],
-        axis=xp.array(joint.get("axis", [0., 0., 0.])),
+        axis=xp.array(_joint_axis_value(joint) if _joint_axis_value(joint) is not None else [0., 0., 0.]),
         parent_link_id=joint["parent_link_id"],
         child_link_id=joint["child_link_id"],
+        q_representation=joint.get("q_representation"),
         origin=SE3.set_pos_quaternion(
           xp.array(joint.get("origin", {}).get("position", [0., 0., 0.])),
           xp.array(joint.get("origin", {}).get("orientation", [1., 0., 0., 0.])),
@@ -406,8 +472,12 @@ class RobotStruct:
         joint_dict["id"] = joint.id
         joint_dict["name"] = joint.name
         joint_dict["type"] = joint.type
+        joint_dict["dof"] = joint.dof
+        if joint.q_representation is not None:
+            joint_dict["q_representation"] = joint.q_representation
 
-        joint_dict["axis"] = joint.axis.tolist()
+        if joint.type in ("revolute", "prismatic", "spherical"):
+            joint_dict["axis"] = _joint_axis_to_dict(joint)
 
         joint_dict["parent_link_id"] = joint.parent_link_id
         joint_dict["child_link_id"] = joint.child_link_id
@@ -497,7 +567,18 @@ class LinkStruct:
 
 class JointStruct:
     dof_index : int = 0
-    def __init__(self, id: int, name: str, type: str, axis: np.ndarray, parent_link_id: int, child_link_id: int, origin: SE3, lib: str = "numpy"):
+    def __init__(
+        self,
+        id: int,
+        name: str,
+        type: str,
+        axis: np.ndarray,
+        parent_link_id: int,
+        child_link_id: int,
+        origin: SE3,
+        q_representation: str | None = None,
+        lib: str = "numpy",
+    ):
         xp = _array_module(lib)
         if type == "fix":
             raise ValueError(
@@ -507,12 +588,26 @@ class JointStruct:
         self.id = id
         self.name = name
         self.type = type
-        self.axis = axis if xp.linalg.norm(axis) > 0 else xp.array([1, 0, 0])
+        self.q_representation = q_representation
+        if type == "spherical":
+            if q_representation != "rotation_vector":
+                raise ValueError(
+                    f"joint '{name}'.q_representation must be 'rotation_vector' for spherical joints."
+                )
+        elif type == "floating":
+            if q_representation != "expmap":
+                raise ValueError(
+                    f"joint '{name}'.q_representation must be 'expmap' for floating joints."
+                )
+        elif q_representation is not None and q_representation not in SUPPORTED_Q_REPRESENTATIONS:
+            raise ValueError(f"Unsupported q_representation '{q_representation}' for joint '{name}'.")
+        self.axis = self._normalize_axis_value(type, axis, lib)
         self.parent_link_id = parent_link_id
         self.child_link_id = child_link_id
         self.dof = self._joint_dof(self.type)
         self.select_mat = self._select_mat(self.type, self.axis, lib)
-        self.select_indeces = xp.argmax(self.select_mat, axis=0)
+        self.select_indeces = xp.array([], dtype=int) if self.dof == 0 else xp.argmax(self.select_mat, axis=0)
+        self.select_indices = self.select_indeces
         self.origin = origin
         
     def set_dof_index(self, n : int):
@@ -528,45 +623,68 @@ class JointStruct:
             return 1
         elif type == "fixed":
             return 0
+        elif type == "spherical":
+            return 3
+        elif type == "floating":
+            return 6
         else:
             warnings.warn(f"Unsupported joint type: {type}", UserWarning)
             return 0
 
     #specific for 1 DOF joint or fixed joint
     @staticmethod
+    def _normalize_axis_value(type: str, axis: np.ndarray, lib: str = "numpy") -> np.ndarray:
+        xp = _array_module(lib)
+        if type == "spherical":
+            if getattr(axis, "shape", None) == (3, 3):
+                if np.linalg.matrix_rank(np.asarray(axis, dtype=float)) < 3:
+                    raise ValueError("spherical joint axis angular basis must be full rank.")
+                return axis
+            if xp.linalg.norm(axis) <= 0:
+                return xp.eye(3)
+            raise ValueError("spherical joint axis must be a 3x3 angular basis.")
+        if type == "floating":
+            return xp.eye(6)
+        return axis if xp.linalg.norm(axis) > 0 else xp.array([1, 0, 0])
+
+    @staticmethod
     def _select_mat(type: str, axis: np.ndarray, lib: str = "numpy") -> np.ndarray:
         xp = _array_module(lib)
-        mat = xp.zeros((6, 1))
-
         if type == "fixed":
-            return mat
+            return xp.zeros((6, 0))
         elif type == "revolute":
+            mat = xp.zeros((6, 1))
             if lib == "jax":
                 mat = mat.at[0:3, 0].set(axis)
             elif lib == "numpy":
                 mat[0:3, 0] = axis
             return mat
         elif type == "prismatic":
+            mat = xp.zeros((6, 1))
             if lib == "jax":
                 mat = mat.at[3:6, 0].set(axis)
             elif lib == "numpy":
                 mat[3:6, 0] = axis
             return mat
+        elif type == "spherical":
+            mat = xp.zeros((6, 3))
+            if lib == "jax":
+                mat = mat.at[0:3, 0:3].set(axis)
+            elif lib == "numpy":
+                mat[0:3, 0:3] = axis
+            return mat
+        elif type == "floating":
+            return xp.eye(6)
         else:
             raise warnings.warn(f"Unsupported joint type: {type}", UserWarning)
         
     def selector(self, mat: np.ndarray) -> np.ndarray:
-        return mat[:, self.select_indeces]
+        return mat @ self.select_mat
     
     #specific for 3D space (magic number 6)
     def scatter(self, mat: np.ndarray) -> np.ndarray:
-        result = np.zeros((6, mat.shape[1]))
-        if mat.shape[1] != self.dof:
-            raise ValueError(f"Invalid input vector length: {len(mat)}")
-        for i in range(self.dof):
-            row = self.select_indeces[i]
-            print(f"row: {row}")
-            result[row] += mat[i]
-        return result
+        if mat.shape[0] != self.dof:
+            raise ValueError(f"Invalid input vector length: {mat.shape[0]}")
+        return self.select_mat @ mat
 
         

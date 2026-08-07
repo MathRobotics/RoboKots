@@ -167,7 +167,7 @@ def kinematics_cmtm(joint: JointData, p_link_cmtm: CMTM,
     return p_link_cmtm @ joint_rel_cmtm(joint, joint_motions, order)
 
 def part_link_jacob(joint: JointData, rel_frame: SE3) -> jnp.ndarray:
-    return rel_frame.mat_inv_adj()[:, joint.select_indeces]
+    return rel_frame.mat_inv_adj() @ joint.select_mat
 
 def part_link_cmtm_tan_jacob(joint: JointData, rel_cmtm: CMTM,
                               joint_cmtm: CMTM) -> jnp.ndarray:
@@ -178,7 +178,7 @@ def part_link_cmtm_tan_jacob(joint: JointData, rel_cmtm: CMTM,
         i, j = idx
         block = tmp[i*6:(i+1)*6, j*6:(j+1)*6]
         return m.at[i*6:(i+1)*6, j*joint.dof:(j+1)*joint.dof].set(
-            block[:, joint.select_indeces])
+            block @ joint.select_mat)
     idxs = [(i, j) for i in range(n) for j in range(i+1)]
     return jax.lax.fori_loop(0, len(idxs), lambda k, m: ij_body(idxs[k], m), mat)
 

@@ -12,7 +12,7 @@ class MockJoint:
         self.select_indeces = np.argmax(self.select_mat, axis=0)
 
     def selector(self, mat: np.ndarray) -> np.ndarray:
-        return mat[:, self.select_indeces]
+        return mat @ self.select_mat
 
 delta = 1e-8 # for numercal difference
 
@@ -367,6 +367,86 @@ def test_part_link_jacob():
     rel_frame = SE3.rand() # Identity matrix for simplicity
     expected_jacob = rel_frame.mat_inv_adj() @ joint.select_mat
     result_jacob = part_link_jacob(joint, rel_frame)
+    assert np.allclose(result_jacob, expected_jacob)
+
+
+def test_spherical_joint_local_frame_uses_rotation_vector_motion_subspace():
+    joint = MockJoint(np.vstack([np.eye(3), np.zeros((3, 3))]))
+    joint_coord = np.array([0.2, -0.1, 0.3])
+
+    expected_frame = SE3.set_mat(SE3.exp(np.array([0.2, -0.1, 0.3, 0.0, 0.0, 0.0])))
+    result_frame = joint_local_frame(joint, joint_coord)
+
+    assert np.allclose(result_frame.mat(), expected_frame.mat())
+
+
+def test_spherical_joint_local_velocity_uses_exp_derivative():
+    joint = MockJoint(np.vstack([np.eye(3), np.zeros((3, 3))]))
+    joint_coord = np.array([0.4, -0.2, 0.3])
+    joint_veloc = np.array([0.7, -0.4, 0.2])
+    dt = 1e-8
+
+    result_vel = joint_local_vel(joint, joint_coord, joint_veloc)
+    h0 = joint_local_frame(joint, joint_coord).mat()
+    h1 = joint_local_frame(joint, joint_coord + joint_veloc * dt).mat()
+    rdot = (h1[:3, :3] - h0[:3, :3]) / dt
+    expected_angular = mr.SO3.vee(h0[:3, :3].T @ rdot)
+
+    assert not np.allclose(joint.select_mat @ joint_veloc, result_vel)
+    assert np.allclose(result_vel[:3], expected_angular, atol=1e-7, rtol=1e-7)
+    assert np.allclose(result_vel[3:], np.zeros(3))
+
+
+def test_spherical_joint_local_acceleration_matches_velocity_derivative():
+    joint = MockJoint(np.vstack([np.eye(3), np.zeros((3, 3))]))
+    joint_coord = np.array([0.4, -0.2, 0.3])
+    joint_veloc = np.array([0.7, -0.4, 0.2])
+    joint_accel = np.array([-0.3, 0.5, 0.1])
+    dt = 1e-6
+
+    result_acc = joint_local_acc(joint, joint_coord, joint_veloc, joint_accel)
+    vel0 = joint_local_vel(joint, joint_coord, joint_veloc)
+    vel1 = joint_local_vel(
+        joint,
+        joint_coord + joint_veloc * dt + 0.5 * joint_accel * dt * dt,
+        joint_veloc + joint_accel * dt,
+    )
+    expected_acc = (vel1 - vel0) / dt
+
+    assert np.allclose(result_acc, expected_acc, atol=1e-6, rtol=1e-6)
+
+
+def test_floating_joint_local_frame_uses_se3_expmap_motion_subspace():
+    joint = MockJoint(np.eye(6))
+    joint_coord = np.array([0.2, -0.1, 0.3, 1.0, 2.0, 3.0])
+
+    expected_frame = SE3.set_mat(SE3.exp(joint_coord))
+    result_frame = joint_local_frame(joint, joint_coord)
+
+    assert np.allclose(result_frame.mat(), expected_frame.mat())
+
+
+def test_floating_joint_local_velocity_uses_exp_derivative():
+    joint = MockJoint(np.eye(6))
+    joint_coord = np.array([0.4, -0.2, 0.3, 0.5, -0.1, 0.2])
+    joint_veloc = np.array([0.7, -0.4, 0.2, -0.3, 0.6, 0.1])
+    expected_vel = mr.SE3.exp_integ_adj(-(joint.select_mat @ joint_coord), 1.0) @ (joint.select_mat @ joint_veloc)
+
+    result_vel = joint_local_vel(joint, joint_coord, joint_veloc)
+
+    assert not np.allclose(joint.select_mat @ joint_veloc, result_vel)
+    assert np.allclose(result_vel, expected_vel)
+
+
+def test_part_link_jacob_projects_multi_dof_motion_subspace():
+    joint = MockJoint(np.vstack([np.eye(3), np.zeros((3, 3))]))
+    joint_coord = np.array([0.4, -0.2, 0.3])
+    rel_frame = SE3.rand()
+
+    expected_jacob = rel_frame.mat_inv_adj() @ local_tangent_mat(joint.select_mat, joint_coord)
+    result_jacob = part_link_jacob(joint, rel_frame, joint_coord)
+
+    assert result_jacob.shape == (6, 3)
     assert np.allclose(result_jacob, expected_jacob)
 
 def test_part_link_jacob_vec():

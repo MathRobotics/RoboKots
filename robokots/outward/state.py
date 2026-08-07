@@ -20,12 +20,12 @@ from ..core.state import data_type_dof, StateType, state_dict_key
 
 from ..core.models.kinematics.base import convert_joint_to_data, convert_link_to_data
 from ..core.models.kinematics.kinematics import joint_local_cmtm, joint_rel_frame
-from ..core.models.kinematics.kinematics_matrix import joint_select_diag_mat
 from ..core.models.kinematics.kinematics_soft_link import soft_link_local_cmtm, calc_link_local_point_frame
 
 from ..core.models.dynamics.base import spatial_inertia
 from ..core.models.dynamics.dynamics import (
     joint_dynamics,
+    joint_project_wrench,
     link_dynamics,
     link_force_cmvec,
     link_momentum_cmvec,
@@ -46,6 +46,20 @@ def _batch_local_tan_vec(select_mat: np.ndarray, vec: np.ndarray) -> np.ndarray:
   return vec @ np.asarray(select_mat, dtype=vec.dtype).T
 
 
+def _batch_local_tangent_mat(select_mat: np.ndarray, coord: np.ndarray) -> np.ndarray:
+  coord = np.asarray(coord, dtype=float)
+  select_mat = np.asarray(select_mat, dtype=coord.dtype)
+  if select_mat.shape[1] == 0:
+    return np.zeros(coord.shape[:-1] + (6, 0), dtype=coord.dtype)
+  tan = _batch_local_tan_vec(select_mat, coord)
+  return SE3.exp_integ_adj(-tan, 1.0) @ select_mat
+
+
+def _batch_local_tan_vel(select_mat: np.ndarray, coord: np.ndarray, veloc: np.ndarray) -> np.ndarray:
+  tangent_mat = _batch_local_tangent_mat(select_mat, coord)
+  return np.einsum("...ij,...j->...i", tangent_mat, veloc)
+
+
 def _batch_local_frame(select_mat: np.ndarray, coord: np.ndarray) -> SE3:
   return SE3.set_mat(SE3.exp(_batch_local_tan_vec(select_mat, coord)))
 
@@ -58,7 +72,10 @@ def _batch_local_cmtm(select_mat: np.ndarray, motions: np.ndarray, dof: int, ord
   blocks = motions.reshape(batch_shape + (order, dof))
   frame = _batch_local_frame(select_mat, blocks[..., 0, :])
   if order > 1:
-    vecs = _batch_local_tan_vec(select_mat, blocks[..., 1:, :])
+    vecs = np.zeros(batch_shape + (order - 1, 6), dtype=motions.dtype)
+    vecs[..., 0, :] = _batch_local_tan_vel(select_mat, blocks[..., 0, :], blocks[..., 1, :])
+    if order > 2:
+      vecs[..., 1:, :] = _batch_local_tan_vec(select_mat, blocks[..., 2:, :])
   else:
     vecs = np.zeros(batch_shape + (0, 6), dtype=motions.dtype)
   return CMTM[SE3](frame, vecs)
@@ -73,7 +90,13 @@ def _batch_joint_rel_cmtm(joint_data, joint_motions: np.ndarray, order: int) -> 
   else:
     blocks = joint_motions.reshape(batch_shape + (order, joint_data.dof))
     local = _batch_local_frame(joint_data.select_mat, blocks[..., 0, :])
-    vecs = _batch_local_tan_vec(joint_data.select_mat, blocks[..., 1:, :]) if order > 1 else np.zeros(batch_shape + (0, 6))
+    if order > 1:
+      vecs = np.zeros(batch_shape + (order - 1, 6), dtype=joint_motions.dtype)
+      vecs[..., 0, :] = _batch_local_tan_vel(joint_data.select_mat, blocks[..., 0, :], blocks[..., 1, :])
+      if order > 2:
+        vecs[..., 1:, :] = _batch_local_tan_vec(joint_data.select_mat, blocks[..., 2:, :])
+    else:
+      vecs = np.zeros(batch_shape + (0, 6))
   origin = SE3.set_mat(np.broadcast_to(joint_data.origin.mat(), batch_shape + (4, 4)).copy())
   return CMTM[SE3](origin @ local, vecs)
 
@@ -376,7 +399,9 @@ def build_dynamics_state(robot : RobotStruct, joint_motions) -> dict:
   return state_dict
 
 def build_dynamics_outward_state(robot : RobotStruct, motions, dynamics_order = 1) -> OutwardState:
-  outward_state = build_kinematics_outward_state(robot, motions, dynamics_order + 2)
+  kinematics_order = dynamics_order + 2
+  motion = np.asarray(motions, dtype=float)
+  outward_state = build_kinematics_outward_state(robot, motion, kinematics_order)
   link_cmtm_dict = outward_state.link_cmtm
   joint_momentum_cmvec = {}
   momentum_order = dynamics_order + 1
@@ -428,9 +453,9 @@ def build_dynamics_outward_state(robot : RobotStruct, motions, dynamics_order = 
 
       if joint.dof == 0:
         continue
-      select = joint_select_diag_mat(joint.select_mat, dynamics_order)
-      joint_torque = joint_force.vec() @ select
-      outward_state.joint_torque[joint.name] = joint_torque.reshape(joint_force.vec().shape[:-1] + (dynamics_order, joint.dof))
+      joint_motion_index = RobotMotions.owner_vec_index(joint.dof, joint.dof_index, kinematics_order)
+      joint_coord = motion[..., joint_motion_index][..., :joint.dof]
+      outward_state.joint_torque[joint.name] = joint_project_wrench(joint, joint_force.vecs(), joint_coord)
 
   # Compute for the world link
   world_link = robot.links[0]

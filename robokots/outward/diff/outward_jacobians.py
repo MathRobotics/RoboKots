@@ -13,12 +13,13 @@ from robokots.core.models.kinematics.kinematics_soft_link import part_soft_link_
 
 from robokots.outward.values import compute_outward_value
 
-def __target_link_part_joint_jacob(target_link : LinkStruct, joint : JointStruct, rel_frame : SE3) -> np.ndarray:
+def __target_link_part_joint_jacob(target_link : LinkStruct, joint : JointStruct, joint_coord : np.ndarray, rel_frame : SE3) -> np.ndarray:
   if target_link.id == joint.child_link_id:
-    mat = joint.select_mat
+    joint_data = convert_joint_to_data(joint)
+    mat = part_link_jacob(joint_data, SE3(), joint_coord)
   else:
     joint_data = convert_joint_to_data(joint)
-    mat = part_link_jacob(joint_data, rel_frame)  
+    mat = part_link_jacob(joint_data, rel_frame, joint_coord)  
   return mat
 
 def __target_link_part_link_jacob(target_link : LinkStruct, link : LinkStruct, link_coord : np.ndarray, rel_frame : SE3) -> np.ndarray:
@@ -43,7 +44,9 @@ def __target_link_part_joint_cmtm_tan_jacob(target_link : LinkStruct, joint : Jo
   if target_link.id == joint.child_link_id:
     tmp = joint_cmtm.tangent_mat()
     for i in range(rel_cmtm._n):
-      mat[i*6:(i+1)*6, i*joint.dof:(i+1)*joint.dof] = (tmp[i*6:(i+1)*6, i*6:(i+1)*6])[:, joint.select_indeces]
+      mat[i*6:(i+1)*6, i*joint.dof:(i+1)*joint.dof] = (
+        tmp[i*6:(i+1)*6, i*6:(i+1)*6] @ joint.select_mat
+      )
   else:
     joint_data = convert_joint_to_data(joint)
     mat = part_link_cmtm_tan_jacob(joint_data, rel_cmtm, joint_cmtm)
@@ -78,8 +81,9 @@ def __link_jacobian(robot : RobotStruct, motions: RobotMotions, state : dict, ta
     joint = robot.joints[j]
     if joint.dof < 1:
       continue
+    joint_coord = np.asarray(motions.joint_motions(joint.dof, joint.dof_index, 1)).reshape(-1)
     rel_frame = state_dict_to_rel_frame(state, robot.links[joint.child_link_id].name, target_link.name)
-    mat = __target_link_part_joint_jacob(target_link, joint, rel_frame)
+    mat = __target_link_part_joint_jacob(target_link, joint, joint_coord, rel_frame)
     jacob[:,joint.dof_index:joint.dof_index+joint.dof] = mat
     
   for l in link_route:

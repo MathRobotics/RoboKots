@@ -1,7 +1,9 @@
 import numpy as np
+from types import SimpleNamespace
 
 from mathrobo import CMVector, SO3, SE3
 from robokots.core.models.dynamics import *
+from robokots.core.models.kinematics.kinematics import local_tangent_mat
 
 '''
 Test dynamics function
@@ -55,6 +57,82 @@ def test_joint_dynamics():
     # Check the shapes of the outputss
     assert np.allclose(joint_force, expected_force)
     assert np.allclose(joint_torque, expected_torque)
+
+
+def test_joint_project_wrench_specializes_one_dof_joints():
+    wrench = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+    revolute = SimpleNamespace(
+        type="revolute",
+        dof=1,
+        axis=np.array([0.0, 0.0, 1.0]),
+        select_mat=np.array([[0.0], [0.0], [1.0], [0.0], [0.0], [0.0]]),
+    )
+    prismatic = SimpleNamespace(
+        type="prismatic",
+        dof=1,
+        axis=np.array([0.0, 1.0, 0.0]),
+        select_mat=np.array([[0.0], [0.0], [0.0], [0.0], [1.0], [0.0]]),
+    )
+
+    assert np.allclose(joint_project_wrench(revolute, wrench), np.array([3.0]))
+    assert np.allclose(joint_project_wrench(prismatic, wrench), np.array([5.0]))
+
+
+def test_joint_project_wrench_falls_back_to_motion_subspace():
+    wrench = np.array([[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]])
+    joint = SimpleNamespace(
+        type="custom",
+        dof=2,
+        axis=np.array([1.0, 0.0, 0.0]),
+        select_mat=np.array(
+            [
+                [1.0, 0.0],
+                [0.0, 0.0],
+                [0.0, 0.0],
+                [0.0, 1.0],
+                [0.0, 0.0],
+                [0.0, 0.0],
+            ]
+        ),
+    )
+
+    assert np.allclose(joint_project_wrench(joint, wrench), np.array([[1.0, 4.0]]))
+
+
+def test_joint_project_wrench_supports_spherical_and_floating_motion_subspaces():
+    wrench = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+    spherical = SimpleNamespace(
+        type="spherical",
+        dof=3,
+        axis=np.array([1.0, 0.0, 0.0]),
+        select_mat=np.vstack([np.eye(3), np.zeros((3, 3))]),
+    )
+    floating = SimpleNamespace(
+        type="floating",
+        dof=6,
+        axis=np.array([1.0, 0.0, 0.0]),
+        select_mat=np.eye(6),
+    )
+
+    assert np.allclose(joint_project_wrench(spherical, wrench), np.array([1.0, 2.0, 3.0]))
+    assert np.allclose(joint_project_wrench(floating, wrench), wrench)
+
+
+def test_joint_project_wrench_uses_coordinate_dependent_tangent_map():
+    wrench = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+    joint_coord = np.array([0.4, -0.2, 0.3])
+    spherical = SimpleNamespace(
+        type="spherical",
+        dof=3,
+        axis=np.eye(3),
+        select_mat=np.vstack([np.eye(3), np.zeros((3, 3))]),
+    )
+
+    expected = wrench @ local_tangent_mat(spherical.select_mat, joint_coord)
+    result = joint_project_wrench(spherical, wrench, joint_coord)
+
+    assert not np.allclose(joint_project_wrench(spherical, wrench), result)
+    assert np.allclose(result, expected)
 
 
 def test_link_force_cmvec_preserves_row_dimension():
