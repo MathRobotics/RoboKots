@@ -8,6 +8,20 @@ from math import cos, sin
 from typing import Dict, List
 
 
+def _zero_inertia_dict() -> Dict[str, float]:
+    return {"ixx": 0.0, "ixy": 0.0, "ixz": 0.0, "iyy": 0.0, "iyz": 0.0, "izz": 0.0}
+
+
+def _zero_inertia_link(link_id: int, name: str) -> Dict:
+    return {
+        "id": link_id,
+        "name": name,
+        "mass": 0.0,
+        "cog": [0.0, 0.0, 0.0],
+        "inertia": _zero_inertia_dict(),
+    }
+
+
 def _parse_xyz(text: str | None, default: List[float]) -> List[float]:
     if text is None or text.strip() == "":
         return list(default)
@@ -31,6 +45,29 @@ def _rpy_to_quaternion_wxyz(rpy: List[float]) -> List[float]:
     y = cr * sp * cy + sr * cp * sy
     z = cr * cp * sy - sr * sp * cy
     return [w, x, y, z]
+
+
+def _quaternion_wxyz_to_rotation_matrix(quat: List[float]) -> List[List[float]]:
+    w, x, y, z = quat
+    return [
+        [1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y - w * z), 2.0 * (x * z + w * y)],
+        [2.0 * (x * y + w * z), 1.0 - 2.0 * (x * x + z * z), 2.0 * (y * z - w * x)],
+        [2.0 * (x * z - w * y), 2.0 * (y * z + w * x), 1.0 - 2.0 * (x * x + y * y)],
+    ]
+
+
+def _rotate_inertia_to_link(inertia: List[List[float]], rpy: List[float]) -> List[List[float]]:
+    """Rotate a URDF inertial-frame tensor into the link frame."""
+    rotation = _quaternion_wxyz_to_rotation_matrix(_rpy_to_quaternion_wxyz(rpy))
+    rotated = [[0.0] * 3 for _ in range(3)]
+    for row in range(3):
+        for col in range(3):
+            rotated[row][col] = sum(
+                rotation[row][i] * inertia[i][j] * rotation[col][j]
+                for i in range(3)
+                for j in range(3)
+            )
+    return rotated
 
 
 def _topologically_order_joints(joints: List[Dict]) -> List[Dict]:
@@ -76,6 +113,28 @@ def _topologically_order_joints(joints: List[Dict]) -> List[Dict]:
     return ordered
 
 
+def _move_single_root_link_to_zero(
+    links: List[Dict],
+    joints: List[Dict],
+    child_link_names: set[str],
+) -> None:
+    """Normalize a world-less URDF so its single root has link id zero."""
+    root_links = [link for link in links if link["name"] not in child_link_names]
+    if len(root_links) != 1 or int(root_links[0]["id"]) == 0:
+        return
+
+    root_id = int(root_links[0]["id"])
+    reordered = [root_links[0], *(link for link in links if int(link["id"]) != root_id)]
+    old_to_new = {int(link["id"]): new_id for new_id, link in enumerate(reordered)}
+    for new_id, link in enumerate(reordered):
+        link["id"] = new_id
+    links[:] = reordered
+
+    for joint in joints:
+        joint["parent_link_id"] = old_to_new[int(joint["parent_link_id"])]
+        joint["child_link_id"] = old_to_new[int(joint["child_link_id"])]
+
+
 def urdf_root_to_model_data(root: ET.Element, add_world_link: bool = True) -> Dict:
     if root.tag != "robot":
         raise ValueError(f"URDF root tag must be 'robot', got '{root.tag}'")
@@ -94,7 +153,7 @@ def urdf_root_to_model_data(root: ET.Element, add_world_link: bool = True) -> Di
     link_name_to_id: Dict[str, int] = {}
 
     if add_world_link:
-        links.append({"id": 0, "name": "world"})
+        links.append(_zero_inertia_link(0, "world"))
 
     base_link_id = len(links)
     for i, link_elem in enumerate(link_elems):
@@ -106,7 +165,10 @@ def urdf_root_to_model_data(root: ET.Element, add_world_link: bool = True) -> Di
 
         link_id = base_link_id + i
         link_name_to_id[name] = link_id
-        link_data: Dict = {"id": link_id, "name": name}
+        # A URDF link without <inertial> is massless. Keep the generic JSON
+        # model defaults unchanged, but make the URDF conversion explicit so
+        # downstream backends do not supply their legacy unit-inertia default.
+        link_data = _zero_inertia_link(link_id, name)
 
         inertial = link_elem.find("inertial")
         if inertial is not None:
@@ -115,8 +177,10 @@ def urdf_root_to_model_data(root: ET.Element, add_world_link: bool = True) -> Di
                 link_data["mass"] = float(mass_elem.attrib["value"])
 
             origin_elem = inertial.find("origin")
+            inertial_rpy = [0.0, 0.0, 0.0]
             if origin_elem is not None:
                 link_data["cog"] = _parse_xyz(origin_elem.attrib.get("xyz"), [0.0, 0.0, 0.0])
+                inertial_rpy = _parse_xyz(origin_elem.attrib.get("rpy"), [0.0, 0.0, 0.0])
 
             inertia_elem = inertial.find("inertia")
             if inertia_elem is not None:
@@ -126,13 +190,21 @@ def urdf_root_to_model_data(root: ET.Element, add_world_link: bool = True) -> Di
                 iyy = float(inertia_elem.attrib.get("iyy", 1.0))
                 iyz = float(inertia_elem.attrib.get("iyz", 0.0))
                 izz = float(inertia_elem.attrib.get("izz", 1.0))
+                inertia_link = _rotate_inertia_to_link(
+                    [
+                        [ixx, ixy, ixz],
+                        [ixy, iyy, iyz],
+                        [ixz, iyz, izz],
+                    ],
+                    inertial_rpy,
+                )
                 link_data["inertia"] = {
-                    "ixx": ixx,
-                    "ixy": ixy,
-                    "ixz": ixz,
-                    "iyy": iyy,
-                    "iyz": iyz,
-                    "izz": izz,
+                    "ixx": inertia_link[0][0],
+                    "ixy": inertia_link[0][1],
+                    "ixz": inertia_link[0][2],
+                    "iyy": inertia_link[1][1],
+                    "iyz": inertia_link[1][2],
+                    "izz": inertia_link[2][2],
                 }
 
         links.append(link_data)
@@ -198,6 +270,9 @@ def urdf_root_to_model_data(root: ET.Element, add_world_link: bool = True) -> Di
             joint_data["axis"] = axis
 
         parsed_joints.append(joint_data)
+
+    if not add_world_link:
+        _move_single_root_link_to_zero(links, parsed_joints, child_link_names)
 
     world_joints: List[Dict] = []
     if add_world_link:

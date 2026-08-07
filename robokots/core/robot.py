@@ -645,6 +645,9 @@ class JointStruct:
             raise ValueError("spherical joint axis must be a 3x3 angular basis.")
         if type == "floating":
             return xp.eye(6)
+        if type in ("revolute", "prismatic"):
+            norm = xp.linalg.norm(axis)
+            return axis / norm if norm > 0 else xp.array([1, 0, 0])
         return axis if xp.linalg.norm(axis) > 0 else xp.array([1, 0, 0])
 
     @staticmethod

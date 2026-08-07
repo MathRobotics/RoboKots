@@ -272,6 +272,21 @@ def test_joint_struct_prismatic_init():
     assert np.allclose(joint.select_mat, np.array([[0], [0], [0], [0], [1], [0]]))
 
 
+@pytest.mark.parametrize("joint_type", ["revolute", "prismatic"])
+def test_joint_struct_normalizes_one_dof_axis(joint_type):
+    origin = SE3.eye()
+    joint = JointStruct(0, "joint", joint_type, np.array((1.0, 2.0, 3.0)), 0, 1, origin)
+
+    expected_axis = np.array((1.0, 2.0, 3.0)) / np.sqrt(14.0)
+    np.testing.assert_allclose(joint.axis, expected_axis)
+    expected_select = np.zeros((6, 1))
+    if joint_type == "revolute":
+        expected_select[:3, 0] = expected_axis
+    else:
+        expected_select[3:, 0] = expected_axis
+    np.testing.assert_allclose(joint.select_mat, expected_select)
+
+
 def test_joint_struct_fixed_init():
     joint = JointStruct(0, "joint_fixed", "fixed", np.array((0, 0, 0)), 0, 1, SE3())
 
