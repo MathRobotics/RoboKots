@@ -50,6 +50,10 @@ from robokots.core.models.whole_body.total_partial_grad_mat import (
     total_partial_world_joint_momentum_to_joint_momentum_grad_mat,
     total_partial_world_joint_momentum_to_joint_momentum_grad_matvec,
 )
+from robokots.core.models.whole_body.topology_layout import (
+    take_joint_child_link_blocks,
+    take_joint_child_link_matrix_blocks,
+)
 from robokots.core.models.dynamics.base import spatial_inertia
 from robokots.core.models.dynamics.dynamics_matrix import (
     inertia_diag_mat,
@@ -1518,15 +1522,23 @@ def _batch_total_coord_to_joint_force_grad_mat(
     dim: int = 3,
 ) -> np.ndarray:
     dof = dim_to_dof(dim)
-    partial_mom = _batch_total_partial_momentum_to_force_grad_mat(robot, state, force_order, dim)
+    partial_mom = take_joint_child_link_matrix_blocks(
+        _batch_total_partial_momentum_to_force_grad_mat(robot, state, force_order, dim),
+        robot,
+        dof * force_order,
+        dof * (force_order + 1),
+    )
     mat_joint_mom = _batch_selected_coord_to_joint_momentum_grad_mat(
         robot, state, robot.joints, order=force_order + 2, dim=dim
     )
     partial_joint_vel = _batch_total_partial_link_sp_vel_to_joint_force_grad_mat(robot, state, force_order, dim)
     mat_link_vel = _batch_selected_coord_to_link_vel_grad_mat(robot, state, robot.links, order=force_order + 2, dim=dim)
+    mat_child_link_vel = take_joint_child_link_blocks(
+        mat_link_vel, robot, dof * (force_order + 2), axis=-2
+    )
     return (
-        partial_mom[..., force_order*dof:, (force_order+1)*dof:] @ mat_joint_mom
-        + partial_joint_vel @ mat_link_vel[..., (force_order+2)*dof:, :]
+        partial_mom @ mat_joint_mom
+        + partial_joint_vel @ mat_child_link_vel
     )
 
 
@@ -1938,10 +1950,13 @@ def _batch_outward_dynamics_jacobian_matvec(
         robot, vec_link_wmom, order=max_time_order - 1, dim=dim
     )
 
+    child_vec_tan_kine = take_joint_child_link_blocks(
+        vec_tan_kine, robot, (max_time_order - 1) * dof
+    )
     vec_joint_mom = _batch_total_partial_world_joint_momentum_to_joint_momentum_grad_matvec(
         robot, state, vec_joint_wmom, max_time_order, dim
     ) + _batch_total_partial_link_tan_vel_to_joint_momentum_grad_matvec(
-        robot, state, vec_tan_kine[..., (max_time_order - 1) * dof:], max_time_order, dim
+        robot, state, child_vec_tan_kine, max_time_order, dim
     )
 
     if max_time_order >= 3:
@@ -1951,12 +1966,20 @@ def _batch_outward_dynamics_jacobian_matvec(
             robot, state, vec_kine, force_order=force_order, dim=dim
         )
 
-        partial_mom = _batch_total_partial_momentum_to_force_grad_mat(robot, state, force_order=force_order, dim=dim)
+        partial_mom = take_joint_child_link_matrix_blocks(
+            _batch_total_partial_momentum_to_force_grad_mat(robot, state, force_order=force_order, dim=dim),
+            robot,
+            dof * force_order,
+            dof * (force_order + 1),
+        )
+        child_vec_kine = take_joint_child_link_blocks(
+            vec_kine, robot, max_time_order * dof
+        )
         vec_joint_force = _batched_matvec(
-            partial_mom[..., force_order*dof:, (force_order+1)*dof:],
+            partial_mom,
             vec_joint_mom,
         ) + _batch_total_partial_link_sp_vel_to_joint_force_grad_matvec(
-            robot, state, vec_kine[..., max_time_order*dof:], force_order=force_order, dim=dim
+            robot, state, child_vec_kine, force_order=force_order, dim=dim
         )
 
         vec_joint_torque = _batch_total_joint_wrench_to_joint_torque_matvec(
@@ -2043,10 +2066,13 @@ def _batch_outward_dynamics_jacobian_matmul_rhs(
         robot, rhs_link_wmom, order=max_time_order - 1, dim=dim
     )
 
+    child_rhs_tan_kine = take_joint_child_link_blocks(
+        rhs_tan_kine, robot, (max_time_order - 1) * dof, axis=-2
+    )
     rhs_joint_mom = _batch_total_partial_world_joint_momentum_to_joint_momentum_grad_matmul_rhs(
         robot, state, rhs_joint_wmom, max_time_order, dim
     ) + _batch_total_partial_link_tan_vel_to_joint_momentum_grad_matmul_rhs(
-        robot, state, rhs_tan_kine[..., (max_time_order - 1) * dof:, :], max_time_order, dim
+        robot, state, child_rhs_tan_kine, max_time_order, dim
     )
 
     if max_time_order >= 3:
@@ -2056,12 +2082,20 @@ def _batch_outward_dynamics_jacobian_matmul_rhs(
             robot, state, rhs_kine, force_order=force_order, dim=dim
         )
 
-        partial_mom = _batch_total_partial_momentum_to_force_grad_mat(robot, state, force_order=force_order, dim=dim)
+        partial_mom = take_joint_child_link_matrix_blocks(
+            _batch_total_partial_momentum_to_force_grad_mat(robot, state, force_order=force_order, dim=dim),
+            robot,
+            dof * force_order,
+            dof * (force_order + 1),
+        )
+        child_rhs_kine = take_joint_child_link_blocks(
+            rhs_kine, robot, max_time_order * dof, axis=-2
+        )
         rhs_joint_force = _matmul_rhs(
-            partial_mom[..., force_order*dof:, (force_order+1)*dof:],
+            partial_mom,
             rhs_joint_mom,
         ) + _batch_total_partial_link_sp_vel_to_joint_force_grad_matmul_rhs(
-            robot, state, rhs_kine[..., max_time_order*dof:, :], force_order=force_order, dim=dim
+            robot, state, child_rhs_kine, force_order=force_order, dim=dim
         )
 
         rhs_joint_torque = _batch_total_joint_wrench_to_joint_torque_matmul_rhs(
@@ -2357,10 +2391,16 @@ def outward_jacobian(robot : RobotStruct, state : dict, state_type_list : list[S
                     robot, state, robot.joints, order=max_time_order, dim=dim
                 )
             else:
+                child_link_tan = take_joint_child_link_blocks(
+                    get_mat_tan_kine(),
+                    robot,
+                    dof * (max_time_order - 1),
+                    axis=-2,
+                )
                 cache["mat_joint_mom"] = (
                     total_partial_world_joint_momentum_to_joint_momentum_grad_mat(robot, state, max_time_order, dim) @ get_mat_joint_wmom()
                     + total_partial_link_tan_vel_to_joint_momentum_grad_mat(robot, state, max_time_order, dim)
-                    @ get_mat_tan_kine()[(max_time_order-1)*dof:]
+                    @ child_link_tan
                 )
         return cache["mat_joint_mom"]
 
@@ -2400,10 +2440,22 @@ def outward_jacobian(robot : RobotStruct, state : dict, state_type_list : list[S
                     robot, state, force_order=force_order, dim=dim
                 )
             else:
+                child_partial_momentum = take_joint_child_link_matrix_blocks(
+                    get_partial_mom_to_force(),
+                    robot,
+                    dof * (max_time_order - 2),
+                    dof * (max_time_order - 1),
+                )
+                child_link_kine = take_joint_child_link_blocks(
+                    get_mat_kine(),
+                    robot,
+                    dof * max_time_order,
+                    axis=-2,
+                )
                 cache["mat_joint_force"] = (
-                    get_partial_mom_to_force()[(max_time_order-2)*dof:,(max_time_order-1)*dof:] @ get_mat_joint_mom()
+                    child_partial_momentum @ get_mat_joint_mom()
                     + total_partial_link_sp_vel_to_joint_force_grad_mat(robot, state, force_order=force_order, dim=dim)
-                    @ get_mat_kine()[(max_time_order)*dof:]
+                    @ child_link_kine
                 )
         return cache["mat_joint_force"]
 
@@ -2509,10 +2561,13 @@ def outward_jacobian_matvec(robot : RobotStruct, state : dict, state_type_list :
         robot, vec_link_wmom, order=max_time_order-1, dim=dim
     )
 
+    child_vec_tan_kine = take_joint_child_link_blocks(
+        vec_tan_kine, robot, (max_time_order - 1) * dof
+    )
     vec_joint_mom = total_partial_world_joint_momentum_to_joint_momentum_grad_matvec(
         robot, state, vec_joint_wmom, max_time_order, dim
     ) + total_partial_link_tan_vel_to_joint_momentum_grad_matvec(
-        robot, state, vec_tan_kine[(max_time_order-1)*dof:], max_time_order, dim
+        robot, state, child_vec_tan_kine, max_time_order, dim
     )
 
     if max_time_order >= 3:
@@ -2523,10 +2578,18 @@ def outward_jacobian_matvec(robot : RobotStruct, state : dict, state_type_list :
             robot, state, vec_kine, force_order=max_time_order-2, dim=dim
         )
 
-        mat_joint_mom_to_force = mat_mom_to_force[(max_time_order-2)*dof:,(max_time_order-1)*dof:]
+        mat_joint_mom_to_force = take_joint_child_link_matrix_blocks(
+            mat_mom_to_force,
+            robot,
+            dof * (max_time_order - 2),
+            dof * (max_time_order - 1),
+        )
+        child_vec_kine = take_joint_child_link_blocks(
+            vec_kine, robot, max_time_order * dof
+        )
         vec_joint_force = mat_joint_mom_to_force @ vec_joint_mom \
                     + total_partial_link_sp_vel_to_joint_force_grad_matvec(
-                        robot, state, vec_kine[(max_time_order)*dof:], force_order=max_time_order-2, dim=dim
+                        robot, state, child_vec_kine, force_order=max_time_order-2, dim=dim
                     )
 
         vec_joint_torque = total_joint_wrench_to_joint_torque_matvec(

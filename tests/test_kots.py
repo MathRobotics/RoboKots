@@ -12,6 +12,7 @@ from robokots.outward.diff.outward_jax import kinematics_jax as outward_kinemati
 METHOD = "poly"
 TEST_DIR = Path(__file__).resolve().parent
 MODEL_PATH = TEST_DIR / "test_model" / "sample_robot.json"
+BRANCHED_FIXED_MODEL_PATH = TEST_DIR / "test_model" / "branched_fixed.urdf"
 TARGET_PATH = TEST_DIR / "target_list.json"
 TARGET_LINK = "arm3"
 
@@ -502,6 +503,141 @@ def test_rust_private_fast_kots_helpers_validate_shapes_and_backend():
         kots._rust_fast_joint_jacobians(np.zeros(kots.dof() + 1))
     with pytest.raises(ValueError, match="v shape"):
         kots._rust_fast_forward_kinematics(q, np.zeros((2, kots.dof())), q)
+
+
+@pytest.mark.parametrize(("order", "data_type"), [(3, "torque"), (4, "torque_diff1")])
+@pytest.mark.parametrize("add_world_link", [True, False])
+def test_branched_fixed_torque_jacobian_matches_numerical_and_products(
+    order,
+    data_type,
+    add_world_link,
+):
+    rng = np.random.default_rng(35 + order)
+    kots = Kots.from_urdf_file(
+        str(BRANCHED_FIXED_MODEL_PATH),
+        order=order,
+        add_world_link=add_world_link,
+    )
+    child_link_ids = [joint.child_link_id for joint in kots.robot_.joints]
+    assert child_link_ids != sorted(child_link_ids)
+
+    kots.import_motions(rng.standard_normal(order * kots.dof()))
+    kots.dynamics(backend="numpy")
+    states = [
+        StateType("joint", joint.name, data_type)
+        for joint in kots.robot_.joints
+        if joint.dof
+    ]
+
+    jacobian = kots.jacobian(states)
+    numerical = kots.jacobian(states, numerical=True)
+    np.testing.assert_allclose(jacobian, numerical, atol=1e-6, rtol=1e-6)
+
+    rhs = rng.standard_normal(order * kots.dof())
+    rhs_matrix = rng.standard_normal((order * kots.dof(), 2))
+    lhs = rng.standard_normal(kots.dof())
+    np.testing.assert_allclose(kots.jacobian_mul(states, rhs), jacobian @ rhs, atol=1e-12, rtol=1e-12)
+    np.testing.assert_allclose(
+        kots.jacobian_mul(states, rhs_matrix),
+        jacobian @ rhs_matrix,
+        atol=1e-12,
+        rtol=1e-12,
+    )
+    np.testing.assert_allclose(
+        kots.jacobian_transpose_mul(states, lhs),
+        jacobian.T @ lhs,
+        atol=1e-12,
+        rtol=1e-12,
+    )
+
+
+def test_branched_fixed_batched_torque_diff1_jacobian_matches_scalar_loop():
+    rng = np.random.default_rng(40)
+    order = 4
+    kots = Kots.from_urdf_file(str(BRANCHED_FIXED_MODEL_PATH), order=order)
+    motions = rng.standard_normal((3, kots.dof() * order))
+    kots.import_motions(motions)
+    kots.dynamics(backend="numpy")
+    states = [
+        StateType("joint", joint.name, "torque_diff1")
+        for joint in kots.robot_.joints
+        if joint.dof
+    ]
+
+    actual = kots.jacobian(states)
+    expected = []
+    for motion in motions:
+        scalar = Kots.from_urdf_file(str(BRANCHED_FIXED_MODEL_PATH), order=order)
+        scalar.import_motions(motion)
+        scalar.dynamics(backend="numpy")
+        expected.append(scalar.jacobian(states))
+
+    np.testing.assert_allclose(actual, np.stack(expected), atol=1e-12, rtol=1e-12)
+    np.testing.assert_allclose(actual, kots.jacobian(states, numerical=True), atol=1e-6, rtol=1e-6)
+    rhs = rng.standard_normal((motions.shape[0], order * kots.dof()))
+    lhs = rng.standard_normal((motions.shape[0], kots.dof()))
+    np.testing.assert_allclose(
+        kots.jacobian_mul(states, rhs),
+        (actual @ rhs[..., None])[..., 0],
+        atol=1e-12,
+        rtol=1e-12,
+    )
+    np.testing.assert_allclose(
+        kots.jacobian_transpose_mul(states, lhs),
+        (np.swapaxes(actual, -1, -2) @ lhs[..., None])[..., 0],
+        atol=1e-12,
+        rtol=1e-12,
+    )
+
+
+def test_branched_fixed_rust_torque_diff1_jacobian_matches_numerical():
+    pytest.importorskip("robokots._rust")
+    rng = np.random.default_rng(41)
+    order = 4
+    kots = Kots.from_urdf_file(str(BRANCHED_FIXED_MODEL_PATH), order=order)
+    kots.import_motions(rng.standard_normal(order * kots.dof()))
+    kots.dynamics(backend="rust")
+    states = [
+        StateType("joint", joint.name, "torque_diff1")
+        for joint in kots.robot_.joints
+        if joint.dof
+    ]
+
+    np.testing.assert_allclose(
+        kots.jacobian(states),
+        kots.jacobian(states, numerical=True),
+        atol=1e-6,
+        rtol=1e-6,
+    )
+
+
+def test_branched_fixed_mixed_dynamics_jacobian_matches_numerical_and_products():
+    rng = np.random.default_rng(42)
+    order = 4
+    kots = Kots.from_urdf_file(str(BRANCHED_FIXED_MODEL_PATH), order=order)
+    kots.import_motions(rng.standard_normal(order * kots.dof()))
+    kots.dynamics(backend="numpy")
+    states = [
+        StateType("link", "a_tip", "force_diff1"),
+        StateType("joint", "b_shoulder", "torque_diff1"),
+    ]
+
+    jacobian = kots.jacobian(states)
+    np.testing.assert_allclose(
+        jacobian,
+        kots.jacobian(states, numerical=True),
+        atol=1e-6,
+        rtol=1e-6,
+    )
+    rhs = rng.standard_normal(order * kots.dof())
+    lhs = rng.standard_normal(jacobian.shape[0])
+    np.testing.assert_allclose(kots.jacobian_mul(states, rhs), jacobian @ rhs, atol=1e-12, rtol=1e-12)
+    np.testing.assert_allclose(
+        kots.jacobian_transpose_mul(states, lhs),
+        jacobian.T @ lhs,
+        atol=1e-12,
+        rtol=1e-12,
+    )
 
 
 def test_inverse_dynamics_gravity_api_preserves_zero_gravity_and_batches():

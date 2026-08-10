@@ -22,6 +22,7 @@ from robokots.core.models.whole_body.total_dynamics_mat import (
     total_world_link_cmtm_wrench_matvec,
     total_world_link_wrench_to_world_joint_wrench_matvec,
 )
+from robokots.core.models.whole_body.topology_layout import scatter_joint_child_link_blocks
 from .outward_total_gradient import (
     _batch_selected_coord_to_link_vel_grad_mat,
     _is_batched_kinematics_state,
@@ -687,7 +688,9 @@ def outward_jacobian_transpose_matvec(
         kine_tail = _transpose_total_partial_link_sp_vel_to_joint_force_grad_matvec(
             robot, state, adj_joint_force, force_order=force_order, dim=dim
         )
-        adj_kine[..., max_time_order*dof:] += kine_tail
+        adj_kine += scatter_joint_child_link_blocks(
+            kine_tail, robot, max_time_order * dof
+        )
 
         adj_link_mom += _transpose_total_partial_momentum_to_force_grad_matvec(
             robot, state, adj_link_force, force_order=force_order, dim=dim
@@ -703,7 +706,9 @@ def outward_jacobian_transpose_matvec(
     tan_tail = _transpose_total_partial_link_tan_vel_to_joint_momentum_grad_matvec(
         robot, state, adj_joint_mom, order=max_time_order, dim=dim
     )
-    adj_tan_kine[..., (max_time_order-1)*dof:] += tan_tail
+    adj_tan_kine += scatter_joint_child_link_blocks(
+        tan_tail, robot, (max_time_order - 1) * dof
+    )
 
     adj_link_wmom += _transpose_total_world_link_wrench_to_world_joint_wrench_matvec(
         robot, adj_joint_wmom, order=max_time_order-1, dim=dim
