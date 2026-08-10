@@ -3,7 +3,7 @@
 # 2024.12.13 Created by T.Ishigaki
 
 import numpy as np
-from typing import List, Any, Optional, Tuple
+from typing import List, Any, Optional
 
 from .core.motion import RobotMotions
 from .core.state import StateType, data_type_dof, dim_to_dof, is_in_keys_dynamics, keys_force, keys_joint_motion, keys_kinematics, keys_momentum, keys_torque
@@ -32,7 +32,7 @@ class Kots():
   order_ : int
   dim_ : int
   lib_ : str
-  state_cache_config_ : Optional[Tuple[bool, int, Optional[str]]]
+  state_cache_config_ : Optional[tuple]
 
   def order_to_aliases(self, order: int) -> List[str]:
     m_aliases = []
@@ -91,6 +91,7 @@ class Kots():
     self._rust_inverse_dynamics_robot_ = None
     self._rust_outward_data_cache_ = {}
     self._rust_outward_data_cache_state_ = {}
+    self.gravity_ = np.zeros(3, dtype=float)
 
   def set_order(self, order: int):
     if order < 1:
@@ -112,6 +113,7 @@ class Kots():
     self._rust_inverse_dynamics_robot_ = None
     self._rust_outward_data_cache_ = {}
     self._rust_outward_data_cache_state_ = {}
+    self.gravity_ = np.zeros(3, dtype=float)
 
   @staticmethod
   def from_json_file(model_file_name : str, order=default_order, dim=default_dim, lib : str = "numpy") -> "Kots":
@@ -351,13 +353,45 @@ class Kots():
     self._ensure_not_batched("kinematics_point")
     return outward_api.calc_link_total_point_frame(self.robot_, self.motions_, self.to_state_dict(), s)
   
-  def dynamics(self, order = None, backend : str = None, materialize_dict : bool = True):
+  @staticmethod
+  def _validate_gravity(gravity) -> np.ndarray:
+    gravity = np.asarray(gravity, dtype=float)
+    if gravity.shape != (3,):
+      raise ValueError(f"gravity must have shape (3,), got {gravity.shape}.")
+    if not np.all(np.isfinite(gravity)):
+      raise ValueError("gravity must contain only finite values.")
+    return gravity
+
+  def dynamics(
+      self,
+      order = None,
+      backend : str = None,
+      materialize_dict : bool = True,
+      gravity=(0.0, 0.0, 0.0),
+  ):
+    """Compute higher-order inverse-dynamics state with world-frame gravity.
+
+    Gravity defaults to zero for backward compatibility. The NumPy backend
+    propagates the moving-frame gravity derivatives through every requested
+    force and torque order. Until the CMTM Rust kernel supports gravity,
+    requesting ``backend="rust"`` with nonzero gravity uses that NumPy path.
+    """
     if order is None:
       order = self.order_
-    if self._resolve_kinematics_backend(True, backend) == "rust":
+    self.gravity_ = self._validate_gravity(gravity).copy()
+    resolved_backend = self._resolve_kinematics_backend(True, backend)
+    # The CMTM Rust kernel is gravity-free for now. Preserve correctness for
+    # gravity-aware higher-order dynamics by using the NumPy implementation.
+    if resolved_backend == "rust" and not np.any(self.gravity_):
       self.update_rust_data(order=order, is_dynamics=True, materialize_dict=materialize_dict)
       return
-    states, batch_shape = self._build_state_result(order=order, is_dynamics=True, backend=backend)
+    effective_backend = "numpy" if resolved_backend == "rust" else backend
+    states, batch_shape = self._build_state_result(
+      order=order,
+      is_dynamics=True,
+      backend=effective_backend,
+      gravity=self.gravity_,
+    )
     self._set_batch_states(states, batch_shape, materialize_dict=materialize_dict)
 
   def _use_jax_kinematics_backend(self, backend: str = None) -> bool:
@@ -445,16 +479,12 @@ class Kots():
     The default gravity matches Pinocchio's fixed-base model default. Pass
     ``gravity=(0, 0, 0)`` for the historical gravity-free RoboKots result.
     This API supports fixed, revolute, and prismatic joints. Higher-order
-    force and torque derivatives remain available through :meth:`dynamics`
-    without gravity; its Rust backend does not yet support prismatic joints.
+    gravity-aware force and torque derivatives are available through
+    :meth:`dynamics`.
     """
     self._fast_backend(backend)
     q, v, a = self._fast_qva(q, v, a)
-    gravity = np.asarray(gravity, dtype=float)
-    if gravity.shape != (3,):
-      raise ValueError(f"gravity must have shape (3,), got {gravity.shape}.")
-    if not np.all(np.isfinite(gravity)):
-      raise ValueError("gravity must contain only finite values.")
+    gravity = self._validate_gravity(gravity)
     rust_robot = self._rust_inverse_dynamics_robot()
     if q.ndim == 1:
       return rust_robot.rnea(q, v, a, gravity)
@@ -546,9 +576,12 @@ class Kots():
     self.state_dict_source_ = data if materialize_dict else None
     return data
 
-  def _state_builder(self, order : int, is_dynamics : bool = False, backend : str = None):
+  def _state_builder(self, order : int, is_dynamics : bool = False, backend : str = None, gravity=None):
     kinematics_backend = self._resolve_kinematics_backend(is_dynamics, backend)
     if is_dynamics:
+      gravity = self.gravity_ if gravity is None else self._validate_gravity(gravity)
+      if kinematics_backend == "rust" and np.any(gravity):
+        kinematics_backend = "numpy"
       if kinematics_backend == "rust":
         return (
           kinematics_backend,
@@ -561,7 +594,9 @@ class Kots():
         )
       return (
         kinematics_backend,
-        lambda x: outward_api.build_dynamics_outward_state(self.robot_, x, order-2),
+        lambda x: outward_api.build_dynamics_outward_state(
+          self.robot_, x, order-2, gravity=gravity
+        ),
       )
     if kinematics_backend == "rust":
       return (
@@ -583,8 +618,10 @@ class Kots():
       lambda x: outward_api.build_kinematics_outward_state(self.robot_, x, order),
     )
 
-  def _build_state_result(self, order : int, is_dynamics : bool = False, backend : str = None):
-    kinematics_backend, build_state = self._state_builder(order, is_dynamics=is_dynamics, backend=backend)
+  def _build_state_result(self, order : int, is_dynamics : bool = False, backend : str = None, gravity=None):
+    kinematics_backend, build_state = self._state_builder(
+      order, is_dynamics=is_dynamics, backend=backend, gravity=gravity
+    )
     motion = self.motion(order)
     if (
       batch_api.is_batched_feature_array(motion)
@@ -599,7 +636,10 @@ class Kots():
               order - 2,
               compiled_robot=self._rust_compiled_robot(),
             ), motion.shape[:-1]
-          return outward_api.build_dynamics_outward_state(self.robot_, motion, order - 2), motion.shape[:-1]
+          active_gravity = self.gravity_ if gravity is None else gravity
+          return outward_api.build_dynamics_outward_state(
+            self.robot_, motion, order - 2, gravity=active_gravity
+          ), motion.shape[:-1]
         if kinematics_backend == "rust":
           return outward_api.build_kinematics_outward_state_rust(
             self.robot_,
@@ -635,7 +675,12 @@ class Kots():
 
     motion_revision = self.motions_.revision()
 
-    cache_config = (bool(is_dynamics), int(order), kinematics_backend)
+    cache_config = (
+      bool(is_dynamics),
+      int(order),
+      kinematics_backend,
+      tuple(self.gravity_) if is_dynamics else None,
+    )
     if not self.motions_.is_batched():
       if self.state_cache_ is None or self.state_cache_config_ != cache_config:
         self.state_cache_ = StateCache(build_state=lambda x_all, time=None, required=None: build_state(x_all))
@@ -667,7 +712,14 @@ class Kots():
 
     motion_pack = _MotionPack(motion, motion_revision)
 
-    state_obj = outward_api.update_outward_state(self.robot_, motion_pack, self.state_cache_, is_dynamics, order)
+    state_obj = outward_api.update_outward_state(
+      self.robot_,
+      motion_pack,
+      self.state_cache_,
+      is_dynamics,
+      order,
+      gravity=self.gravity_,
+    )
     return self._set_current_state(state_obj, materialize_dict=False)
 
   def to_state_dict(self) -> dict:
@@ -791,13 +843,20 @@ class Kots():
 
   def _jacobian_numerical(self, state_type_list, max_order : int, list_output : bool = False):
     if not self.motions_.is_batched():
-      jacobs = [outward_api.jacobian_numerical(self.robot_, self.motions_, st, max_order) for st in state_type_list]
+      jacobs = [
+        outward_api.jacobian_numerical(
+          self.robot_, self.motions_, st, max_order, gravity=self.gravity_
+        )
+        for st in state_type_list
+      ]
       return jacobs if list_output else np.vstack(jacobs)
 
     flat_motion, batch_shape = batch_api.flatten_feature_batch(self.motion(max_order))
     sample_results = [
       [
-        outward_api.jacobian_numerical(self.robot_, self._sample_motions(x, max_order), st, max_order)
+        outward_api.jacobian_numerical(
+          self.robot_, self._sample_motions(x, max_order), st, max_order, gravity=self.gravity_
+        )
         for st in state_type_list
       ]
       for x in flat_motion
@@ -858,7 +917,12 @@ class Kots():
 
   def _jacobian_matvec_numerical(self, state_type_list, max_order : int, vec, list_output : bool = False):
     if not self.motions_.is_batched():
-      results = [outward_api.jacobian_numerical(self.robot_, self.motions_, st, max_order) @ vec for st in state_type_list]
+      results = [
+        outward_api.jacobian_numerical(
+          self.robot_, self.motions_, st, max_order, gravity=self.gravity_
+        ) @ vec
+        for st in state_type_list
+      ]
       return results if list_output else np.concatenate(results)
 
     flat_motion, batch_shape = batch_api.flatten_feature_batch(self.motion(max_order))
@@ -866,7 +930,9 @@ class Kots():
     for x, v in zip(flat_motion, vec):
       sample_motions = self._sample_motions(x, max_order)
       parts = [
-        outward_api.jacobian_numerical(self.robot_, sample_motions, st, max_order) @ v
+        outward_api.jacobian_numerical(
+          self.robot_, sample_motions, st, max_order, gravity=self.gravity_
+        ) @ v
         for st in state_type_list
       ]
       sample_results.append(parts if list_output else np.concatenate(parts))
@@ -1038,7 +1104,9 @@ class Kots():
     for x, v in zip(flat_motion, vec):
       sample_motions = self._sample_motions(x, max_order)
       parts = [
-        outward_api.jacobian_numerical(self.robot_, sample_motions, st, max_order)
+        outward_api.jacobian_numerical(
+          self.robot_, sample_motions, st, max_order, gravity=self.gravity_
+        )
         for st in state_type_list
       ]
       jacob = np.vstack(parts)
@@ -1589,6 +1657,9 @@ class Kots():
   def jacobian(self, state_type, numerical : bool = False, list_output : bool = False):
     state_type_list = self._state_type_list(state_type)
     max_order = StateType.max_time_order(state_type_list)
+    numerical = numerical or (
+      np.any(self.gravity_) and any(st.is_dynamics for st in state_type_list)
+    )
     if numerical:
       return self._jacobian_numerical(state_type_list, max_order, list_output)
 
@@ -1605,6 +1676,9 @@ class Kots():
     """
     state_type_list = self._state_type_list(state_type)
     max_order = StateType.max_time_order(state_type_list)
+    numerical = numerical or (
+      np.any(self.gravity_) and any(st.is_dynamics for st in state_type_list)
+    )
     input_dim = self.robot_.dof * max_order
     batch_shape = self.batch_shape_ if self.batch_shape_ else self.motions_.batch_shape()
     rhs, rhs_is_matrix = batch_api.broadcast_feature_rhs(rhs, batch_shape, input_dim, name="rhs")
@@ -1625,6 +1699,9 @@ class Kots():
     """
     state_type_list = self._state_type_list(state_type)
     max_order = StateType.max_time_order(state_type_list)
+    numerical = numerical or (
+      np.any(self.gravity_) and any(st.is_dynamics for st in state_type_list)
+    )
     output_dim = self._jacobian_output_dim(state_type_list)
     batch_shape = self.batch_shape_ if self.batch_shape_ else self.motions_.batch_shape()
     rhs, rhs_is_matrix = batch_api.broadcast_feature_rhs(rhs, batch_shape, output_dim, name="rhs")

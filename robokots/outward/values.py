@@ -29,7 +29,13 @@ def _project_motion_order(robot: RobotStruct, motions: np.ndarray, input_order: 
   return projected
 
 
-def compute_outward_value(robot : RobotStruct, motions : np.ndarray, state_type : StateType, input_order = None) -> dict:
+def compute_outward_value(
+  robot : RobotStruct,
+  motions : np.ndarray,
+  state_type : StateType,
+  input_order = None,
+  gravity=(0.0, 0.0, 0.0),
+) -> dict:
   if input_order is None:
     motion = np.asarray(motions, dtype=float).reshape(-1)
   elif input_order == state_type.time_order:
@@ -38,12 +44,21 @@ def compute_outward_value(robot : RobotStruct, motions : np.ndarray, state_type 
     motion = _project_motion_order(robot, motions, input_order, state_type.time_order)
 
   if state_type.is_dynamics:
-    state_dict = build_dynamics_cmtm_state(robot, motion, max(state_type.time_order-2,0))
+    state_dict = build_dynamics_cmtm_state(
+      robot, motion, max(state_type.time_order-2,0), gravity=gravity
+    )
   else:
     state_dict = build_kinematics_state(robot, motion, state_type.time_order)
   return get_value(robot, state_dict, state_type)
 
-def update_outward_state(robot : RobotStruct, motion_pack, state_cache : StateCache, is_dynamics : bool, order = 3) -> dict:
+def update_outward_state(
+  robot : RobotStruct,
+  motion_pack,
+  state_cache : StateCache,
+  is_dynamics : bool,
+  order = 3,
+  gravity=(0.0, 0.0, 0.0),
+) -> dict:
   if state_cache is None:
     if not is_dynamics:
       state_cache = StateCache(
@@ -51,7 +66,9 @@ def update_outward_state(robot : RobotStruct, motion_pack, state_cache : StateCa
       )
     else:
       state_cache = StateCache(
-        build_state=lambda x_all, time=None, required=None: build_dynamics_cmtm_state(robot, x_all, order-2)
+        build_state=lambda x_all, time=None, required=None: build_dynamics_cmtm_state(
+          robot, x_all, order-2, gravity=gravity
+        )
       )
 
   state_cache.update_if_needed(motion_pack)

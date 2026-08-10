@@ -30,7 +30,7 @@ from ..core.models.dynamics.dynamics import (
     link_force_cmvec,
     link_momentum_cmvec,
 )
-from ..core.models.cmtm_apply import apply_mat_adj
+from ..core.models.cmtm_apply import apply_mat_adj, apply_mat_inv_adj
 
 
 def _batch_eye_cmtm(batch_shape: tuple[int, ...], order: int) -> CMTM:
@@ -249,6 +249,17 @@ def _truncate_link_cmtm_order(link_cmtm: CMTM, order: int) -> CMTM:
   return CMTM[SE3](SE3.set_mat(link_cmtm.elem_mat()), link_cmtm.vecs()[..., : order - 1, :])
 
 
+def _local_gravity_cmvec(link_cmtm: CMTM, gravity: np.ndarray, order: int) -> CMVector:
+  """Return world gravity expressed in a moving link frame and its derivatives."""
+  truncated = _truncate_link_cmtm_order(link_cmtm, order)
+  batch_shape = np.asarray(truncated.elem_mat()).shape[:-2]
+  world_vecs = np.zeros(batch_shape + (order, 6), dtype=float)
+  world_vecs[..., 0, 3:] = gravity
+  world_gravity = CMVector(world_vecs)
+  local_cm = apply_mat_inv_adj(truncated, world_gravity.cm_vec())
+  return CMVector.set_cmvecs(local_cm.reshape(batch_shape + (order, 6)))
+
+
 def _should_use_jax_kinematics(robot: RobotStruct, backend = None) -> bool:
   if backend is not None:
     if backend == "jax":
@@ -398,12 +409,23 @@ def build_dynamics_state(robot : RobotStruct, joint_motions) -> dict:
     
   return state_dict
 
-def build_dynamics_outward_state(robot : RobotStruct, motions, dynamics_order = 1) -> OutwardState:
+def build_dynamics_outward_state(
+  robot : RobotStruct,
+  motions,
+  dynamics_order = 1,
+  gravity=(0.0, 0.0, 0.0),
+) -> OutwardState:
+  gravity = np.asarray(gravity, dtype=float)
+  if gravity.shape != (3,):
+    raise ValueError(f"gravity must have shape (3,), got {gravity.shape}.")
+  if not np.all(np.isfinite(gravity)):
+    raise ValueError("gravity must contain only finite values.")
   kinematics_order = dynamics_order + 2
   motion = np.asarray(motions, dtype=float)
   outward_state = build_kinematics_outward_state(robot, motion, kinematics_order)
   link_cmtm_dict = outward_state.link_cmtm
   joint_momentum_cmvec = {}
+  joint_gravity_cmvec = {}
   momentum_order = dynamics_order + 1
   factor_mat = Factorial.mat(momentum_order, 6)
   momentum_link_cmtm_dict = {
@@ -425,6 +447,12 @@ def build_dynamics_outward_state(robot : RobotStruct, motions, dynamics_order = 
     # calculate link force
     if dynamics_order > 0:
       link_force = link_force_cmvec(link_cmtm.cmvecs(), link_momentum)
+      link_gravity_force = None
+      if np.any(gravity):
+        local_gravity = _local_gravity_cmvec(link_cmtm, gravity, dynamics_order)
+        gravity_force = link_momentum_cmvec(inertia, local_gravity)
+        link_gravity_force = CMVector(-gravity_force.vecs())
+        link_force = CMVector(link_force.vecs() + link_gravity_force.vecs())
       outward_state.link_force[child.name] = link_force
 
     # calculate joint momentum
@@ -449,6 +477,25 @@ def build_dynamics_outward_state(robot : RobotStruct, motions, dynamics_order = 
     outward_state.joint_momentum[joint.name] = joint_momentum
     if dynamics_order > 0:
       joint_force = link_force_cmvec(link_cmtm.cmvecs(), joint_momentum)
+      if np.any(gravity):
+        joint_gravity = np.asarray(link_gravity_force.vec(), dtype=float).copy()
+        gravity_factor_mat = Factorial.mat(dynamics_order, 6)
+        for c_id in child_joint_ids:
+          c_joint = robot.joints[c_id]
+          c_joint_link = robot.links[c_joint.child_link_id]
+          child_gravity = joint_gravity_cmvec[c_joint.name]
+          rel_cmtm = (
+            _truncate_link_cmtm_order(link_cmtm, dynamics_order).inv()
+            @ _truncate_link_cmtm_order(link_cmtm_dict[c_joint_link.name], dynamics_order)
+          )
+          rel_wrench = CMTM.change_elemclass(rel_cmtm, SE3wrench)
+          transported = apply_mat_adj(rel_wrench, child_gravity.cm_vec())
+          joint_gravity += _left_matmul(gravity_factor_mat, transported)
+        joint_gravity = CMVector(
+          joint_gravity.reshape(joint_gravity.shape[:-1] + (dynamics_order, 6))
+        )
+        joint_gravity_cmvec[joint.name] = joint_gravity
+        joint_force = CMVector(joint_force.vecs() + joint_gravity.vecs())
       outward_state.joint_force[joint.name] = joint_force
 
       if joint.dof == 0:
@@ -468,10 +515,21 @@ def build_dynamics_outward_state(robot : RobotStruct, motions, dynamics_order = 
 
   if dynamics_order > 0:
     link_force = link_force_cmvec(link_vel, link_momentum)
+    if np.any(gravity):
+      local_gravity = _local_gravity_cmvec(link_cmtm, gravity, dynamics_order)
+      gravity_force = link_momentum_cmvec(inertia, local_gravity)
+      link_force = CMVector(link_force.vecs() - gravity_force.vecs())
     outward_state.link_force[world_link.name] = link_force
     
   return outward_state
 
 
-def build_dynamics_cmtm_state(robot : RobotStruct, motions, dynamics_order = 1) -> dict:
-  return build_dynamics_outward_state(robot, motions, dynamics_order).to_state_dict(robot)
+def build_dynamics_cmtm_state(
+  robot : RobotStruct,
+  motions,
+  dynamics_order = 1,
+  gravity=(0.0, 0.0, 0.0),
+) -> dict:
+  return build_dynamics_outward_state(
+    robot, motions, dynamics_order, gravity=gravity
+  ).to_state_dict(robot)

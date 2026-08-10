@@ -110,8 +110,20 @@ tau_zero_g = kots.inverse_dynamics(q, v, a, gravity=[0, 0, 0])
 ```
 
 The gravity-aware API uses the Rust fixed/revolute/prismatic RNEA backend.
-`dynamics()` continues to provide the existing gravity-free higher-order force
-and torque derivatives; its Rust backend does not yet support prismatic joints.
+Higher-order force and torque derivatives can include gravity as well. The
+`dynamics()` default remains zero gravity for backward compatibility:
+
+```python
+kots.dynamics(gravity=[0, 0, -9.81])
+kots.dynamics(gravity=[0, 0, 0])  # historical behavior and current default
+```
+
+Gravity is expressed in the world frame. Its moving-link-frame derivatives are
+included in `force_diff*` and `torque_diff*`. The CMTM Rust kernel remains
+gravity-free, so a nonzero-gravity `dynamics(backend="rust")` call currently
+uses the NumPy higher-order implementation to preserve correctness. Dynamics
+Jacobians with nonzero gravity likewise use the gravity-aware numerical path
+until the analytic gravity terms are available.
 
 ## Model JSON
 

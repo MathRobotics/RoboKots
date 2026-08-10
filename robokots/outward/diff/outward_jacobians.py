@@ -147,9 +147,17 @@ def link_cmtm_jacobian(robot : RobotStruct, motions : RobotMotions, state : dict
 
   return jacobs
 
-def jacobian_numerical(robot : RobotStruct, motions : RobotMotions, state_type : StateType, input_motion_order = None) -> np.ndarray:
+def jacobian_numerical(
+  robot : RobotStruct,
+  motions : RobotMotions,
+  state_type : StateType,
+  input_motion_order = None,
+  gravity=(0.0, 0.0, 0.0),
+) -> np.ndarray:
   def func(x):
-    return compute_outward_value(robot, x, state_type, input_order = input_motion_order)
+    return compute_outward_value(
+      robot, x, state_type, input_order=input_motion_order, gravity=gravity
+    )
 
   if input_motion_order is None:
     motion = np.zeros(robot.dof * state_type.time_order)

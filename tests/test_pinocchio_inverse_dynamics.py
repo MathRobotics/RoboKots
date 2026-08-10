@@ -223,6 +223,76 @@ def test_inverse_dynamics_matches_pinocchio_for_same_urdf(tmp_path, gravity):
         np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
 
 
+@pytest.mark.parametrize("backend", ["numpy", "rust"])
+def test_gravity_aware_dynamics_matches_pinocchio(tmp_path, backend):
+    urdf_path = tmp_path / "comparison.urdf"
+    urdf_path.write_text(URDF, encoding="utf-8")
+    kots = Kots.from_urdf_file(str(urdf_path), order=3)
+    pin_model = pin.buildModelFromUrdf(str(urdf_path))
+    gravity = np.array([1.2, -3.4, 0.7])
+    pin_model.gravity.linear = gravity
+
+    q = np.array([0.2, -0.3])
+    v = np.array([0.4, 0.5])
+    a = np.array([-0.2, 0.7])
+    kots.import_motion_array(np.stack([q, v, a], axis=-1))
+    kots.dynamics(backend=backend, gravity=gravity, materialize_dict=False)
+
+    actual = np.asarray(
+        kots.state_info(StateType("total_joint", "total_joint", "torque"))
+    ).reshape(-1)
+    expected = pin.rnea(pin_model, pin_model.createData(), q, v, a)
+    np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
+
+
+def test_batched_gravity_aware_dynamics_matches_scalar_rnea(tmp_path):
+    urdf_path = tmp_path / "comparison.urdf"
+    urdf_path.write_text(URDF, encoding="utf-8")
+    kots = Kots.from_urdf_file(str(urdf_path), order=3)
+    gravity = np.array([0.0, 0.0, -9.81])
+    rng = np.random.default_rng(42)
+    q = rng.normal(size=(5, 2))
+    v = rng.normal(size=(5, 2))
+    a = rng.normal(size=(5, 2))
+
+    kots.import_motion_array(np.stack([q, v, a], axis=-1))
+    kots.dynamics(backend="numpy", gravity=gravity, materialize_dict=False)
+    actual = np.asarray(
+        kots.state_info(StateType("total_joint", "total_joint", "torque"))
+    )
+    expected = np.stack(
+        [kots.inverse_dynamics(q[i], v[i], a[i], gravity=gravity) for i in range(q.shape[0])]
+    )
+    np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
+
+
+def test_gravity_aware_torque_diff1_matches_time_finite_difference(tmp_path):
+    urdf_path = tmp_path / "comparison.urdf"
+    urdf_path.write_text(URDF, encoding="utf-8")
+    kots = Kots.from_urdf_file(str(urdf_path), order=4)
+    gravity = np.array([1.2, -3.4, 0.7])
+    q = np.array([0.2, -0.3])
+    v = np.array([0.4, 0.5])
+    a = np.array([-0.2, 0.7])
+    jerk = np.array([0.3, -0.1])
+    kots.import_motion_array(np.stack([q, v, a, jerk], axis=-1))
+    kots.dynamics(backend="numpy", gravity=gravity, materialize_dict=False)
+
+    actual = np.asarray(
+        kots.state_info(StateType("total_joint", "total_joint", "torque_diff1"))
+    ).reshape(-1)
+    eps = 1e-6
+
+    def torque_at(t):
+        q_t = q + v * t + 0.5 * a * t**2 + jerk * t**3 / 6.0
+        v_t = v + a * t + 0.5 * jerk * t**2
+        a_t = a + jerk * t
+        return kots.inverse_dynamics(q_t, v_t, a_t, gravity=gravity)
+
+    expected = (torque_at(eps) - torque_at(-eps)) / (2.0 * eps)
+    np.testing.assert_allclose(actual, expected, rtol=2e-9, atol=3e-10)
+
+
 def test_inverse_dynamics_default_gravity_matches_pinocchio(tmp_path):
     urdf_path = tmp_path / "comparison.urdf"
     urdf_path.write_text(URDF, encoding="utf-8")
@@ -293,6 +363,19 @@ def test_branched_fixed_joint_rnea_matches_pinocchio_by_joint_name(tmp_path, gra
 
         np.testing.assert_allclose(
             [actual_by_name[name] for name in sorted(kots_names)],
+            [expected_by_name[name] for name in sorted(kots_names)],
+            rtol=1e-12,
+            atol=1e-12,
+        )
+
+        kots.import_motion_array(np.stack([q_kots, v_kots, a_kots], axis=-1))
+        kots.dynamics(backend="numpy", gravity=gravity, materialize_dict=False)
+        dynamics_raw = np.asarray(
+            kots.state_info(StateType("total_joint", "total_joint", "torque"))
+        ).reshape(-1)
+        dynamics_by_name = dict(zip(kots_names, dynamics_raw))
+        np.testing.assert_allclose(
+            [dynamics_by_name[name] for name in sorted(kots_names)],
             [expected_by_name[name] for name in sorted(kots_names)],
             rtol=1e-12,
             atol=1e-12,
@@ -402,6 +485,12 @@ def test_mixed_revolute_prismatic_inverse_dynamics_matches_pinocchio(tmp_path, g
         )
 
     kots.import_motion_array(np.stack([q[0], v[0], a[0]], axis=-1))
+    kots.dynamics(backend="numpy", gravity=gravity, materialize_dict=False)
+    actual_dynamics = np.asarray(
+        kots.state_info(StateType("total_joint", "total_joint", "torque"))
+    ).reshape(-1)
+    np.testing.assert_allclose(actual_dynamics, expected[0], rtol=1e-12, atol=1e-12)
+
     with pytest.raises(NotImplementedError, match="prismatic"):
         kots.dynamics(backend="rust")
 
@@ -458,3 +547,9 @@ def test_inverse_dynamics_validates_gravity_shape(tmp_path):
 
     with pytest.raises(ValueError, match="gravity must have shape"):
         kots.inverse_dynamics(np.zeros(2), np.zeros(2), np.zeros(2), gravity=np.zeros(2))
+
+    kots.import_motion_array(np.zeros((2, 3)))
+    with pytest.raises(ValueError, match="gravity must have shape"):
+        kots.dynamics(gravity=np.zeros(2))
+    with pytest.raises(ValueError, match="gravity must contain only finite"):
+        kots.dynamics(gravity=[0.0, np.inf, 0.0])
