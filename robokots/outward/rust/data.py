@@ -571,22 +571,30 @@ class RustOutwardState:
     self._minimal_dynamics = False
     return self
 
-  def compute_dynamics(self, motion) -> "RustOutwardState":
+  def compute_dynamics(self, motion, gravity=None) -> "RustOutwardState":
     motion = np.asarray(motion, dtype=float)
     if motion.ndim != 1:
       raise ValueError("motion must have shape (robot dof * order,)")
-    self.raw_data.compute_dynamics(motion)
+    if gravity is None:
+      self.raw_data.compute_dynamics(motion)
+    else:
+      gravity = np.ascontiguousarray(gravity, dtype=float)
+      self.raw_data.compute_dynamics(motion, gravity)
     self._cache.clear()
     self._has_kinematics = True
     self._has_dynamics = True
     self._minimal_dynamics = False
     return self
 
-  def compute_dynamics_minimal(self, motion) -> "RustOutwardState":
+  def compute_dynamics_minimal(self, motion, gravity=None) -> "RustOutwardState":
     motion = np.asarray(motion, dtype=float)
     if motion.ndim != 1:
       raise ValueError("motion must have shape (robot dof * order,)")
-    self.raw_data.compute_dynamics_minimal(motion)
+    if gravity is None:
+      self.raw_data.compute_dynamics_minimal(motion)
+    else:
+      gravity = np.ascontiguousarray(gravity, dtype=float)
+      self.raw_data.compute_dynamics_minimal(motion, gravity)
     self._cache.clear()
     self._has_kinematics = True
     self._has_dynamics = True
@@ -891,18 +899,26 @@ class RustBatchOutwardState(RustOutwardState):
     self._minimal_dynamics = False
     return self
 
-  def compute_dynamics(self, motion) -> "RustBatchOutwardState":
+  def compute_dynamics(self, motion, gravity=None) -> "RustBatchOutwardState":
     flat_motion = self._flat_motion(motion)
-    self.raw_data.compute_dynamics(flat_motion)
+    if gravity is None:
+      self.raw_data.compute_dynamics(flat_motion)
+    else:
+      gravity = np.ascontiguousarray(gravity, dtype=float)
+      self.raw_data.compute_dynamics(flat_motion, gravity)
     self._cache.clear()
     self._has_kinematics = True
     self._has_dynamics = True
     self._minimal_dynamics = False
     return self
 
-  def compute_dynamics_minimal(self, motion) -> "RustBatchOutwardState":
+  def compute_dynamics_minimal(self, motion, gravity=None) -> "RustBatchOutwardState":
     flat_motion = self._flat_motion(motion)
-    self.raw_data.compute_dynamics_minimal(flat_motion)
+    if gravity is None:
+      self.raw_data.compute_dynamics_minimal(flat_motion)
+    else:
+      gravity = np.ascontiguousarray(gravity, dtype=float)
+      self.raw_data.compute_dynamics_minimal(flat_motion, gravity)
     self._cache.clear()
     self._has_kinematics = True
     self._has_dynamics = True

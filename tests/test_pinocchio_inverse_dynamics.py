@@ -237,6 +237,10 @@ def test_gravity_aware_dynamics_matches_pinocchio(tmp_path, backend):
     a = np.array([-0.2, 0.7])
     kots.import_motion_array(np.stack([q, v, a], axis=-1))
     kots.dynamics(backend=backend, gravity=gravity, materialize_dict=False)
+    if backend == "rust":
+        from robokots.outward.rust import RustOutwardState
+
+        assert isinstance(kots.outward_state_, RustOutwardState)
 
     actual = np.asarray(
         kots.state_info(StateType("total_joint", "total_joint", "torque"))
@@ -245,7 +249,8 @@ def test_gravity_aware_dynamics_matches_pinocchio(tmp_path, backend):
     np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
 
 
-def test_batched_gravity_aware_dynamics_matches_scalar_rnea(tmp_path):
+@pytest.mark.parametrize("backend", ["numpy", "rust"])
+def test_batched_gravity_aware_dynamics_matches_scalar_rnea(tmp_path, backend):
     urdf_path = tmp_path / "comparison.urdf"
     urdf_path.write_text(URDF, encoding="utf-8")
     kots = Kots.from_urdf_file(str(urdf_path), order=3)
@@ -256,7 +261,7 @@ def test_batched_gravity_aware_dynamics_matches_scalar_rnea(tmp_path):
     a = rng.normal(size=(5, 2))
 
     kots.import_motion_array(np.stack([q, v, a], axis=-1))
-    kots.dynamics(backend="numpy", gravity=gravity, materialize_dict=False)
+    kots.dynamics(backend=backend, gravity=gravity, materialize_dict=False)
     actual = np.asarray(
         kots.state_info(StateType("total_joint", "total_joint", "torque"))
     )
@@ -266,7 +271,8 @@ def test_batched_gravity_aware_dynamics_matches_scalar_rnea(tmp_path):
     np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
 
 
-def test_gravity_aware_torque_diff1_matches_time_finite_difference(tmp_path):
+@pytest.mark.parametrize("backend", ["numpy", "rust"])
+def test_gravity_aware_torque_diff1_matches_time_finite_difference(tmp_path, backend):
     urdf_path = tmp_path / "comparison.urdf"
     urdf_path.write_text(URDF, encoding="utf-8")
     kots = Kots.from_urdf_file(str(urdf_path), order=4)
@@ -276,7 +282,7 @@ def test_gravity_aware_torque_diff1_matches_time_finite_difference(tmp_path):
     a = np.array([-0.2, 0.7])
     jerk = np.array([0.3, -0.1])
     kots.import_motion_array(np.stack([q, v, a, jerk], axis=-1))
-    kots.dynamics(backend="numpy", gravity=gravity, materialize_dict=False)
+    kots.dynamics(backend=backend, gravity=gravity, materialize_dict=False)
 
     actual = np.asarray(
         kots.state_info(StateType("total_joint", "total_joint", "torque_diff1"))
@@ -291,6 +297,70 @@ def test_gravity_aware_torque_diff1_matches_time_finite_difference(tmp_path):
 
     expected = (torque_at(eps) - torque_at(-eps)) / (2.0 * eps)
     np.testing.assert_allclose(actual, expected, rtol=2e-9, atol=3e-10)
+
+
+def test_rust_gravity_aware_high_order_dynamics_matches_numpy_on_branched_model(tmp_path):
+    urdf_path = tmp_path / "branched_fixed.urdf"
+    urdf_path.write_text(BRANCHED_FIXED_URDF, encoding="utf-8")
+    order = 6
+    gravity = np.array([1.2, -3.4, 0.7])
+    numpy_kots = Kots.from_urdf_file(str(urdf_path), order=order)
+    rust_kots = Kots.from_urdf_file(str(urdf_path), order=order)
+    motion = np.random.default_rng(20260810).normal(size=(rust_kots.dof(), order))
+    numpy_kots.import_motion_array(motion)
+    rust_kots.import_motion_array(motion)
+    numpy_kots.dynamics(backend="numpy", gravity=gravity, materialize_dict=False)
+    rust_kots.dynamics(backend="rust", gravity=gravity, materialize_dict=False)
+
+    force_types = ["force", "force_diff1", "force_diff2", "force_diff3"]
+    momentum_types = [
+        "momentum",
+        "momentum_diff1",
+        "momentum_diff2",
+        "momentum_diff3",
+        "momentum_diff4",
+    ]
+    torque_types = ["torque", "torque_diff1", "torque_diff2", "torque_diff3"]
+    states = []
+    for link in rust_kots.robot_.links:
+        states.extend(StateType("link", link.name, data_type) for data_type in force_types)
+        states.extend(StateType("link", link.name, data_type) for data_type in momentum_types)
+    for joint in rust_kots.robot_.joints:
+        states.extend(StateType("joint", joint.name, data_type) for data_type in force_types)
+        states.extend(StateType("joint", joint.name, data_type) for data_type in momentum_types)
+        if joint.dof:
+            states.extend(StateType("joint", joint.name, data_type) for data_type in torque_types)
+
+    for state in states:
+        np.testing.assert_allclose(
+            rust_kots.state_info(state),
+            numpy_kots.state_info(state),
+            rtol=2e-12,
+            atol=2e-12,
+            err_msg=f"state mismatch: {state.owner_type}/{state.owner_name}/{state.data_type}",
+        )
+
+
+def test_rust_dynamics_cache_recomputes_when_gravity_changes(tmp_path):
+    urdf_path = tmp_path / "comparison.urdf"
+    urdf_path.write_text(URDF, encoding="utf-8")
+    kots = Kots.from_urdf_file(str(urdf_path), order=3)
+    q = np.array([0.2, -0.3])
+    v = np.array([0.4, 0.5])
+    a = np.array([-0.2, 0.7])
+    kots.import_motion_array(np.stack([q, v, a], axis=-1))
+
+    for gravity in (np.array([0.0, 0.0, -9.81]), np.array([1.2, -3.4, 0.7])):
+        kots.dynamics(backend="rust", gravity=gravity, materialize_dict=False)
+        actual = np.asarray(
+            kots.state_info(StateType("total_joint", "total_joint", "torque"))
+        ).reshape(-1)
+        np.testing.assert_allclose(
+            actual,
+            kots.inverse_dynamics(q, v, a, gravity=gravity),
+            rtol=1e-12,
+            atol=1e-12,
+        )
 
 
 def test_inverse_dynamics_default_gravity_matches_pinocchio(tmp_path):

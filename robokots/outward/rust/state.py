@@ -36,20 +36,27 @@ def build_dynamics_outward_state_rust(
   motions,
   dynamics_order: int = 1,
   compiled_robot=None,
+  gravity=(0.0, 0.0, 0.0),
 ) -> ArrayOutwardState:
   if dynamics_order < 0:
     raise ValueError("dynamics_order must be >= 0")
   rust_robot = compiled_robot if compiled_robot is not None else _rust_compiled_robot(robot)
+  gravity = np.asarray(gravity, dtype=float)
+  if gravity.shape != (3,):
+    raise ValueError(f"gravity must have shape (3,), got {gravity.shape}.")
+  if not np.all(np.isfinite(gravity)):
+    raise ValueError("gravity must contain only finite values.")
+  gravity = np.ascontiguousarray(gravity)
   kin_order = dynamics_order + 2
   motion = np.asarray(motions, dtype=float)
   if motion.ndim == 1:
     _validate_motion_length(robot, motion, kin_order)
-    arrays = rust_robot.dynamics_outward_cmtm(motion, dynamics_order)
+    arrays = rust_robot.dynamics_outward_cmtm(motion, dynamics_order, gravity)
   else:
     flat_motion, batch_shape = batch_api.flatten_feature_batch(motion)
     if flat_motion.shape[-1] != robot.dof * kin_order:
       raise ValueError(f"Invalid motion length: {flat_motion.shape[-1]}. Must be {robot.dof * kin_order}.")
-    arrays = rust_robot.dynamics_outward_cmtm_batch(flat_motion, dynamics_order)
+    arrays = rust_robot.dynamics_outward_cmtm_batch(flat_motion, dynamics_order, gravity)
     arrays = _reshape_batch_arrays(arrays, batch_shape)
 
   return _dynamics_outward_state_from_arrays(robot, arrays, kin_order)

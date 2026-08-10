@@ -2,14 +2,80 @@ use crate::spatial::*;
 use crate::types::RustCompiledRobot;
 use crate::workspace::DynamicsCmtmWorkspace;
 
+fn gravity_is_zero(gravity: [f64; 3]) -> bool {
+    gravity == [0.0; 3]
+}
+
+fn binomial(n: usize, k: usize) -> f64 {
+    let k = k.min(n - k);
+    let mut value = 1.0;
+    for i in 0..k {
+        value *= (n - i) as f64 / (i + 1) as f64;
+    }
+    value
+}
+
+fn gravity_force_series_into(
+    link_mat: [[f64; 4]; 4],
+    link_vel: &[f64],
+    inertia: [[f64; 6]; 6],
+    gravity: [f64; 3],
+    order: usize,
+    local_gravity: &mut [f64],
+    force: &mut [f64],
+) {
+    if order == 0 {
+        return;
+    }
+    let rotation_t = mat3_transpose(mat3_from_mat4(link_mat));
+    let gravity0 = mat3_vec(rotation_t, gravity);
+    local_gravity[..3].copy_from_slice(&gravity0);
+
+    // For a world-fixed vector expressed in a moving link frame,
+    // g_L^(n+1) = -sum_k C(n,k) omega^(k) x g_L^(n-k).
+    for n in 1..order {
+        let mut derivative = [0.0; 3];
+        for k in 0..n {
+            let omega = vec6_from_flat(link_vel, k);
+            let gravity_derivative = [
+                local_gravity[(n - 1 - k) * 3],
+                local_gravity[(n - 1 - k) * 3 + 1],
+                local_gravity[(n - 1 - k) * 3 + 2],
+            ];
+            let term = cross([omega[0], omega[1], omega[2]], gravity_derivative);
+            let coefficient = binomial(n - 1, k);
+            for i in 0..3 {
+                derivative[i] -= coefficient * term[i];
+            }
+        }
+        local_gravity[n * 3..(n + 1) * 3].copy_from_slice(&derivative);
+    }
+
+    for n in 0..order {
+        let acceleration = [
+            0.0,
+            0.0,
+            0.0,
+            local_gravity[n * 3],
+            local_gravity[n * 3 + 1],
+            local_gravity[n * 3 + 2],
+        ];
+        let gravity_force = mat6_vec6(inertia, acceleration);
+        for i in 0..6 {
+            force[n * 6 + i] = -gravity_force[i];
+        }
+    }
+}
+
 impl RustCompiledRobot {
     pub(crate) fn dynamics_cmtm_into(
         &self,
         motion: &[f64],
         dynamics_order: usize,
+        gravity: [f64; 3],
         ws: &mut DynamicsCmtmWorkspace,
     ) {
-        if dynamics_order == 1 {
+        if dynamics_order == 1 && gravity_is_zero(gravity) {
             self.dynamics_cmtm_order1_full_into(motion, ws);
             return;
         }
@@ -45,6 +111,20 @@ impl RustCompiledRobot {
                     &ws.factorial,
                     &mut ws.tmp_force,
                 );
+                if !gravity_is_zero(gravity) {
+                    gravity_force_series_into(
+                        mat4_from_flat(&ws.cmtm.link_mat, child),
+                        link_vel,
+                        self.link_inertia[child],
+                        gravity,
+                        dynamics_order,
+                        &mut ws.tmp_local_gravity,
+                        &mut ws.tmp_gravity_force,
+                    );
+                    for i in 0..dynamics_order * 6 {
+                        ws.tmp_force[i] += ws.tmp_gravity_force[i];
+                    }
+                }
                 set_cmvec_flat(&mut ws.link_force, child, dynamics_order, &ws.tmp_force);
             }
 
@@ -70,6 +150,21 @@ impl RustCompiledRobot {
                     &mut ws.tmp_wrench_adj_c_blocks,
                     &mut ws.tmp_joint_momentum,
                 );
+                if !gravity_is_zero(gravity) {
+                    let child_gravity =
+                        cmvec_slice(&ws.joint_gravity_force, child_joint_id, dynamics_order);
+                    cmtm_accumulate_mat_adj_wrench_series_into(
+                        rel_mat,
+                        &rel_vecs[..dynamics_order.saturating_sub(1) * 6],
+                        child_gravity,
+                        dynamics_order,
+                        &ws.factorial,
+                        &mut ws.tmp_scaled_vecs,
+                        &mut ws.tmp_wrench_adj_a_blocks,
+                        &mut ws.tmp_wrench_adj_c_blocks,
+                        &mut ws.tmp_gravity_force,
+                    );
+                }
             }
 
             set_cmvec_flat(
@@ -80,6 +175,14 @@ impl RustCompiledRobot {
             );
 
             if dynamics_order > 0 {
+                if !gravity_is_zero(gravity) {
+                    set_cmvec_flat(
+                        &mut ws.joint_gravity_force,
+                        j,
+                        dynamics_order,
+                        &ws.tmp_gravity_force,
+                    );
+                }
                 force_from_velocity_momentum_into(
                     link_vel,
                     &ws.tmp_joint_momentum,
@@ -87,6 +190,11 @@ impl RustCompiledRobot {
                     &ws.factorial,
                     &mut ws.tmp_force,
                 );
+                if !gravity_is_zero(gravity) {
+                    for i in 0..dynamics_order * 6 {
+                        ws.tmp_force[i] += ws.tmp_gravity_force[i];
+                    }
+                }
                 set_cmvec_flat(&mut ws.joint_force, j, dynamics_order, &ws.tmp_force);
                 if self.q_index[j] >= 0 {
                     for k in 0..dynamics_order {
@@ -120,6 +228,20 @@ impl RustCompiledRobot {
                 &ws.factorial,
                 &mut ws.tmp_force,
             );
+            if !gravity_is_zero(gravity) {
+                gravity_force_series_into(
+                    mat4_from_flat(&ws.cmtm.link_mat, world),
+                    world_vel,
+                    self.link_inertia[world],
+                    gravity,
+                    dynamics_order,
+                    &mut ws.tmp_local_gravity,
+                    &mut ws.tmp_gravity_force,
+                );
+                for i in 0..dynamics_order * 6 {
+                    ws.tmp_force[i] += ws.tmp_gravity_force[i];
+                }
+            }
             set_cmvec_flat(&mut ws.link_force, world, dynamics_order, &ws.tmp_force);
         }
     }
@@ -264,10 +386,11 @@ impl RustCompiledRobot {
         &self,
         motion: &[f64],
         dynamics_order: usize,
+        gravity: [f64; 3],
         ws: &mut DynamicsCmtmWorkspace,
     ) {
-        if dynamics_order != 1 {
-            self.dynamics_cmtm_into(motion, dynamics_order, ws);
+        if dynamics_order != 1 || !gravity_is_zero(gravity) {
+            self.dynamics_cmtm_into(motion, dynamics_order, gravity, ws);
             return;
         }
 

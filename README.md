@@ -119,11 +119,9 @@ kots.dynamics(gravity=[0, 0, 0])  # historical behavior and current default
 ```
 
 Gravity is expressed in the world frame. Its moving-link-frame derivatives are
-included in `force_diff*` and `torque_diff*`. The CMTM Rust kernel remains
-gravity-free, so a nonzero-gravity `dynamics(backend="rust")` call currently
-uses the NumPy higher-order implementation to preserve correctness. Dynamics
-Jacobians with nonzero gravity likewise use the gravity-aware numerical path
-until the analytic gravity terms are available.
+included in `force_diff*` and `torque_diff*` by both the NumPy and Rust CMTM
+backends. Dynamics Jacobians with nonzero gravity use the gravity-aware
+numerical path until the analytic gravity terms are available.
 
 ## Model JSON
 

@@ -1130,11 +1130,13 @@ impl RustCompiledRobot {
         ))
     }
 
+    #[pyo3(signature = (motion, dynamics_order, gravity = None))]
     fn dynamics_cmtm<'py>(
         &self,
         py: Python<'py>,
         motion: PyReadonlyArray1<'py, f64>,
         dynamics_order: usize,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
     ) -> PyResult<(
         Bound<'py, PyArray3<f64>>,
         Bound<'py, PyArray3<f64>>,
@@ -1142,11 +1144,12 @@ impl RustCompiledRobot {
         Bound<'py, PyArray3<f64>>,
         Bound<'py, PyArray3<f64>>,
     )> {
+        let gravity = gravity_vec3(gravity)?;
         let kin_order = dynamics_order + 2;
         let motion = motion.as_slice()?;
         self.check_cmtm_motion(motion, kin_order)?;
         let mut ws = DynamicsCmtmWorkspace::new(self, dynamics_order);
-        self.dynamics_cmtm_into(motion, dynamics_order, &mut ws);
+        self.dynamics_cmtm_into(motion, dynamics_order, gravity, &mut ws);
         Ok((
             ws.link_momentum
                 .into_pyarray(py)
@@ -1166,11 +1169,13 @@ impl RustCompiledRobot {
         ))
     }
 
+    #[pyo3(signature = (motion, dynamics_order, gravity = None))]
     fn dynamics_outward_cmtm<'py>(
         &self,
         py: Python<'py>,
         motion: PyReadonlyArray1<'py, f64>,
         dynamics_order: usize,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
     ) -> PyResult<(
         Bound<'py, PyArray3<f64>>,
         Bound<'py, PyArray3<f64>>,
@@ -1182,11 +1187,12 @@ impl RustCompiledRobot {
         Bound<'py, PyArray3<f64>>,
         Bound<'py, PyArray3<f64>>,
     )> {
+        let gravity = gravity_vec3(gravity)?;
         let kin_order = dynamics_order + 2;
         let motion = motion.as_slice()?;
         self.check_cmtm_motion(motion, kin_order)?;
         let mut ws = DynamicsCmtmWorkspace::new(self, dynamics_order);
-        self.dynamics_cmtm_into(motion, dynamics_order, &mut ws);
+        self.dynamics_cmtm_into(motion, dynamics_order, gravity, &mut ws);
         Ok((
             ws.cmtm
                 .link_mat
@@ -1222,11 +1228,13 @@ impl RustCompiledRobot {
         ))
     }
 
+    #[pyo3(signature = (motions, dynamics_order, gravity = None))]
     fn dynamics_cmtm_batch<'py>(
         &self,
         py: Python<'py>,
         motions: PyReadonlyArray2<'py, f64>,
         dynamics_order: usize,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
     ) -> PyResult<(
         Bound<'py, PyArray4<f64>>,
         Bound<'py, PyArray4<f64>>,
@@ -1234,6 +1242,7 @@ impl RustCompiledRobot {
         Bound<'py, PyArray4<f64>>,
         Bound<'py, PyArray4<f64>>,
     )> {
+        let gravity = gravity_vec3(gravity)?;
         let kin_order = dynamics_order + 2;
         let shape = motions.shape();
         if shape.len() != 2 || shape[1] != self.dof * kin_order {
@@ -1261,6 +1270,7 @@ impl RustCompiledRobot {
             self.dynamics_cmtm_into(
                 &motions[motion_start..motion_start + motion_len],
                 dynamics_order,
+                gravity,
                 &mut ws,
             );
             link_momentum[sample * link_momentum_len..(sample + 1) * link_momentum_len]
@@ -1300,11 +1310,13 @@ impl RustCompiledRobot {
         ))
     }
 
+    #[pyo3(signature = (motions, dynamics_order, gravity = None))]
     fn dynamics_outward_cmtm_batch<'py>(
         &self,
         py: Python<'py>,
         motions: PyReadonlyArray2<'py, f64>,
         dynamics_order: usize,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
     ) -> PyResult<(
         Bound<'py, PyArray4<f64>>,
         Bound<'py, PyArray4<f64>>,
@@ -1316,6 +1328,7 @@ impl RustCompiledRobot {
         Bound<'py, PyArray4<f64>>,
         Bound<'py, PyArray4<f64>>,
     )> {
+        let gravity = gravity_vec3(gravity)?;
         let kin_order = dynamics_order + 2;
         let shape = motions.shape();
         if shape.len() != 2 || shape[1] != self.dof * kin_order {
@@ -1351,6 +1364,7 @@ impl RustCompiledRobot {
             self.dynamics_cmtm_into(
                 &motions[motion_start..motion_start + motion_len],
                 dynamics_order,
+                gravity,
                 &mut ws,
             );
             link_mat[sample * link_mat_len..(sample + 1) * link_mat_len]
@@ -1535,19 +1549,25 @@ impl RustOutwardData {
         Ok(())
     }
 
-    fn compute_dynamics(&mut self, motion: PyReadonlyArray1<'_, f64>) -> PyResult<()> {
+    #[pyo3(signature = (motion, gravity = None))]
+    fn compute_dynamics(
+        &mut self,
+        motion: PyReadonlyArray1<'_, f64>,
+        gravity: Option<PyReadonlyArray1<'_, f64>>,
+    ) -> PyResult<()> {
         if self.order < 2 {
             return Err(PyValueError::new_err("dynamics data requires order >= 2"));
         }
+        let gravity = gravity_vec3(gravity)?;
         let motion = motion.as_slice()?;
         self.robot.check_cmtm_motion(motion, self.order)?;
-        if self.order == 3 && self.dynamics_order == 1 {
+        if self.order == 3 && self.dynamics_order == 1 && gravity == [0.0; 3] {
             self.robot
                 .dynamics_cmtm_order1_cached_into(motion, &mut self.dynamics);
             self.has_cached_order1_dynamics = true;
         } else {
             self.robot
-                .dynamics_cmtm_into(motion, self.dynamics_order, &mut self.dynamics);
+                .dynamics_cmtm_into(motion, self.dynamics_order, gravity, &mut self.dynamics);
             self.has_cached_order1_dynamics = false;
         }
         self.has_kinematics = true;
@@ -1555,14 +1575,24 @@ impl RustOutwardData {
         Ok(())
     }
 
-    fn compute_dynamics_minimal(&mut self, motion: PyReadonlyArray1<'_, f64>) -> PyResult<()> {
+    #[pyo3(signature = (motion, gravity = None))]
+    fn compute_dynamics_minimal(
+        &mut self,
+        motion: PyReadonlyArray1<'_, f64>,
+        gravity: Option<PyReadonlyArray1<'_, f64>>,
+    ) -> PyResult<()> {
         if self.order < 2 {
             return Err(PyValueError::new_err("dynamics data requires order >= 2"));
         }
+        let gravity = gravity_vec3(gravity)?;
         let motion = motion.as_slice()?;
         self.robot.check_cmtm_motion(motion, self.order)?;
-        self.robot
-            .dynamics_cmtm_minimal_into(motion, self.dynamics_order, &mut self.dynamics);
+        self.robot.dynamics_cmtm_minimal_into(
+            motion,
+            self.dynamics_order,
+            gravity,
+            &mut self.dynamics,
+        );
         self.has_kinematics = true;
         self.has_dynamics = true;
         self.has_cached_order1_dynamics = false;
@@ -2013,17 +2043,23 @@ impl RustBatchOutwardData {
         Ok(())
     }
 
-    fn compute_dynamics(&mut self, motions: PyReadonlyArray2<'_, f64>) -> PyResult<()> {
+    #[pyo3(signature = (motions, gravity = None))]
+    fn compute_dynamics(
+        &mut self,
+        motions: PyReadonlyArray2<'_, f64>,
+        gravity: Option<PyReadonlyArray1<'_, f64>>,
+    ) -> PyResult<()> {
         if self.order < 2 {
             return Err(PyValueError::new_err("dynamics data requires order >= 2"));
         }
+        let gravity = gravity_vec3(gravity)?;
         self.check_motion_shape(motions.shape())?;
         let motions = motions.as_slice()?;
         let motion_len = self.robot.dof * self.order;
         for sample in 0..self.batch {
             let start = sample * motion_len;
             let end = start + motion_len;
-            if self.order == 3 && self.dynamics_order == 1 {
+            if self.order == 3 && self.dynamics_order == 1 && gravity == [0.0; 3] {
                 self.robot.dynamics_cmtm_order1_cached_into(
                     &motions[start..end],
                     &mut self.dynamics[sample],
@@ -2032,20 +2068,28 @@ impl RustBatchOutwardData {
                 self.robot.dynamics_cmtm_into(
                     &motions[start..end],
                     self.dynamics_order,
+                    gravity,
                     &mut self.dynamics[sample],
                 );
             }
         }
         self.has_kinematics = true;
         self.has_dynamics = true;
-        self.has_cached_order1_dynamics = self.order == 3 && self.dynamics_order == 1;
+        self.has_cached_order1_dynamics =
+            self.order == 3 && self.dynamics_order == 1 && gravity == [0.0; 3];
         Ok(())
     }
 
-    fn compute_dynamics_minimal(&mut self, motions: PyReadonlyArray2<'_, f64>) -> PyResult<()> {
+    #[pyo3(signature = (motions, gravity = None))]
+    fn compute_dynamics_minimal(
+        &mut self,
+        motions: PyReadonlyArray2<'_, f64>,
+        gravity: Option<PyReadonlyArray1<'_, f64>>,
+    ) -> PyResult<()> {
         if self.order < 2 {
             return Err(PyValueError::new_err("dynamics data requires order >= 2"));
         }
+        let gravity = gravity_vec3(gravity)?;
         self.check_motion_shape(motions.shape())?;
         let motions = motions.as_slice()?;
         let motion_len = self.robot.dof * self.order;
@@ -2055,6 +2099,7 @@ impl RustBatchOutwardData {
             self.robot.dynamics_cmtm_minimal_into(
                 &motions[start..end],
                 self.dynamics_order,
+                gravity,
                 &mut self.dynamics[sample],
             );
         }

@@ -147,11 +147,14 @@ pub(crate) struct DynamicsCmtmWorkspace {
     pub(crate) link_force: Vec<f64>,
     pub(crate) joint_momentum: Vec<f64>,
     pub(crate) joint_force: Vec<f64>,
+    pub(crate) joint_gravity_force: Vec<f64>,
     pub(crate) joint_torque: Vec<f64>,
     pub(crate) factorial: Vec<f64>,
     pub(crate) tmp_link_momentum: Vec<f64>,
     pub(crate) tmp_joint_momentum: Vec<f64>,
     pub(crate) tmp_force: Vec<f64>,
+    pub(crate) tmp_gravity_force: Vec<f64>,
+    pub(crate) tmp_local_gravity: Vec<f64>,
     pub(crate) tmp_rel_vecs: Vec<f64>,
     pub(crate) tmp_scaled_vecs: Vec<f64>,
     pub(crate) cached_motion: Vec<f64>,
@@ -167,11 +170,14 @@ impl DynamicsCmtmWorkspace {
             link_force: vec![0.0; robot.link_num * dynamics_order * 6],
             joint_momentum: vec![0.0; robot.joint_num * (dynamics_order + 1) * 6],
             joint_force: vec![0.0; robot.joint_num * dynamics_order * 6],
+            joint_gravity_force: vec![0.0; robot.joint_num * dynamics_order * 6],
             joint_torque: vec![0.0; robot.joint_num * dynamics_order],
             factorial: vec![1.0; (dynamics_order + 2).max(1)],
             tmp_link_momentum: vec![0.0; (dynamics_order + 1) * 6],
             tmp_joint_momentum: vec![0.0; (dynamics_order + 1) * 6],
             tmp_force: vec![0.0; dynamics_order * 6],
+            tmp_gravity_force: vec![0.0; dynamics_order * 6],
+            tmp_local_gravity: vec![0.0; dynamics_order * 3],
             tmp_rel_vecs: vec![0.0; dynamics_order * 6],
             tmp_scaled_vecs: vec![0.0; dynamics_order * 6],
             cached_motion: vec![0.0; robot.dof * (dynamics_order + 2)],
@@ -186,10 +192,13 @@ impl DynamicsCmtmWorkspace {
         self.link_force.fill(0.0);
         self.joint_momentum.fill(0.0);
         self.joint_force.fill(0.0);
+        self.joint_gravity_force.fill(0.0);
         self.joint_torque.fill(0.0);
         self.tmp_link_momentum.fill(0.0);
         self.tmp_joint_momentum.fill(0.0);
         self.tmp_force.fill(0.0);
+        self.tmp_gravity_force.fill(0.0);
+        self.tmp_local_gravity.fill(0.0);
         self.tmp_rel_vecs.fill(0.0);
         self.tmp_scaled_vecs.fill(0.0);
         self.cached_motion.fill(0.0);
@@ -203,6 +212,9 @@ impl DynamicsCmtmWorkspace {
         self.tmp_link_momentum.fill(0.0);
         self.tmp_joint_momentum.fill(0.0);
         self.tmp_force.fill(0.0);
+        self.joint_gravity_force.fill(0.0);
+        self.tmp_gravity_force.fill(0.0);
+        self.tmp_local_gravity.fill(0.0);
         self.tmp_rel_vecs.fill(0.0);
         self.tmp_scaled_vecs.fill(0.0);
         self.cached_motion.fill(0.0);

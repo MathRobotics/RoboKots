@@ -371,25 +371,26 @@ class Kots():
   ):
     """Compute higher-order inverse-dynamics state with world-frame gravity.
 
-    Gravity defaults to zero for backward compatibility. The NumPy backend
-    propagates the moving-frame gravity derivatives through every requested
-    force and torque order. Until the CMTM Rust kernel supports gravity,
-    requesting ``backend="rust"`` with nonzero gravity uses that NumPy path.
+    Gravity defaults to zero for backward compatibility. Both NumPy and Rust
+    propagate the moving-frame gravity derivatives through every requested
+    force and torque order.
     """
     if order is None:
       order = self.order_
     self.gravity_ = self._validate_gravity(gravity).copy()
     resolved_backend = self._resolve_kinematics_backend(True, backend)
-    # The CMTM Rust kernel is gravity-free for now. Preserve correctness for
-    # gravity-aware higher-order dynamics by using the NumPy implementation.
-    if resolved_backend == "rust" and not np.any(self.gravity_):
-      self.update_rust_data(order=order, is_dynamics=True, materialize_dict=materialize_dict)
+    if resolved_backend == "rust":
+      self.update_rust_data(
+        order=order,
+        is_dynamics=True,
+        materialize_dict=materialize_dict,
+        gravity=self.gravity_,
+      )
       return
-    effective_backend = "numpy" if resolved_backend == "rust" else backend
     states, batch_shape = self._build_state_result(
       order=order,
       is_dynamics=True,
-      backend=effective_backend,
+      backend=backend,
       gravity=self.gravity_,
     )
     self._set_batch_states(states, batch_shape, materialize_dict=materialize_dict)
@@ -547,7 +548,13 @@ class Kots():
       self._rust_outward_data_cache_state_.pop(key, None)
     return data
 
-  def update_rust_data(self, order : int = None, is_dynamics : bool = False, materialize_dict : bool = False):
+  def update_rust_data(
+      self,
+      order : int = None,
+      is_dynamics : bool = False,
+      materialize_dict : bool = False,
+      gravity=None,
+  ):
     if order is None:
       order = self.order_
 
@@ -555,19 +562,28 @@ class Kots():
     batch_shape = motion.shape[:-1] if batch_api.is_batched_feature_array(motion) else ()
     data = self._cached_rust_data(order, batch_shape)
     revision = self.motions_.revision()
+    active_gravity = self.gravity_ if gravity is None else self._validate_gravity(gravity)
+    gravity_key = tuple(active_gravity) if is_dynamics else None
     key = (int(order), tuple(batch_shape))
     cached = self._rust_outward_data_cache_state_.get(key)
     needs_compute = (
       cached is None
       or cached[0] != revision
-      or (is_dynamics and not cached[1])
+      or (is_dynamics and (not cached[1] or cached[2] != gravity_key))
     )
     if needs_compute:
       if is_dynamics:
-        data.compute_dynamics(motion)
+        if np.any(active_gravity):
+          data.compute_dynamics(motion, active_gravity)
+        else:
+          data.compute_dynamics(motion)
       else:
         data.compute_kinematics(motion)
-      self._rust_outward_data_cache_state_[key] = (revision, bool(is_dynamics))
+      self._rust_outward_data_cache_state_[key] = (
+        revision,
+        bool(is_dynamics),
+        gravity_key,
+      )
 
     self.batch_shape_ = tuple(batch_shape)
     self.state_batch_ = None
@@ -580,8 +596,6 @@ class Kots():
     kinematics_backend = self._resolve_kinematics_backend(is_dynamics, backend)
     if is_dynamics:
       gravity = self.gravity_ if gravity is None else self._validate_gravity(gravity)
-      if kinematics_backend == "rust" and np.any(gravity):
-        kinematics_backend = "numpy"
       if kinematics_backend == "rust":
         return (
           kinematics_backend,
@@ -590,6 +604,7 @@ class Kots():
             x,
             order-2,
             compiled_robot=self._rust_compiled_robot(),
+            gravity=gravity,
           ),
         )
       return (
@@ -635,6 +650,7 @@ class Kots():
               motion,
               order - 2,
               compiled_robot=self._rust_compiled_robot(),
+              gravity=self.gravity_ if gravity is None else gravity,
             ), motion.shape[:-1]
           active_gravity = self.gravity_ if gravity is None else gravity
           return outward_api.build_dynamics_outward_state(
