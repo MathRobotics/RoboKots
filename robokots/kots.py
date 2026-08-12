@@ -1137,6 +1137,22 @@ class Kots():
     return batch_api.stack_sample_results(sample_results, batch_shape)
 
   def _jacobian_transpose_matvec_from_state(self, state, state_type_list, max_order : int, vec, batch_shape : tuple):
+    if self._has_gravity_force_output(state_type_list) and batch_shape and not isinstance(state, list):
+      is_dynamics = any(st.is_dynamics for st in state_type_list)
+      _, build_state = self._state_builder(
+        max_order, is_dynamics=is_dynamics, gravity=self.gravity_
+      )
+      flat_motion, _ = batch_api.flatten_feature_batch(self.motion(max_order))
+      flat_vec = np.asarray(vec).reshape((-1, vec.shape[-1]))
+      sample_results = [
+        outward_api.outward_jacobian_transpose_matvec(
+          self.robot_, build_state(x), state_type_list, v,
+          max_time_order=max_order, dim=self.dim_,
+        )
+        for x, v in zip(flat_motion, flat_vec)
+      ]
+      return batch_api.stack_sample_results(sample_results, batch_shape)
+
     fast = self._joint_motion_torque_jacobian_transpose_apply(state, state_type_list, max_order, vec, batch_shape, rhs_is_matrix=False)
     if fast is not None:
       return fast
@@ -1194,6 +1210,30 @@ class Kots():
   def _jacobian_transpose_mul_from_state(self, state, state_type_list, max_order : int, rhs, batch_shape : tuple, rhs_is_matrix : bool):
     if not rhs_is_matrix:
       return self._jacobian_transpose_matvec_from_state(state, state_type_list, max_order, rhs, batch_shape)
+
+    if self._has_gravity_force_output(state_type_list) and batch_shape:
+      flat_rhs = np.asarray(rhs).reshape((-1,) + rhs.shape[-2:])
+      if isinstance(state, list):
+        states = state
+      else:
+        is_dynamics = any(st.is_dynamics for st in state_type_list)
+        _, build_state = self._state_builder(
+          max_order, is_dynamics=is_dynamics, gravity=self.gravity_
+        )
+        flat_motion, _ = batch_api.flatten_feature_batch(self.motion(max_order))
+        states = [build_state(x) for x in flat_motion]
+      sample_results = [
+        np.moveaxis(
+          outward_api.outward_jacobian_transpose_matvec(
+            self.robot_, st, state_type_list, np.moveaxis(r, -1, 0),
+            max_time_order=max_order, dim=self.dim_,
+          ),
+          0,
+          -1,
+        )
+        for st, r in zip(states, flat_rhs)
+      ]
+      return batch_api.stack_sample_results(sample_results, batch_shape)
 
     fast = self._joint_motion_torque_jacobian_transpose_apply(state, state_type_list, max_order, rhs, batch_shape, rhs_is_matrix=True)
     if fast is not None:
@@ -1724,14 +1764,6 @@ class Kots():
       return self._jacobian_transpose_mul_numerical(state_type_list, max_order, rhs, rhs_is_matrix)
 
     state = self.outward_state_ if self.outward_state_ is not None else self.state_dict_
-    if self._has_gravity_force_output(state_type_list):
-      jacob = self._jacobian_from_state(
-        state, state_type_list, max_order, list_output=False
-      )
-      jacob_t = np.swapaxes(jacob, -1, -2)
-      if rhs_is_matrix:
-        return jacob_t @ rhs
-      return (jacob_t @ rhs[..., None])[..., 0]
     return self._jacobian_transpose_mul_from_state(state, state_type_list, max_order, rhs, batch_shape, rhs_is_matrix)
 
   def jacobian_tensor(self, state_type, numerical : bool = False) -> JacobianTensor:

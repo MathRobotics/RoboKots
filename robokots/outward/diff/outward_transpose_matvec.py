@@ -22,6 +22,10 @@ from robokots.core.models.whole_body.total_dynamics_mat import (
     total_world_link_cmtm_wrench_matvec,
     total_world_link_wrench_to_world_joint_wrench_matvec,
 )
+from robokots.core.models.whole_body.total_gravity_grad_mat import (
+    state_gravity,
+    total_link_gravity_force,
+)
 from robokots.core.models.whole_body.topology_layout import scatter_joint_child_link_blocks
 from .outward_total_gradient import (
     _batch_selected_coord_to_link_vel_grad_mat,
@@ -359,6 +363,134 @@ def _transpose_total_joint_wrench_to_joint_torque_matvec(
     return result
 
 
+def _transpose_total_coord_to_gravity_force_grad_matvec(
+    robot: RobotStruct,
+    state: dict,
+    gravity: np.ndarray,
+    adj_link_force: np.ndarray,
+    adj_joint_force: np.ndarray,
+    force_order: int = 1,
+    dim: int = 3,
+) -> np.ndarray:
+    """Apply the transpose of both gravity-force coordinate gradients."""
+    if dim != 3:
+        raise NotImplementedError("gravity force gradients currently support dim=3 only")
+    if force_order < 1:
+        raise ValueError("force_order must be at least 1")
+
+    dof = dim_to_dof(dim)
+    block_size = dof * force_order
+    gravity = state_gravity(state, gravity)
+    world_gravity_vecs = np.zeros((force_order, dof), dtype=float)
+    world_gravity_vecs[0, 3:] = gravity
+    world_gravity = CMVector(world_gravity_vecs)
+
+    local_link_force = total_link_gravity_force(
+        robot, state, gravity, force_order=force_order, dim=dim
+    )
+    world_link_force = np.zeros_like(local_link_force)
+    for i, link in enumerate(robot.links):
+        block = slice(i * block_size, (i + 1) * block_size)
+        cmtm = state_dict_to_cmtm_wrench(state, link.name, "link", force_order)
+        world_link_force[..., block] = (
+            cmtm.mat_adj() @ local_link_force[..., block, None]
+        )[..., 0]
+    world_joint_force = total_world_link_wrench_to_world_joint_wrench_matvec(
+        robot, world_link_force, order=force_order, dim=dim
+    )
+
+    adj_link_pose = np.zeros(
+        np.asarray(adj_link_force).shape[:-1]
+        + (robot.link_num * block_size,),
+        dtype=np.result_type(adj_link_force, adj_joint_force),
+    )
+    adj_local_link = np.array(adj_link_force, copy=True)
+
+    # Reverse the final joint-frame conversion and subtree aggregation.
+    adj_joint_sum = _transpose_total_factorial_matvec(
+        robot.joint_num, adj_joint_force, force_order, dof
+    )
+    adj_inv_world_joint = np.zeros_like(adj_joint_sum)
+    joint_force_blocks = world_joint_force.reshape(robot.joint_num, block_size)
+    for i, joint in enumerate(robot.joints):
+        block = slice(i * block_size, (i + 1) * block_size)
+        child_link = robot.links[joint.child_link_id]
+        cmtm = state_dict_to_cmtm_wrench(
+            state, child_link.name, "link", force_order
+        )
+        adj_inv_world_joint[..., block] += _transpose_apply(
+            cmtm.mat_inv_adj(), adj_joint_sum[..., block]
+        )
+        arb_vec = CMVector.set_cmvecs(
+            joint_force_blocks[i].reshape(force_order, dof)
+        )
+        child_adj = _cmtm_var_jacob_transpose_matvec(
+            cmtm, arb_vec, adj_joint_sum[..., block], inverse=True
+        )
+        child_block = slice(
+            child_link.id * block_size, (child_link.id + 1) * block_size
+        )
+        adj_link_pose[..., child_block] += child_adj
+
+    adj_world_joint = _transpose_total_factorial_mat_inv_vec(
+        robot.joint_num, adj_inv_world_joint, force_order, dof
+    )
+    adj_world_link = _transpose_total_world_link_wrench_to_world_joint_wrench_matvec(
+        robot, adj_world_joint, order=force_order, dim=dim
+    )
+    adj_link_sum = _transpose_total_factorial_matvec(
+        robot.link_num, adj_world_link, force_order, dof
+    )
+
+    # Reverse each link's world-frame conversion. Its local-force input also
+    # depends on link pose, so accumulate that adjoint before reversing the
+    # local gravity-wrench construction below.
+    adj_inv_local_link = np.zeros_like(adj_link_sum)
+    local_force_blocks = local_link_force.reshape(robot.link_num, block_size)
+    for i, link in enumerate(robot.links):
+        block = slice(i * block_size, (i + 1) * block_size)
+        cmtm = state_dict_to_cmtm_wrench(state, link.name, "link", force_order)
+        adj_inv_local_link[..., block] += _transpose_apply(
+            cmtm.mat_adj(), adj_link_sum[..., block]
+        )
+        arb_vec = CMVector.set_cmvecs(
+            local_force_blocks[i].reshape(force_order, dof)
+        )
+        adj_link_pose[..., block] += _cmtm_var_jacob_transpose_matvec(
+            cmtm, arb_vec, adj_link_sum[..., block]
+        )
+
+    adj_local_link += _transpose_total_factorial_mat_inv_vec(
+        robot.link_num, adj_inv_local_link, force_order, dof
+    )
+
+    # Reverse local_link_rhs = F (-I) Var(T^-1, gravity) link_pose_rhs.
+    adj_local_varied = _transpose_total_factorial_matvec(
+        robot.link_num, adj_local_link, force_order, dof
+    )
+    for i, link in enumerate(robot.links):
+        block = slice(i * block_size, (i + 1) * block_size)
+        inertia = inertia_diag_mat(
+            spatial_inertia(link.mass, link.inertia, link.cog), force_order
+        )
+        adj_varied = _transpose_apply(
+            -inertia, adj_local_varied[..., block]
+        )
+        cmtm = state_dict_to_cmtm(state, link.name, "link", force_order)
+        adj_link_pose[..., block] += _cmtm_var_jacob_transpose_matvec(
+            cmtm, world_gravity, adj_varied, inverse=True
+        )
+
+    return _transpose_total_coord_to_link_tan_vel_grad_matvec(
+        robot,
+        state,
+        adj_link_pose,
+        out_order=force_order,
+        in_order=force_order + 2,
+        dim=dim,
+    )
+
+
 def _transpose_total_partial_momentum_to_force_grad_matvec(
     robot: RobotStruct,
     state: dict,
@@ -681,6 +813,20 @@ def outward_jacobian_transpose_matvec(
             robot, adj_joint_torque, torque_order=force_order, dim=dim
         )
 
+        gravity = state_gravity(state)
+        if np.any(gravity):
+            gravity_result = _transpose_total_coord_to_gravity_force_grad_matvec(
+                robot,
+                state,
+                gravity,
+                adj_link_force,
+                adj_joint_force,
+                force_order=force_order,
+                dim=dim,
+            )
+        else:
+            gravity_result = np.zeros(batch_shape + (motion_dim,), dtype=vec.dtype)
+
         adj_joint_mom += _transpose_joint_partial_momentum_to_force_grad_matvec(
             robot, state, adj_joint_force, force_order=force_order, dim=dim
         )
@@ -723,6 +869,8 @@ def outward_jacobian_transpose_matvec(
     )
 
     result = np.zeros(batch_shape + (motion_dim,), dtype=vec.dtype)
+    if max_time_order >= 3:
+        result += gravity_result
     result += _transpose_total_coord_to_link_vel_grad_matvec(
         robot, state, adj_kine, order=max_time_order, dim=dim
     )

@@ -1940,6 +1940,8 @@ def test_numpy_gravity_aware_torque_jacobian_matches_full_numerical(monkeypatch)
     np.testing.assert_allclose(
         kots.jacobian_transpose_mul(torque, cotangent),
         actual.T @ cotangent,
+        atol=1e-12,
+        rtol=1e-12,
     )
 
 
@@ -2232,6 +2234,53 @@ def test_gravity_jacobian_mul_uses_direct_cmtm_kernel(
         jacobian @ matrix,
         atol=2e-10,
         rtol=2e-10,
+    )
+
+
+@pytest.mark.parametrize("backend", ["numpy", "rust"])
+@pytest.mark.parametrize("batched", [False, True])
+def test_gravity_jacobian_transpose_mul_uses_direct_cmtm_kernel(
+    monkeypatch,
+    backend,
+    batched,
+):
+    if backend == "rust":
+        pytest.importorskip("robokots._rust")
+    force_order = 3
+    order = force_order + 2
+    gravity = np.array([0.4, -1.1, -9.3])
+    states = [
+        StateType("link", TARGET_LINK, "force_diff2"),
+        StateType("joint", "joint3", "torque_diff2"),
+    ]
+    rng = np.random.default_rng(635 + int(batched))
+    kots = _make_kots(order=order)
+    motion_shape = (2, kots.dof() * order) if batched else (kots.dof() * order,)
+    kots.import_motions(rng.standard_normal(motion_shape))
+    kots.dynamics(backend=backend, gravity=gravity, materialize_dict=False)
+
+    jacobian = kots.jacobian(states)
+    output_dim = jacobian.shape[-2]
+    vector_shape = (2, output_dim) if batched else (output_dim,)
+    matrix_shape = (2, output_dim, 4) if batched else (output_dim, 4)
+    vector = rng.standard_normal(vector_shape)
+    matrix = rng.standard_normal(matrix_shape)
+
+    def fail_dense_jacobian(*args, **kwargs):
+        raise AssertionError("jacobian_transpose_mul assembled a dense Jacobian")
+
+    monkeypatch.setattr(kots, "_jacobian_from_state", fail_dense_jacobian)
+    np.testing.assert_allclose(
+        kots.jacobian_transpose_mul(states, vector),
+        (np.swapaxes(jacobian, -1, -2) @ vector[..., None])[..., 0],
+        atol=3e-10,
+        rtol=3e-10,
+    )
+    np.testing.assert_allclose(
+        kots.jacobian_transpose_mul(states, matrix),
+        np.swapaxes(jacobian, -1, -2) @ matrix,
+        atol=3e-10,
+        rtol=3e-10,
     )
 
 
