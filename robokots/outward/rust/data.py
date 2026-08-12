@@ -26,6 +26,16 @@ def _factorial(order: int, dtype) -> np.ndarray:
     fact[i] = fact[i - 1] * i
   return fact
 
+def _validate_gravity(gravity) -> np.ndarray:
+  if gravity is None:
+    return np.zeros(3, dtype=float)
+  gravity = np.asarray(gravity, dtype=float)
+  if gravity.shape != (3,):
+    raise ValueError(f"gravity must have shape (3,), got {gravity.shape}.")
+  if not np.all(np.isfinite(gravity)):
+    raise ValueError("gravity must contain only finite values.")
+  return np.ascontiguousarray(gravity)
+
 def _mat4_inv_se3(mat: np.ndarray) -> np.ndarray:
   mat = np.asarray(mat)
   rot_t = np.swapaxes(mat[..., :3, :3], -1, -2)
@@ -559,6 +569,7 @@ class RustOutwardState:
     self._has_kinematics = False
     self._has_dynamics = False
     self._minimal_dynamics = False
+    self.gravity = np.zeros(3, dtype=float)
 
   def compute_kinematics(self, motion) -> "RustOutwardState":
     motion = np.asarray(motion, dtype=float)
@@ -569,36 +580,39 @@ class RustOutwardState:
     self._has_kinematics = True
     self._has_dynamics = False
     self._minimal_dynamics = False
+    self.gravity = np.zeros(3, dtype=float)
     return self
 
   def compute_dynamics(self, motion, gravity=None) -> "RustOutwardState":
     motion = np.asarray(motion, dtype=float)
     if motion.ndim != 1:
       raise ValueError("motion must have shape (robot dof * order,)")
+    active_gravity = _validate_gravity(gravity)
     if gravity is None:
       self.raw_data.compute_dynamics(motion)
     else:
-      gravity = np.ascontiguousarray(gravity, dtype=float)
-      self.raw_data.compute_dynamics(motion, gravity)
+      self.raw_data.compute_dynamics(motion, active_gravity)
     self._cache.clear()
     self._has_kinematics = True
     self._has_dynamics = True
     self._minimal_dynamics = False
+    self.gravity = active_gravity.copy()
     return self
 
   def compute_dynamics_minimal(self, motion, gravity=None) -> "RustOutwardState":
     motion = np.asarray(motion, dtype=float)
     if motion.ndim != 1:
       raise ValueError("motion must have shape (robot dof * order,)")
+    active_gravity = _validate_gravity(gravity)
     if gravity is None:
       self.raw_data.compute_dynamics_minimal(motion)
     else:
-      gravity = np.ascontiguousarray(gravity, dtype=float)
-      self.raw_data.compute_dynamics_minimal(motion, gravity)
+      self.raw_data.compute_dynamics_minimal(motion, active_gravity)
     self._cache.clear()
     self._has_kinematics = True
     self._has_dynamics = True
     self._minimal_dynamics = True
+    self.gravity = active_gravity.copy()
     return self
 
   def _require_full_dynamics(self):
@@ -897,32 +911,35 @@ class RustBatchOutwardState(RustOutwardState):
     self._has_kinematics = True
     self._has_dynamics = False
     self._minimal_dynamics = False
+    self.gravity = np.zeros(3, dtype=float)
     return self
 
   def compute_dynamics(self, motion, gravity=None) -> "RustBatchOutwardState":
     flat_motion = self._flat_motion(motion)
+    active_gravity = _validate_gravity(gravity)
     if gravity is None:
       self.raw_data.compute_dynamics(flat_motion)
     else:
-      gravity = np.ascontiguousarray(gravity, dtype=float)
-      self.raw_data.compute_dynamics(flat_motion, gravity)
+      self.raw_data.compute_dynamics(flat_motion, active_gravity)
     self._cache.clear()
     self._has_kinematics = True
     self._has_dynamics = True
     self._minimal_dynamics = False
+    self.gravity = active_gravity.copy()
     return self
 
   def compute_dynamics_minimal(self, motion, gravity=None) -> "RustBatchOutwardState":
     flat_motion = self._flat_motion(motion)
+    active_gravity = _validate_gravity(gravity)
     if gravity is None:
       self.raw_data.compute_dynamics_minimal(flat_motion)
     else:
-      gravity = np.ascontiguousarray(gravity, dtype=float)
-      self.raw_data.compute_dynamics_minimal(flat_motion, gravity)
+      self.raw_data.compute_dynamics_minimal(flat_motion, active_gravity)
     self._cache.clear()
     self._has_kinematics = True
     self._has_dynamics = True
     self._minimal_dynamics = True
+    self.gravity = active_gravity.copy()
     return self
 
   def link_mat(self, link) -> np.ndarray:

@@ -1903,6 +1903,359 @@ def test_batched_dynamics_and_jacobian_matches_loop():
         np.testing.assert_allclose(actual_jacob[i], single.jacobian(torque_state), atol=1e-12)
 
 
+def test_numpy_gravity_aware_torque_jacobian_matches_full_numerical(monkeypatch):
+    kots = _make_kots(order=3)
+    rng = np.random.default_rng(31)
+    motion = rng.standard_normal(kots.dof() * 3)
+    gravity = np.array([1.2, -3.4, 0.7])
+    torque = StateType("total_joint", "total_joint", "torque")
+
+    kots.import_motions(motion)
+    kots.dynamics(backend="numpy", gravity=gravity, materialize_dict=False)
+    expected = kots.jacobian(torque, numerical=True)
+    actual = kots.jacobian(torque)
+
+    np.testing.assert_allclose(actual, expected, atol=5e-6, rtol=5e-7)
+
+    zero_g = _make_kots(order=3)
+    zero_g.import_motions(motion)
+    zero_g.dynamics(backend="numpy", gravity=np.zeros(3), materialize_dict=False)
+    gravity_delta = actual - zero_g.jacobian(torque)
+    configuration_columns = np.arange(0, kots.dof() * 3, 3)
+    other_columns = np.setdiff1d(np.arange(kots.dof() * 3), configuration_columns)
+    assert np.linalg.norm(gravity_delta[:, configuration_columns]) > 1e-3
+    np.testing.assert_allclose(gravity_delta[:, other_columns], 0.0, atol=1e-10)
+
+    def fail_full_numerical(*args, **kwargs):
+        raise AssertionError("the full numerical Jacobian fallback was used")
+
+    monkeypatch.setattr(kots, "_jacobian_numerical", fail_full_numerical)
+    monkeypatch.setattr(kots, "_jacobian_mul_numerical", fail_full_numerical)
+    monkeypatch.setattr(kots, "_jacobian_transpose_mul_numerical", fail_full_numerical)
+
+    rhs = rng.standard_normal(kots.dof() * 3)
+    cotangent = rng.standard_normal(kots.dof())
+    np.testing.assert_allclose(kots.jacobian(torque), actual)
+    np.testing.assert_allclose(kots.jacobian_mul(torque, rhs), actual @ rhs)
+    np.testing.assert_allclose(
+        kots.jacobian_transpose_mul(torque, cotangent),
+        actual.T @ cotangent,
+    )
+
+
+def test_numpy_cmtm_gravity_force_jacobians_match_full_numerical():
+    from robokots.core.models.whole_body import (
+        total_coord_to_joint_torque_grad_mat,
+    )
+
+    kots = _make_kots(order=3)
+    rng = np.random.default_rng(33)
+    kots.import_motions(rng.standard_normal(kots.dof() * 3))
+    kots.dynamics(
+        backend="numpy",
+        gravity=np.array([0.8, -2.1, -8.7]),
+        materialize_dict=False,
+    )
+
+    states = [
+        StateType("link", TARGET_LINK, "force"),
+        StateType("joint", "joint3", "force"),
+    ]
+    for state in states:
+        np.testing.assert_allclose(
+            kots.jacobian(state),
+            kots.jacobian(state, numerical=True),
+            atol=5e-6,
+            rtol=5e-7,
+        )
+
+    torque = StateType("total_joint", "total_joint", "torque")
+    explicit_from_dict = total_coord_to_joint_torque_grad_mat(
+        kots.robot_,
+        kots.to_state_dict(),
+        torque_order=1,
+        gravity=kots.gravity_,
+    )
+    np.testing.assert_allclose(
+        explicit_from_dict,
+        kots.jacobian(torque, numerical=True),
+        atol=5e-6,
+        rtol=5e-7,
+    )
+
+
+@pytest.mark.parametrize("backend", ["numpy", "rust"])
+def test_mixed_kinematics_and_torque_gravity_jacobian_is_analytic(
+    monkeypatch,
+    backend,
+):
+    if backend == "rust":
+        pytest.importorskip("robokots._rust")
+    kots = _make_kots(order=3)
+    rng = np.random.default_rng(35)
+    kots.import_motions(rng.standard_normal(kots.dof() * 3))
+    kots.dynamics(
+        backend=backend,
+        gravity=np.array([0.8, -2.1, -8.7]),
+        materialize_dict=False,
+    )
+    states = [
+        StateType("link", TARGET_LINK, "vel"),
+        StateType("joint", "joint3", "torque"),
+    ]
+    expected = kots.jacobian(states, numerical=True)
+
+    def fail_numerical(*args, **kwargs):
+        raise AssertionError("a numerical Jacobian fallback was used")
+
+    monkeypatch.setattr(kots, "_jacobian_numerical", fail_numerical)
+    np.testing.assert_allclose(
+        kots.jacobian(states),
+        expected,
+        atol=5e-6,
+        rtol=5e-7,
+    )
+
+
+@pytest.mark.parametrize("force_order", [1, 2, 3, 4, 8])
+def test_numpy_cmtm_higher_order_gravity_jacobians_are_analytic(
+    monkeypatch,
+    force_order,
+):
+    order = force_order + 2
+    kots = _make_kots(order=order)
+    rng = np.random.default_rng(330 + force_order)
+    motion_scale = 0.2 if force_order > 4 else 1.0
+    kots.import_motions(
+        motion_scale * rng.standard_normal(kots.dof() * order)
+    )
+    kots.dynamics(
+        backend="numpy",
+        gravity=np.array([0.8, -2.1, -8.7]),
+        materialize_dict=False,
+    )
+
+    suffix = "" if force_order == 1 else f"_diff{force_order - 1}"
+    states = [
+        StateType("link", TARGET_LINK, f"force{suffix}"),
+        StateType("joint", "joint3", f"force{suffix}"),
+        StateType("total_joint", "total_joint", f"torque{suffix}"),
+    ]
+    expected = [kots.jacobian(state, numerical=True) for state in states]
+
+    def fail_numerical(*args, **kwargs):
+        raise AssertionError("a numerical gravity Jacobian path was used")
+
+    monkeypatch.setattr(kots, "_jacobian_numerical", fail_numerical)
+    monkeypatch.setattr(kots, "_jacobian_mul_numerical", fail_numerical)
+    monkeypatch.setattr(kots, "_jacobian_transpose_mul_numerical", fail_numerical)
+
+    finite_difference_atol = 2e-4 if force_order > 4 else 1e-4
+    for state, expected_jacobian in zip(states, expected):
+        np.testing.assert_allclose(
+            kots.jacobian(state),
+            expected_jacobian,
+            atol=finite_difference_atol,
+            rtol=2e-6,
+        )
+
+    torque_state = states[-1]
+    torque_jacobian = kots.jacobian(torque_state)
+    tangent = rng.standard_normal(kots.dof() * order)
+    cotangent = rng.standard_normal(kots.dof())
+    np.testing.assert_allclose(
+        kots.jacobian_mul(torque_state, tangent),
+        torque_jacobian @ tangent,
+        atol=finite_difference_atol,
+        rtol=2e-6,
+    )
+    np.testing.assert_allclose(
+        kots.jacobian_transpose_mul(torque_state, cotangent),
+        torque_jacobian.T @ cotangent,
+        atol=finite_difference_atol,
+        rtol=2e-6,
+    )
+
+
+def test_batched_numpy_cmtm_higher_order_gravity_torque_jacobian(monkeypatch):
+    force_order = 3
+    order = force_order + 2
+    gravity = np.array([0.4, -1.1, -9.3])
+    torque = StateType("total_joint", "total_joint", "torque_diff2")
+    kots = _make_kots(order=order)
+    rng = np.random.default_rng(334)
+    motions = rng.standard_normal((2, kots.dof() * order))
+
+    kots.import_motions(motions)
+    kots.dynamics(backend="numpy", gravity=gravity, materialize_dict=False)
+
+    def fail_scalar_fallback(*args, **kwargs):
+        raise AssertionError("the batched analytic path fell back to scalar states")
+
+    monkeypatch.setattr(kots, "_state_builder", fail_scalar_fallback)
+    actual = kots.jacobian(torque)
+
+    expected = []
+    for motion in motions:
+        single = _make_kots(order=order)
+        single.import_motions(motion)
+        single.dynamics(backend="numpy", gravity=gravity, materialize_dict=False)
+        expected.append(single.jacobian(torque, numerical=True))
+
+    np.testing.assert_allclose(
+        actual,
+        np.stack(expected),
+        atol=1e-4,
+        rtol=2e-6,
+    )
+
+
+@pytest.mark.parametrize("force_order", [1, 2, 3, 4, 8])
+def test_rust_cmtm_higher_order_gravity_jacobians_match_numpy_analytic(
+    monkeypatch,
+    force_order,
+):
+    pytest.importorskip("robokots._rust")
+    order = force_order + 2
+    gravity = np.array([0.8, -2.1, -8.7])
+    rng = np.random.default_rng(430 + force_order)
+    motion_scale = 0.2 if force_order > 4 else 1.0
+    motion = motion_scale * rng.standard_normal(_make_kots(order=order).dof() * order)
+
+    expected_kots = _make_kots(order=order)
+    expected_kots.import_motions(motion)
+    expected_kots.dynamics(
+        backend="numpy", gravity=gravity, materialize_dict=False
+    )
+
+    actual_kots = _make_kots(order=order)
+    actual_kots.import_motions(motion)
+    actual_kots.dynamics(
+        backend="rust", gravity=gravity, materialize_dict=False
+    )
+    np.testing.assert_array_equal(actual_kots.outward_state_.gravity, gravity)
+
+    suffix = "" if force_order == 1 else f"_diff{force_order - 1}"
+    states = [
+        StateType("link", TARGET_LINK, f"force{suffix}"),
+        StateType("joint", "joint3", f"force{suffix}"),
+        StateType("total_joint", "total_joint", f"torque{suffix}"),
+    ]
+
+    def fail_numerical(*args, **kwargs):
+        raise AssertionError("a numerical gravity Jacobian path was used")
+
+    monkeypatch.setattr(actual_kots, "_jacobian_numerical", fail_numerical)
+    monkeypatch.setattr(actual_kots, "_jacobian_mul_numerical", fail_numerical)
+    monkeypatch.setattr(
+        actual_kots, "_jacobian_transpose_mul_numerical", fail_numerical
+    )
+    for state in states:
+        np.testing.assert_allclose(
+            actual_kots.jacobian(state),
+            expected_kots.jacobian(state),
+            atol=2e-10,
+            rtol=2e-10,
+        )
+
+
+def test_batched_rust_cmtm_higher_order_gravity_torque_jacobian_matches_numpy(
+    monkeypatch,
+):
+    pytest.importorskip("robokots._rust")
+    force_order = 3
+    order = force_order + 2
+    gravity = np.array([0.4, -1.1, -9.3])
+    torque = StateType("total_joint", "total_joint", "torque_diff2")
+    rng = np.random.default_rng(434)
+    motions = rng.standard_normal((2, _make_kots(order=order).dof() * order))
+
+    expected = _make_kots(order=order)
+    expected.import_motions(motions)
+    expected.dynamics(backend="numpy", gravity=gravity, materialize_dict=False)
+
+    actual = _make_kots(order=order)
+    actual.import_motions(motions)
+    actual.dynamics(backend="rust", gravity=gravity, materialize_dict=False)
+
+    def fail_scalar_fallback(*args, **kwargs):
+        raise AssertionError("the batched analytic path fell back to scalar states")
+
+    monkeypatch.setattr(actual, "_state_builder", fail_scalar_fallback)
+
+    np.testing.assert_allclose(
+        actual.jacobian(torque),
+        expected.jacobian(torque),
+        atol=2e-4,
+        rtol=2e-6,
+    )
+
+
+@pytest.mark.parametrize("backend", ["numpy", "rust"])
+@pytest.mark.parametrize("batched", [False, True])
+def test_gravity_jacobian_mul_uses_direct_cmtm_kernel(
+    monkeypatch,
+    backend,
+    batched,
+):
+    if backend == "rust":
+        pytest.importorskip("robokots._rust")
+    force_order = 3
+    order = force_order + 2
+    gravity = np.array([0.4, -1.1, -9.3])
+    states = [
+        StateType("link", TARGET_LINK, "force_diff2"),
+        StateType("joint", "joint3", "torque_diff2"),
+    ]
+    rng = np.random.default_rng(535 + int(batched))
+    kots = _make_kots(order=order)
+    motion_shape = (2, kots.dof() * order) if batched else (kots.dof() * order,)
+    kots.import_motions(rng.standard_normal(motion_shape))
+    kots.dynamics(backend=backend, gravity=gravity, materialize_dict=False)
+
+    jacobian = kots.jacobian(states)
+    vector = rng.standard_normal(kots.dof() * order)
+    matrix = rng.standard_normal((kots.dof() * order, 4))
+
+    def fail_dense_jacobian(*args, **kwargs):
+        raise AssertionError("jacobian_mul assembled a dense Jacobian")
+
+    monkeypatch.setattr(kots, "_jacobian_from_state", fail_dense_jacobian)
+    np.testing.assert_allclose(
+        kots.jacobian_mul(states, vector),
+        (jacobian @ vector[..., None])[..., 0],
+        atol=2e-10,
+        rtol=2e-10,
+    )
+    np.testing.assert_allclose(
+        kots.jacobian_mul(states, matrix),
+        jacobian @ matrix,
+        atol=2e-10,
+        rtol=2e-10,
+    )
+
+
+def test_batched_numpy_gravity_aware_torque_jacobian_matches_scalar_loop():
+    rng = np.random.default_rng(32)
+    gravity = np.array([0.4, -1.1, -9.3])
+    torque = StateType("total_joint", "total_joint", "torque")
+    kots = _make_kots(order=3)
+    motions = rng.standard_normal((2, kots.dof() * 3))
+
+    kots.import_motions(motions)
+    kots.dynamics(backend="numpy", gravity=gravity, materialize_dict=False)
+    actual = kots.jacobian(torque)
+
+    expected = []
+    for motion in motions:
+        single = _make_kots(order=3)
+        single.import_motions(motion)
+        single.dynamics(backend="numpy", gravity=gravity, materialize_dict=False)
+        expected.append(single.jacobian(torque, numerical=True))
+
+    np.testing.assert_allclose(actual, np.stack(expected), atol=5e-6, rtol=5e-7)
+
+
 def test_batched_dynamics_jacobian_mul_vector_matches_jacobian_product():
     order = 5
     kots = _make_kots(order=order)

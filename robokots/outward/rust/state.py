@@ -59,7 +59,9 @@ def build_dynamics_outward_state_rust(
     arrays = rust_robot.dynamics_outward_cmtm_batch(flat_motion, dynamics_order, gravity)
     arrays = _reshape_batch_arrays(arrays, batch_shape)
 
-  return _dynamics_outward_state_from_arrays(robot, arrays, kin_order)
+  state = _dynamics_outward_state_from_arrays(robot, arrays, kin_order)
+  state.gravity = gravity.copy()
+  return state
 
 
 def _validate_motion_length(robot: RobotStruct, motion: np.ndarray, order: int) -> None:

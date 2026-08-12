@@ -27,6 +27,7 @@ class OutwardState:
     order: int
     link_cmtm: dict[str, CMTM]
     joint_cmtm: dict[str, CMTM]
+    gravity: np.ndarray = field(default_factory=lambda: np.zeros(3, dtype=float))
     link_momentum: dict[str, CMVector] = field(default_factory=dict)
     joint_momentum: dict[str, CMVector] = field(default_factory=dict)
     link_force: dict[str, CMVector] = field(default_factory=dict)

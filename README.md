@@ -116,12 +116,28 @@ Higher-order force and torque derivatives can include gravity as well. The
 ```python
 kots.dynamics(gravity=[0, 0, -9.81])
 kots.dynamics(gravity=[0, 0, 0])  # historical behavior and current default
+
+gravity_torque_jacobian = kots.jacobian(
+    StateType("total_joint", "total_joint", "torque")
+)
+
+# Optional finite-difference reference for verification.
+gravity_torque_jacobian_fd = kots.jacobian(
+    StateType("total_joint", "total_joint", "torque"), numerical=True
+)
 ```
 
 Gravity is expressed in the world frame. Its moving-link-frame derivatives are
 included in `force_diff*` and `torque_diff*` by both the NumPy and Rust CMTM
-backends. Dynamics Jacobians with nonzero gravity use the gravity-aware
-numerical path until the analytic gravity terms are available.
+backends. For `force`, `torque`, and their higher time derivatives, both paths
+differentiate the local gravity-wrench CMVector analytically through the
+requested CMTM order, then transport and aggregate that gradient through the
+existing generalized-force pipeline. For the ordinary torque Jacobian, gravity
+therefore changes only the `coord` columns. Finite differences are never chosen
+automatically; they remain available only through `numerical=True` for
+comparison and validation. `jacobian_mul()` applies the gravity CMTM variation
+directly for vector and matrix right-hand sides, without assembling the dense
+gravity Jacobian.
 
 ## Model JSON
 

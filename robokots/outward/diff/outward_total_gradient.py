@@ -27,7 +27,16 @@ from robokots.core.models.whole_body.total_dynamics_grad_mat import (
     total_coord_to_world_joint_momentum_grad_mat,
     total_coord_to_world_link_momentum_grad_mat,
 )
-from robokots.core.models.whole_body.total_dynamics_grad_mat import total_coord_to_link_force_grad_mat, total_coord_to_joint_force_grad_mat, total_coord_to_joint_torque_grad_mat
+from robokots.core.models.whole_body.total_dynamics_grad_mat import (
+    total_coord_to_joint_force_grad_mat,
+    total_coord_to_joint_torque_grad_mat,
+    total_coord_to_link_force_grad_mat,
+)
+from robokots.core.models.whole_body.total_gravity_grad_mat import (
+    total_coord_to_joint_gravity_force_grad_mat,
+    total_coord_to_link_gravity_force_grad_mat,
+    total_link_pose_to_gravity_force_grad_matmul_rhs,
+)
 from robokots.core.models.whole_body.total_dynamics_mat import (
     total_joint_wrench_to_joint_torque_mat,
     total_joint_wrench_to_joint_torque_matvec,
@@ -94,6 +103,13 @@ def _selected_coord_to_link_vel_grad_mat(
 def _state_batch_shape(state: dict, owner_name: str, owner_type: str, order: int) -> tuple:
     cmtm = state_dict_to_cmtm(state, owner_name, owner_type, order)
     return np.asarray(cmtm.elem_mat()).shape[:-2]
+
+
+def _state_gravity(state) -> np.ndarray:
+    gravity = np.asarray(getattr(state, "gravity", np.zeros(3)), dtype=float)
+    if gravity.shape != (3,):
+        raise ValueError(f"gravity must have shape (3,), got {gravity.shape}.")
+    return gravity
 
 
 def _is_batched_kinematics_state(
@@ -1404,7 +1420,26 @@ def _batch_total_coord_to_link_force_grad_mat(
     partial_vel = _batch_total_partial_link_sp_vel_to_link_force_grad_mat(robot, state, force_order, dim)
     mat_link_mom = _batch_selected_coord_to_link_momentum_grad_mat(robot, state, robot.links, order=force_order + 2, dim=dim)
     mat_link_vel = _batch_selected_coord_to_link_vel_grad_mat(robot, state, robot.links, order=force_order + 2, dim=dim)
-    return partial_mom @ mat_link_mom + partial_vel @ mat_link_vel
+    result = partial_mom @ mat_link_mom + partial_vel @ mat_link_vel
+    gravity = _state_gravity(state)
+    if np.any(gravity):
+        link_pose_grad = _batch_selected_coord_to_link_tan_vel_grad_mat(
+            robot,
+            state,
+            robot.links,
+            out_order=force_order,
+            in_order=force_order + 2,
+            dim=dim,
+        )
+        result += total_coord_to_link_gravity_force_grad_mat(
+            robot,
+            state,
+            gravity,
+            force_order=force_order,
+            dim=dim,
+            link_pose_grad=link_pose_grad,
+        )
+    return result
 
 
 def _batch_selected_coord_to_link_force_grad_mat(
@@ -1536,10 +1571,75 @@ def _batch_total_coord_to_joint_force_grad_mat(
     mat_child_link_vel = take_joint_child_link_blocks(
         mat_link_vel, robot, dof * (force_order + 2), axis=-2
     )
-    return (
+    result = (
         partial_mom @ mat_joint_mom
         + partial_joint_vel @ mat_child_link_vel
     )
+    gravity = _state_gravity(state)
+    if np.any(gravity):
+        link_pose_grad = _batch_selected_coord_to_link_tan_vel_grad_mat(
+            robot,
+            state,
+            robot.links,
+            out_order=force_order,
+            in_order=force_order + 2,
+            dim=dim,
+        )
+        result += total_coord_to_joint_gravity_force_grad_mat(
+            robot,
+            state,
+            gravity,
+            force_order=force_order,
+            dim=dim,
+            link_pose_grad=link_pose_grad,
+        )
+    return result
+
+
+def _batch_total_coord_to_gravity_force_grad_matmul_rhs(
+    robot: RobotStruct,
+    state,
+    gravity: np.ndarray,
+    rhs: np.ndarray,
+    force_order: int,
+    dim: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Map coordinate directions to gravity-force directions."""
+    link_pose_rhs = _batch_total_coord_to_link_tan_vel_grad_matmul_rhs(
+        robot,
+        state,
+        rhs,
+        out_order=force_order,
+        in_order=force_order + 2,
+        dim=dim,
+    )
+    return total_link_pose_to_gravity_force_grad_matmul_rhs(
+        robot,
+        state,
+        gravity,
+        link_pose_rhs,
+        force_order=force_order,
+        dim=dim,
+    )
+
+
+def _batch_total_coord_to_gravity_force_grad_matvec(
+    robot: RobotStruct,
+    state,
+    gravity: np.ndarray,
+    vec: np.ndarray,
+    force_order: int,
+    dim: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    link_rhs, joint_rhs = _batch_total_coord_to_gravity_force_grad_matmul_rhs(
+        robot,
+        state,
+        gravity,
+        np.asarray(vec)[..., None],
+        force_order,
+        dim,
+    )
+    return link_rhs[..., 0], joint_rhs[..., 0]
 
 
 def _batch_selected_coord_to_joint_force_grad_mat(
@@ -1982,6 +2082,16 @@ def _batch_outward_dynamics_jacobian_matvec(
             robot, state, child_vec_kine, force_order=force_order, dim=dim
         )
 
+        gravity = _state_gravity(state)
+        if np.any(gravity):
+            gravity_link_force, gravity_joint_force = (
+                _batch_total_coord_to_gravity_force_grad_matvec(
+                    robot, state, gravity, vec, force_order, dim
+                )
+            )
+            vec_link_force += gravity_link_force
+            vec_joint_force += gravity_joint_force
+
         vec_joint_torque = _batch_total_joint_wrench_to_joint_torque_matvec(
             robot, vec_joint_force, torque_order=force_order, dim=dim
         )
@@ -2097,6 +2207,16 @@ def _batch_outward_dynamics_jacobian_matmul_rhs(
         ) + _batch_total_partial_link_sp_vel_to_joint_force_grad_matmul_rhs(
             robot, state, child_rhs_kine, force_order=force_order, dim=dim
         )
+
+        gravity = _state_gravity(state)
+        if np.any(gravity):
+            gravity_link_force, gravity_joint_force = (
+                _batch_total_coord_to_gravity_force_grad_matmul_rhs(
+                    robot, state, gravity, rhs, force_order, dim
+                )
+            )
+            rhs_link_force += gravity_link_force
+            rhs_joint_force += gravity_joint_force
 
         rhs_joint_torque = _batch_total_joint_wrench_to_joint_torque_matmul_rhs(
             robot, rhs_joint_force, torque_order=force_order, dim=dim
@@ -2429,6 +2549,11 @@ def outward_jacobian(robot : RobotStruct, state : dict, state_type_list : list[S
                     get_partial_mom_to_force() @ get_mat_link_mom()
                     + total_partial_link_sp_vel_to_link_force_grad_mat(robot, state, force_order=force_order, dim=dim) @ get_mat_kine()
                 )
+                gravity = _state_gravity(state)
+                if np.any(gravity):
+                    cache["mat_link_force"] += total_coord_to_link_gravity_force_grad_mat(
+                        robot, state, gravity, force_order=force_order, dim=dim
+                    )
         return cache["mat_link_force"]
 
     def get_mat_joint_force() -> np.ndarray:
@@ -2457,6 +2582,11 @@ def outward_jacobian(robot : RobotStruct, state : dict, state_type_list : list[S
                     + total_partial_link_sp_vel_to_joint_force_grad_mat(robot, state, force_order=force_order, dim=dim)
                     @ child_link_kine
                 )
+                gravity = _state_gravity(state)
+                if np.any(gravity):
+                    cache["mat_joint_force"] += total_coord_to_joint_gravity_force_grad_mat(
+                        robot, state, gravity, force_order=force_order, dim=dim
+                    )
         return cache["mat_joint_force"]
 
     def get_mat_joint_torque() -> np.ndarray:
@@ -2591,6 +2721,16 @@ def outward_jacobian_matvec(robot : RobotStruct, state : dict, state_type_list :
                     + total_partial_link_sp_vel_to_joint_force_grad_matvec(
                         robot, state, child_vec_kine, force_order=max_time_order-2, dim=dim
                     )
+
+        gravity = _state_gravity(state)
+        if np.any(gravity):
+            gravity_link_force, gravity_joint_force = (
+                _batch_total_coord_to_gravity_force_grad_matvec(
+                    robot, state, gravity, vec, max_time_order - 2, dim
+                )
+            )
+            vec_link_force += gravity_link_force
+            vec_joint_force += gravity_joint_force
 
         vec_joint_torque = total_joint_wrench_to_joint_torque_matvec(
             robot, vec_joint_force, torque_order=max_time_order-2, dim=dim

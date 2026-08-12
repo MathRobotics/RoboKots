@@ -885,6 +885,13 @@ class Kots():
       combine=np.vstack,
     )
 
+  def _has_gravity_force_output(self, state_type_list) -> bool:
+    """Whether an analytic force/torque Jacobian must include gravity."""
+    return np.any(self.gravity_) and any(
+      st.data_type in keys_force or st.data_type in keys_torque
+      for st in state_type_list
+    )
+
   def _jacobian_from_state(self, state, state_type_list, max_order : int, list_output : bool = False):
     fast = self._joint_motion_torque_jacobian(state, state_type_list, max_order, list_output=list_output)
     if fast is not None:
@@ -1474,7 +1481,7 @@ class Kots():
     )
 
   def _rust_torque_jacobian(self, state_type_list, max_order : int, list_output : bool = False):
-    if not hasattr(self.outward_state_, "raw_data"):
+    if np.any(self.gravity_) or not hasattr(self.outward_state_, "raw_data"):
       return None
     spec = self._rust_torque_row_parts(state_type_list, max_order)
     if spec is None:
@@ -1504,7 +1511,7 @@ class Kots():
 
   def _rust_torque_jacobian_apply(self, state_type_list, max_order : int, rhs, batch_shape : tuple, rhs_is_matrix : bool, list_output : bool = False):
     spec = self._rust_torque_row_parts(state_type_list, max_order)
-    if spec is None or not hasattr(self.outward_state_, "raw_data"):
+    if np.any(self.gravity_) or spec is None or not hasattr(self.outward_state_, "raw_data"):
       return None
     rows, part_sizes = spec
     qva = self._rust_qva_order3()
@@ -1543,7 +1550,7 @@ class Kots():
 
   def _rust_torque_jacobian_transpose_apply(self, state_type_list, max_order : int, rhs, batch_shape : tuple, rhs_is_matrix : bool):
     spec = self._rust_torque_row_parts(state_type_list, max_order)
-    if spec is None or not hasattr(self.outward_state_, "raw_data"):
+    if np.any(self.gravity_) or spec is None or not hasattr(self.outward_state_, "raw_data"):
       return None
     rows, _ = spec
     qva = self._rust_qva_order3()
@@ -1598,7 +1605,7 @@ class Kots():
     return np.asarray(link_ids, dtype=np.int64), np.asarray(data_codes, dtype=np.int64)
 
   def _rust_link_local_jacobian(self, state_type_list, max_order : int, list_output : bool = False):
-    if not hasattr(self.outward_state_, "raw_data"):
+    if np.any(self.gravity_) or not hasattr(self.outward_state_, "raw_data"):
       return None
     spec = self._rust_link_local_specs(state_type_list, max_order)
     if spec is None:
@@ -1624,7 +1631,7 @@ class Kots():
     return [jacob[..., i * 6:(i + 1) * 6, :] for i in range(len(link_ids))]
 
   def _rust_link_local_jacobian_apply(self, state_type_list, max_order : int, rhs, batch_shape : tuple, rhs_is_matrix : bool, list_output : bool = False):
-    if not hasattr(self.outward_state_, "raw_data"):
+    if np.any(self.gravity_) or not hasattr(self.outward_state_, "raw_data"):
       return None
     spec = self._rust_link_local_specs(state_type_list, max_order)
     if spec is None:
@@ -1673,9 +1680,6 @@ class Kots():
   def jacobian(self, state_type, numerical : bool = False, list_output : bool = False):
     state_type_list = self._state_type_list(state_type)
     max_order = StateType.max_time_order(state_type_list)
-    numerical = numerical or (
-      np.any(self.gravity_) and any(st.is_dynamics for st in state_type_list)
-    )
     if numerical:
       return self._jacobian_numerical(state_type_list, max_order, list_output)
 
@@ -1692,9 +1696,6 @@ class Kots():
     """
     state_type_list = self._state_type_list(state_type)
     max_order = StateType.max_time_order(state_type_list)
-    numerical = numerical or (
-      np.any(self.gravity_) and any(st.is_dynamics for st in state_type_list)
-    )
     input_dim = self.robot_.dof * max_order
     batch_shape = self.batch_shape_ if self.batch_shape_ else self.motions_.batch_shape()
     rhs, rhs_is_matrix = batch_api.broadcast_feature_rhs(rhs, batch_shape, input_dim, name="rhs")
@@ -1715,9 +1716,6 @@ class Kots():
     """
     state_type_list = self._state_type_list(state_type)
     max_order = StateType.max_time_order(state_type_list)
-    numerical = numerical or (
-      np.any(self.gravity_) and any(st.is_dynamics for st in state_type_list)
-    )
     output_dim = self._jacobian_output_dim(state_type_list)
     batch_shape = self.batch_shape_ if self.batch_shape_ else self.motions_.batch_shape()
     rhs, rhs_is_matrix = batch_api.broadcast_feature_rhs(rhs, batch_shape, output_dim, name="rhs")
@@ -1726,6 +1724,14 @@ class Kots():
       return self._jacobian_transpose_mul_numerical(state_type_list, max_order, rhs, rhs_is_matrix)
 
     state = self.outward_state_ if self.outward_state_ is not None else self.state_dict_
+    if self._has_gravity_force_output(state_type_list):
+      jacob = self._jacobian_from_state(
+        state, state_type_list, max_order, list_output=False
+      )
+      jacob_t = np.swapaxes(jacob, -1, -2)
+      if rhs_is_matrix:
+        return jacob_t @ rhs
+      return (jacob_t @ rhs[..., None])[..., 0]
     return self._jacobian_transpose_mul_from_state(state, state_type_list, max_order, rhs, batch_shape, rhs_is_matrix)
 
   def jacobian_tensor(self, state_type, numerical : bool = False) -> JacobianTensor:

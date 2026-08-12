@@ -452,6 +452,38 @@ def test_branched_fixed_joint_rnea_matches_pinocchio_by_joint_name(tmp_path, gra
         )
 
 
+@pytest.mark.parametrize(
+    "name,urdf",
+    [
+        ("branched_fixed", BRANCHED_FIXED_URDF),
+        ("mixed_joint_chain", MIXED_REVOLUTE_PRISMATIC_URDF),
+    ],
+)
+def test_numpy_cmtm_gravity_torque_jacobian_handles_robot_topology(
+    tmp_path,
+    name,
+    urdf,
+):
+    urdf_path = tmp_path / f"{name}.urdf"
+    urdf_path.write_text(urdf, encoding="utf-8")
+    kots = Kots.from_urdf_file(str(urdf_path), order=3)
+    rng = np.random.default_rng(20260812)
+    motion = rng.standard_normal(kots.dof() * 3)
+    gravity = np.array([1.2, -3.4, 0.7])
+    torque = StateType("total_joint", "total_joint", "torque")
+
+    kots.import_motions(motion)
+    kots.dynamics(backend="numpy", gravity=gravity, materialize_dict=False)
+    expected = kots.jacobian(torque, numerical=True)
+
+    np.testing.assert_allclose(
+        kots.jacobian(torque),
+        expected,
+        atol=5e-6,
+        rtol=5e-7,
+    )
+
+
 def test_moving_link_without_inertial_is_massless_like_pinocchio(tmp_path):
     urdf = """<robot name="massless_link">
       <link name="base"/>

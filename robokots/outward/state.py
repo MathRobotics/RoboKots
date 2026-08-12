@@ -423,6 +423,7 @@ def build_dynamics_outward_state(
   kinematics_order = dynamics_order + 2
   motion = np.asarray(motions, dtype=float)
   outward_state = build_kinematics_outward_state(robot, motion, kinematics_order)
+  outward_state.gravity = gravity.copy()
   link_cmtm_dict = outward_state.link_cmtm
   joint_momentum_cmvec = {}
   joint_gravity_cmvec = {}

@@ -192,19 +192,10 @@ keys_time_order = {
     "drop": 9,
     "shot": 10,
     "put": 11,
-    "force": 3,
-    "force_diff1": 4,
-    "force_diff2": 5,
-    "force_diff3": 6,
-    "momentum": 2,
-    "momentum_diff1": 3,
-    "momentum_diff2": 4,
-    "momentum_diff3": 5,
-    "torque": 3,
-    "torque_diff1": 4,
-    "torque_diff2": 5,
-    "torque_diff3": 6,
 }
+keys_time_order.update({key: i + 2 for i, key in enumerate(keys_momentum)})
+keys_time_order.update({key: i + 3 for i, key in enumerate(keys_force)})
+keys_time_order.update({key: i + 3 for i, key in enumerate(keys_torque)})
 
 keys_order_kinematics = {
     "coord": 1,
@@ -223,29 +214,11 @@ keys_order_kinematics = {
     "put": 11,
 }
 
-keys_order_force = {
-    "force": 1,
-    "force_diff1": 2,
-    "force_diff2": 3,
-    "force_diff3": 4,
-    "force_diff4": 5,
-}
+keys_order_force = {key: i + 1 for i, key in enumerate(keys_force)}
 
-keys_order_momentum = {
-    "momentum": 1,
-    "momentum_diff1": 2,
-    "momentum_diff2": 3,
-    "momentum_diff3": 4,
-    "momentum_diff4": 5,
-}
+keys_order_momentum = {key: i + 1 for i, key in enumerate(keys_momentum)}
 
-keys_order_torque = {
-    "torque": 1,
-    "torque_diff1": 2,
-    "torque_diff2": 3,
-    "torque_diff3": 4,
-    "torque_diff4": 5,
-}
+keys_order_torque = {key: i + 1 for i, key in enumerate(keys_torque)}
 
 keys_order = {**keys_order_kinematics, **keys_order_momentum, **keys_order_force, **keys_order_torque}
 
@@ -307,9 +280,9 @@ def data_type_to_sub_func(data_type : str):
         return None
     elif data_type in ["pos", "vel", "acc"] \
         or data_type in ["jerk", "snap", "crackle", "pop", "lock", "drop", "shot", "put"]  \
-        or data_type in ["force", "force_diff1", "force_diff2", "force_diff3"] \
-        or data_type in ["momentum", "momentum_diff1", "momentum_diff2", "momentum_diff3"] \
-        or data_type in ["torque", "torque_diff1", "torque_diff2", "torque_diff3"]:
+        or data_type in keys_force \
+        or data_type in keys_momentum \
+        or data_type in keys_torque:
         return None
     else:
         raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'jerk', 'frame' or 'cmtm'.")
@@ -329,8 +302,8 @@ def data_type_dof(data_type : str, order = None, dim = 3):
         return dim
     elif data_type in ["vel", "acc"] \
         or data_type in ["jerk", "snap", "crackle", "pop", "lock", "drop", "shot", "put"]  \
-        or data_type in ["force", "force_diff1", "force_diff2", "force_diff3"] \
-        or data_type in ["momentum", "momentum_diff1", "momentum_diff2", "momentum_diff3"]:
+        or data_type in keys_force \
+        or data_type in keys_momentum:
         return dim * 2
     elif data_type == "frame":
         return dim * 2
