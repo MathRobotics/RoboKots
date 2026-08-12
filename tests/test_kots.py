@@ -2284,6 +2284,78 @@ def test_gravity_jacobian_transpose_mul_uses_direct_cmtm_kernel(
     )
 
 
+@pytest.mark.parametrize("batched", [False, True])
+def test_rust_gravity_torque_jacobian_uses_rnea_kernels(monkeypatch, batched):
+    pytest.importorskip("robokots._rust")
+    from robokots.outward import api as outward_api
+
+    order = 3
+    gravity = np.array([0.4, -1.1, -9.3])
+    torque = StateType("total_joint", "total_joint", "torque")
+    rng = np.random.default_rng(734 + int(batched))
+    kots = _make_kots(order=order)
+    motion_shape = (2, kots.dof() * order) if batched else (kots.dof() * order,)
+    kots.import_motions(rng.standard_normal(motion_shape))
+    kots.dynamics(backend="rust", gravity=gravity, materialize_dict=False)
+    expected = kots.jacobian(torque, numerical=True)
+
+    # A force/torque fallback would reach one of these outward kernels.
+    def fail_outward(*args, **kwargs):
+        raise AssertionError("the Rust RNEA Jacobian kernel was not used")
+
+    monkeypatch.setattr(outward_api, "outward_jacobian", fail_outward)
+    monkeypatch.setattr(outward_api, "outward_jacobian_matvec", fail_outward)
+    monkeypatch.setattr(outward_api, "outward_jacobian_transpose_matvec", fail_outward)
+
+    actual = kots.jacobian(torque)
+    output_dim = actual.shape[-2]
+    vector_shape = (2, output_dim) if batched else (output_dim,)
+    matrix_shape = (2, kots.dof() * order, 3) if batched else (kots.dof() * order, 3)
+    cotangent_shape = (2, output_dim, 2) if batched else (output_dim, 2)
+    tangent = rng.standard_normal(matrix_shape)
+    cotangent = rng.standard_normal(cotangent_shape)
+
+    np.testing.assert_allclose(actual, expected, atol=5e-6, rtol=5e-7)
+    np.testing.assert_allclose(
+        kots.jacobian_mul(torque, tangent),
+        actual @ tangent,
+        atol=2e-10,
+        rtol=2e-10,
+    )
+    np.testing.assert_allclose(
+        kots.jacobian_transpose_mul(torque, cotangent),
+        np.swapaxes(actual, -1, -2) @ cotangent,
+        atol=2e-10,
+        rtol=2e-10,
+    )
+
+
+def test_rust_rnea_jacobian_api_accepts_gravity():
+    pytest.importorskip("robokots._rust")
+    kots = _make_kots(order=3)
+    rng = np.random.default_rng(736)
+    kots.import_motions(rng.standard_normal(kots.dof() * 3))
+    q, v, a, _ = kots._rust_qva_order3()
+    gravity = np.array([0.4, -1.1, -9.3])
+    robot = kots._rust_compiled_robot()
+
+    dynamics_jacobian = robot.dynamics_jacobian(q, v, a, gravity=gravity)
+    expected_grouped = np.concatenate(
+        [
+            dynamics_jacobian[:, 0::3],
+            dynamics_jacobian[:, 1::3],
+            dynamics_jacobian[:, 2::3],
+        ],
+        axis=1,
+    )
+    np.testing.assert_allclose(
+        robot.rnea_jacobian(q, v, a, gravity=gravity),
+        expected_grouped,
+        atol=2e-10,
+        rtol=2e-10,
+    )
+
+
 def test_batched_numpy_gravity_aware_torque_jacobian_matches_scalar_loop():
     rng = np.random.default_rng(32)
     gravity = np.array([0.4, -1.1, -9.3])

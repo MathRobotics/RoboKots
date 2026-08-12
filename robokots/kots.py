@@ -1211,6 +1211,16 @@ class Kots():
     if not rhs_is_matrix:
       return self._jacobian_transpose_matvec_from_state(state, state_type_list, max_order, rhs, batch_shape)
 
+    fast = self._joint_motion_torque_jacobian_transpose_apply(state, state_type_list, max_order, rhs, batch_shape, rhs_is_matrix=True)
+    if fast is not None:
+      return fast
+    fast = self._rust_torque_jacobian_transpose_apply(state_type_list, max_order, rhs, batch_shape, rhs_is_matrix=True)
+    if fast is not None:
+      return fast
+    fast = self._rust_link_local_jacobian_transpose_apply(state_type_list, max_order, rhs, batch_shape, rhs_is_matrix=True)
+    if fast is not None:
+      return fast
+
     if self._has_gravity_force_output(state_type_list) and batch_shape:
       flat_rhs = np.asarray(rhs).reshape((-1,) + rhs.shape[-2:])
       if isinstance(state, list):
@@ -1234,16 +1244,6 @@ class Kots():
         for st, r in zip(states, flat_rhs)
       ]
       return batch_api.stack_sample_results(sample_results, batch_shape)
-
-    fast = self._joint_motion_torque_jacobian_transpose_apply(state, state_type_list, max_order, rhs, batch_shape, rhs_is_matrix=True)
-    if fast is not None:
-      return fast
-    fast = self._rust_torque_jacobian_transpose_apply(state_type_list, max_order, rhs, batch_shape, rhs_is_matrix=True)
-    if fast is not None:
-      return fast
-    fast = self._rust_link_local_jacobian_transpose_apply(state_type_list, max_order, rhs, batch_shape, rhs_is_matrix=True)
-    if fast is not None:
-      return fast
 
     if (
       not batch_shape
@@ -1521,7 +1521,7 @@ class Kots():
     )
 
   def _rust_torque_jacobian(self, state_type_list, max_order : int, list_output : bool = False):
-    if np.any(self.gravity_) or not hasattr(self.outward_state_, "raw_data"):
+    if not hasattr(self.outward_state_, "raw_data"):
       return None
     spec = self._rust_torque_row_parts(state_type_list, max_order)
     if spec is None:
@@ -1533,10 +1533,10 @@ class Kots():
     q, v, a, batch_shape = qva
     try:
       if batch_shape:
-        jacob = np.asarray(self._rust_compiled_robot().dynamics_jacobian_batch(q, v, a))
+        jacob = np.asarray(self._rust_compiled_robot().dynamics_jacobian_batch(q, v, a, gravity=self.gravity_))
         jacob = jacob.reshape(batch_shape + jacob.shape[-2:])
       else:
-        jacob = np.asarray(self._rust_compiled_robot().dynamics_jacobian(q, v, a))
+        jacob = np.asarray(self._rust_compiled_robot().dynamics_jacobian(q, v, a, gravity=self.gravity_))
     except Exception:
       return None
     selected = jacob[..., rows, :]
@@ -1551,7 +1551,7 @@ class Kots():
 
   def _rust_torque_jacobian_apply(self, state_type_list, max_order : int, rhs, batch_shape : tuple, rhs_is_matrix : bool, list_output : bool = False):
     spec = self._rust_torque_row_parts(state_type_list, max_order)
-    if np.any(self.gravity_) or spec is None or not hasattr(self.outward_state_, "raw_data"):
+    if spec is None or not hasattr(self.outward_state_, "raw_data"):
       return None
     rows, part_sizes = spec
     qva = self._rust_qva_order3()
@@ -1568,10 +1568,10 @@ class Kots():
         rhs_matrix = rhs_vec[..., :, None]
       if batch_shape:
         flat_rhs = np.ascontiguousarray(rhs_matrix.reshape((-1,) + rhs_matrix.shape[-2:]))
-        applied = np.asarray(self._rust_compiled_robot().dynamics_jacobian_matmul_rhs_batch(q, v, a, flat_rhs))
+        applied = np.asarray(self._rust_compiled_robot().dynamics_jacobian_matmul_rhs_batch(q, v, a, flat_rhs, gravity=self.gravity_))
         applied = applied.reshape(batch_shape + applied.shape[-2:])
       else:
-        applied = np.asarray(self._rust_compiled_robot().dynamics_jacobian_matmul_rhs(q, v, a, np.ascontiguousarray(rhs_matrix)))
+        applied = np.asarray(self._rust_compiled_robot().dynamics_jacobian_matmul_rhs(q, v, a, np.ascontiguousarray(rhs_matrix), gravity=self.gravity_))
     except Exception:
       return None
     selected = applied[..., rows, :]
@@ -1590,7 +1590,7 @@ class Kots():
 
   def _rust_torque_jacobian_transpose_apply(self, state_type_list, max_order : int, rhs, batch_shape : tuple, rhs_is_matrix : bool):
     spec = self._rust_torque_row_parts(state_type_list, max_order)
-    if np.any(self.gravity_) or spec is None or not hasattr(self.outward_state_, "raw_data"):
+    if spec is None or not hasattr(self.outward_state_, "raw_data"):
       return None
     rows, _ = spec
     qva = self._rust_qva_order3()
@@ -1612,10 +1612,10 @@ class Kots():
         full_rhs[..., rows, :] = rhs_part
       if batch_shape:
         flat_rhs = np.ascontiguousarray(full_rhs.reshape((-1,) + full_rhs.shape[-2:]))
-        out = np.asarray(self._rust_compiled_robot().dynamics_jacobian_transpose_matmul_rhs_batch(q, v, a, flat_rhs))
+        out = np.asarray(self._rust_compiled_robot().dynamics_jacobian_transpose_matmul_rhs_batch(q, v, a, flat_rhs, gravity=self.gravity_))
         out = out.reshape(batch_shape + out.shape[-2:])
       else:
-        out = np.asarray(self._rust_compiled_robot().dynamics_jacobian_transpose_matmul_rhs(q, v, a, np.ascontiguousarray(full_rhs)))
+        out = np.asarray(self._rust_compiled_robot().dynamics_jacobian_transpose_matmul_rhs(q, v, a, np.ascontiguousarray(full_rhs), gravity=self.gravity_))
     except Exception:
       return None
     if rhs_is_matrix:

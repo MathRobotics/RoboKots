@@ -262,9 +262,10 @@ impl RustCompiledRobot {
         q: &[f64],
         v: &[f64],
         a: &[f64],
+        gravity: [f64; 3],
         interleaved: bool,
     ) -> Vec<f64> {
-        let interleaved_jac = self.rnea_jacobian_bulk_interleaved_into(q, v, a);
+        let interleaved_jac = self.rnea_jacobian_bulk_interleaved_into(q, v, a, gravity);
         if interleaved {
             return interleaved_jac;
         }
@@ -287,6 +288,7 @@ impl RustCompiledRobot {
         q: &[f64],
         v: &[f64],
         a: &[f64],
+        gravity: [f64; 3],
     ) -> Vec<f64> {
         let cols = 3 * self.dof;
         let mut base = Workspace::new(self);
@@ -296,6 +298,7 @@ impl RustCompiledRobot {
             q,
             v,
             a,
+            gravity,
             &self.link_motion_columns,
             &mut base,
             &mut deriv,
@@ -309,15 +312,16 @@ impl RustCompiledRobot {
         q: &[f64],
         v: &[f64],
         a: &[f64],
+        gravity: [f64; 3],
         motion_cols: &[Vec<usize>],
         base: &mut Workspace,
         deriv: &mut BulkDerivativeWorkspace,
         out: &mut [f64],
     ) {
-        self.rnea_into(q, v, a, base);
+        self.rnea_with_gravity_into(q, v, a, gravity, base);
         deriv.clear();
         self.forward_kinematics_bulk_derivative_into(q, v, a, base, deriv, motion_cols);
-        self.link_force_bulk_derivative_into(base, deriv, motion_cols);
+        self.link_force_bulk_derivative_into(base, deriv, motion_cols, gravity);
         self.backward_force_bulk_derivative_into(base, deriv);
         out.copy_from_slice(&deriv.tau);
     }
@@ -327,17 +331,18 @@ impl RustCompiledRobot {
         q: &[f64],
         v: &[f64],
         a: &[f64],
+        gravity: [f64; 3],
         rhs: &[f64],
         rhs_cols: usize,
         base: &mut Workspace,
         deriv: &mut BulkDerivativeWorkspace,
         out: &mut [f64],
     ) {
-        self.rnea_into(q, v, a, base);
+        self.rnea_with_gravity_into(q, v, a, gravity, base);
         deriv.clear();
         self.forward_kinematics_directional_derivative_into(q, v, a, rhs, rhs_cols, base, deriv);
         let all_cols = all_directional_cols(self.link_num, rhs_cols);
-        self.link_force_bulk_derivative_into(base, deriv, &all_cols);
+        self.link_force_bulk_derivative_into(base, deriv, &all_cols, gravity);
         self.backward_force_directional_derivative_into(base, deriv);
         out.copy_from_slice(&deriv.tau);
     }
@@ -637,6 +642,7 @@ impl RustCompiledRobot {
         base: &Workspace,
         deriv: &mut BulkDerivativeWorkspace,
         motion_cols: &[Vec<usize>],
+        gravity: [f64; 3],
     ) {
         let cols = deriv.cols;
         for link_id in 1..self.link_num {
@@ -646,7 +652,10 @@ impl RustCompiledRobot {
             let a_world = [flat3(&base.alpha, link_id), flat3(&base.lin_a, link_id)];
             let v_local = [mat3_vec(rt, v_world[0]), mat3_vec(rt, v_world[1])];
             let a_local_ang = mat3_vec(rt, a_world[0]);
-            let a_local_lin = sub3(mat3_vec(rt, a_world[1]), cross(v_local[0], v_local[1]));
+            let a_local_lin = sub3(
+                sub3(mat3_vec(rt, a_world[1]), mat3_vec(rt, gravity)),
+                cross(v_local[0], v_local[1]),
+            );
             let a_local = [a_local_ang, a_local_lin];
             let momentum = mat6_vec(self.link_inertia[link_id], v_local);
             let inertial = mat6_vec(self.link_inertia[link_id], a_local);
@@ -678,7 +687,10 @@ impl RustCompiledRobot {
                 ];
                 let da_local_ang = add3(mat3_vec(drt, a_world[0]), mat3_vec(rt, da_world[0]));
                 let da_local_lin = sub3(
-                    add3(mat3_vec(drt, a_world[1]), mat3_vec(rt, da_world[1])),
+                    sub3(
+                        add3(mat3_vec(drt, a_world[1]), mat3_vec(rt, da_world[1])),
+                        mat3_vec(drt, gravity),
+                    ),
                     add3(
                         cross(dv_local[0], v_local[1]),
                         cross(v_local[0], dv_local[1]),

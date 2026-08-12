@@ -636,7 +636,7 @@ impl RustCompiledRobot {
         Ok(out.into_pyarray(py).reshape([batch, self.dof])?)
     }
 
-    #[pyo3(signature = (q, v, a, eps = 1e-6))]
+    #[pyo3(signature = (q, v, a, eps = 1e-6, gravity = None))]
     fn rnea_jacobian<'py>(
         &self,
         py: Python<'py>,
@@ -644,17 +644,18 @@ impl RustCompiledRobot {
         v: PyReadonlyArray1<'py, f64>,
         a: PyReadonlyArray1<'py, f64>,
         eps: f64,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
     ) -> PyResult<Bound<'py, PyArray2<f64>>> {
         let _ = eps;
         let q = q.as_slice()?;
         let v = v.as_slice()?;
         let a = a.as_slice()?;
         self.check_motion(q, v, a)?;
-        let jac = self.rnea_jacobian_into(q, v, a, false);
+        let jac = self.rnea_jacobian_into(q, v, a, gravity_vec3(gravity)?, false);
         Ok(jac.into_pyarray(py).reshape([self.dof, 3 * self.dof])?)
     }
 
-    #[pyo3(signature = (q, v, a, eps = 1e-6))]
+    #[pyo3(signature = (q, v, a, eps = 1e-6, gravity = None))]
     fn dynamics_jacobian<'py>(
         &self,
         py: Python<'py>,
@@ -662,17 +663,18 @@ impl RustCompiledRobot {
         v: PyReadonlyArray1<'py, f64>,
         a: PyReadonlyArray1<'py, f64>,
         eps: f64,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
     ) -> PyResult<Bound<'py, PyArray2<f64>>> {
         let _ = eps;
         let q = q.as_slice()?;
         let v = v.as_slice()?;
         let a = a.as_slice()?;
         self.check_motion(q, v, a)?;
-        let jac = self.rnea_jacobian_into(q, v, a, true);
+        let jac = self.rnea_jacobian_into(q, v, a, gravity_vec3(gravity)?, true);
         Ok(jac.into_pyarray(py).reshape([self.dof, 3 * self.dof])?)
     }
 
-    #[pyo3(signature = (q, v, a, eps = 1e-6))]
+    #[pyo3(signature = (q, v, a, eps = 1e-6, gravity = None))]
     fn dynamics_jacobian_batch<'py>(
         &self,
         py: Python<'py>,
@@ -680,12 +682,14 @@ impl RustCompiledRobot {
         v: PyReadonlyArray2<'py, f64>,
         a: PyReadonlyArray2<'py, f64>,
         eps: f64,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
     ) -> PyResult<Bound<'py, PyArray3<f64>>> {
         let _ = eps;
         let batch = self.check_motion_batch(q.shape(), v.shape(), a.shape())?;
         let q = q.as_slice()?;
         let v = v.as_slice()?;
         let a = a.as_slice()?;
+        let gravity = gravity_vec3(gravity)?;
         let cols = 3 * self.dof;
         let mut out = vec![0.0; batch * self.dof * cols];
         let motion_cols = &self.link_motion_columns;
@@ -699,6 +703,7 @@ impl RustCompiledRobot {
                 &q[motion_start..motion_end],
                 &v[motion_start..motion_end],
                 &a[motion_start..motion_end],
+                gravity,
                 motion_cols,
                 &mut base,
                 &mut deriv,
@@ -708,6 +713,7 @@ impl RustCompiledRobot {
         Ok(out.into_pyarray(py).reshape([batch, self.dof, cols])?)
     }
 
+    #[pyo3(signature = (q, v, a, rhs, gravity = None))]
     fn dynamics_jacobian_matmul_rhs<'py>(
         &self,
         py: Python<'py>,
@@ -715,6 +721,7 @@ impl RustCompiledRobot {
         v: PyReadonlyArray1<'py, f64>,
         a: PyReadonlyArray1<'py, f64>,
         rhs: PyReadonlyArray2<'py, f64>,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
     ) -> PyResult<Bound<'py, PyArray2<f64>>> {
         let q = q.as_slice()?;
         let v = v.as_slice()?;
@@ -728,6 +735,7 @@ impl RustCompiledRobot {
         }
         let rhs_cols = rhs_shape[1];
         let rhs = rhs.as_slice()?;
+        let gravity = gravity_vec3(gravity)?;
         let mut base = Workspace::new(self);
         let mut deriv = BulkDerivativeWorkspace::new(self, rhs_cols);
         let mut out = vec![0.0; self.dof * rhs_cols];
@@ -735,6 +743,7 @@ impl RustCompiledRobot {
             q,
             v,
             a,
+            gravity,
             rhs,
             rhs_cols,
             &mut base,
@@ -744,6 +753,7 @@ impl RustCompiledRobot {
         Ok(out.into_pyarray(py).reshape([self.dof, rhs_cols])?)
     }
 
+    #[pyo3(signature = (q, v, a, rhs, gravity = None))]
     fn dynamics_jacobian_matmul_rhs_batch<'py>(
         &self,
         py: Python<'py>,
@@ -751,6 +761,7 @@ impl RustCompiledRobot {
         v: PyReadonlyArray2<'py, f64>,
         a: PyReadonlyArray2<'py, f64>,
         rhs: PyReadonlyArray3<'py, f64>,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
     ) -> PyResult<Bound<'py, PyArray3<f64>>> {
         let batch = self.check_motion_batch(q.shape(), v.shape(), a.shape())?;
         let rhs_shape = rhs.shape();
@@ -764,6 +775,7 @@ impl RustCompiledRobot {
         let v = v.as_slice()?;
         let a = a.as_slice()?;
         let rhs = rhs.as_slice()?;
+        let gravity = gravity_vec3(gravity)?;
         let mut base = Workspace::new(self);
         let mut deriv = BulkDerivativeWorkspace::new(self, rhs_cols);
         let mut out = vec![0.0; batch * self.dof * rhs_cols];
@@ -777,6 +789,7 @@ impl RustCompiledRobot {
                 &q[motion_start..motion_end],
                 &v[motion_start..motion_end],
                 &a[motion_start..motion_end],
+                gravity,
                 &rhs[rhs_start..rhs_end],
                 rhs_cols,
                 &mut base,
@@ -789,6 +802,7 @@ impl RustCompiledRobot {
             .reshape([batch, self.dof, rhs_cols])?)
     }
 
+    #[pyo3(signature = (q, v, a, rhs, gravity = None))]
     fn dynamics_jacobian_transpose_matmul_rhs<'py>(
         &self,
         py: Python<'py>,
@@ -796,6 +810,7 @@ impl RustCompiledRobot {
         v: PyReadonlyArray1<'py, f64>,
         a: PyReadonlyArray1<'py, f64>,
         rhs: PyReadonlyArray2<'py, f64>,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
     ) -> PyResult<Bound<'py, PyArray2<f64>>> {
         let q = q.as_slice()?;
         let v = v.as_slice()?;
@@ -810,7 +825,7 @@ impl RustCompiledRobot {
         let rhs_cols = rhs_shape[1];
         let rhs = rhs.as_slice()?;
         let input_cols = 3 * self.dof;
-        let jac = self.rnea_jacobian_bulk_interleaved_into(q, v, a);
+        let jac = self.rnea_jacobian_bulk_interleaved_into(q, v, a, gravity_vec3(gravity)?);
         let mut out = vec![0.0; input_cols * rhs_cols];
         for row in 0..self.dof {
             for input_col in 0..input_cols {
@@ -823,6 +838,7 @@ impl RustCompiledRobot {
         Ok(out.into_pyarray(py).reshape([input_cols, rhs_cols])?)
     }
 
+    #[pyo3(signature = (q, v, a, rhs, gravity = None))]
     fn dynamics_jacobian_transpose_matmul_rhs_batch<'py>(
         &self,
         py: Python<'py>,
@@ -830,6 +846,7 @@ impl RustCompiledRobot {
         v: PyReadonlyArray2<'py, f64>,
         a: PyReadonlyArray2<'py, f64>,
         rhs: PyReadonlyArray3<'py, f64>,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
     ) -> PyResult<Bound<'py, PyArray3<f64>>> {
         let batch = self.check_motion_batch(q.shape(), v.shape(), a.shape())?;
         let rhs_shape = rhs.shape();
@@ -843,6 +860,7 @@ impl RustCompiledRobot {
         let v = v.as_slice()?;
         let a = a.as_slice()?;
         let rhs = rhs.as_slice()?;
+        let gravity = gravity_vec3(gravity)?;
         let input_cols = 3 * self.dof;
         let mut out = vec![0.0; batch * input_cols * rhs_cols];
         let motion_cols = &self.link_motion_columns;
@@ -856,6 +874,7 @@ impl RustCompiledRobot {
                 &q[motion_start..motion_end],
                 &v[motion_start..motion_end],
                 &a[motion_start..motion_end],
+                gravity,
                 motion_cols,
                 &mut base,
                 &mut deriv,
