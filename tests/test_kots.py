@@ -2311,14 +2311,22 @@ def test_rust_gravity_torque_jacobian_uses_rnea_kernels(monkeypatch, batched):
     output_dim = actual.shape[-2]
     vector_shape = (2, output_dim) if batched else (output_dim,)
     matrix_shape = (2, kots.dof() * order, 3) if batched else (kots.dof() * order, 3)
+    vector_cotangent_shape = (2, output_dim) if batched else (output_dim,)
     cotangent_shape = (2, output_dim, 2) if batched else (output_dim, 2)
     tangent = rng.standard_normal(matrix_shape)
+    vector_cotangent = rng.standard_normal(vector_cotangent_shape)
     cotangent = rng.standard_normal(cotangent_shape)
 
     np.testing.assert_allclose(actual, expected, atol=5e-6, rtol=5e-7)
     np.testing.assert_allclose(
         kots.jacobian_mul(torque, tangent),
         actual @ tangent,
+        atol=2e-10,
+        rtol=2e-10,
+    )
+    np.testing.assert_allclose(
+        kots.jacobian_transpose_mul(torque, vector_cotangent),
+        (np.swapaxes(actual, -1, -2) @ vector_cotangent[..., None])[..., 0],
         atol=2e-10,
         rtol=2e-10,
     )

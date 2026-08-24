@@ -1137,6 +1137,20 @@ class Kots():
     return batch_api.stack_sample_results(sample_results, batch_shape)
 
   def _jacobian_transpose_matvec_from_state(self, state, state_type_list, max_order : int, vec, batch_shape : tuple):
+    # Try analytic backend kernels before considering the gravity-aware
+    # outward fallback.  In particular, the RNEA Rust VJP includes gravity;
+    # routing batched force/torque outputs above this point used to make the
+    # fast path unreachable.
+    fast = self._joint_motion_torque_jacobian_transpose_apply(state, state_type_list, max_order, vec, batch_shape, rhs_is_matrix=False)
+    if fast is not None:
+      return fast
+    fast = self._rust_torque_jacobian_transpose_apply(state_type_list, max_order, vec, batch_shape, rhs_is_matrix=False)
+    if fast is not None:
+      return fast
+    fast = self._rust_link_local_jacobian_transpose_apply(state_type_list, max_order, vec, batch_shape, rhs_is_matrix=False)
+    if fast is not None:
+      return fast
+
     if self._has_gravity_force_output(state_type_list) and batch_shape and not isinstance(state, list):
       is_dynamics = any(st.is_dynamics for st in state_type_list)
       _, build_state = self._state_builder(
@@ -1152,16 +1166,6 @@ class Kots():
         for x, v in zip(flat_motion, flat_vec)
       ]
       return batch_api.stack_sample_results(sample_results, batch_shape)
-
-    fast = self._joint_motion_torque_jacobian_transpose_apply(state, state_type_list, max_order, vec, batch_shape, rhs_is_matrix=False)
-    if fast is not None:
-      return fast
-    fast = self._rust_torque_jacobian_transpose_apply(state_type_list, max_order, vec, batch_shape, rhs_is_matrix=False)
-    if fast is not None:
-      return fast
-    fast = self._rust_link_local_jacobian_transpose_apply(state_type_list, max_order, vec, batch_shape, rhs_is_matrix=False)
-    if fast is not None:
-      return fast
 
     if not isinstance(state, list):
       if batch_shape:
