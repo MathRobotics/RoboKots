@@ -20,6 +20,9 @@ pub struct RustCompiledRobot {
     pub(crate) link_ancestors: Vec<Vec<usize>>,
     pub(crate) link_motion_columns: Vec<Vec<usize>>,
     pub(crate) link_subtree_motion_columns: Vec<Vec<usize>>,
+    /// Link indices in each link's subtree, in forward-topology order.
+    /// Unlike `link_subtree_motion_columns`, this includes fixed links.
+    pub(crate) link_subtree_links: Vec<Vec<usize>>,
     pub(crate) link_child_joints: Vec<Vec<usize>>,
 }
 

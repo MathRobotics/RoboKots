@@ -1,5 +1,5 @@
 use numpy::{
-    ndarray::{Array, Dimension, Ix1, Ix2, Ix3},
+    ndarray::{Array, Dimension, Ix1, Ix2, Ix3, Ix4, Ix5},
     Element, IntoPyArray, PyArray1, PyArray2, PyArray3, PyArray4, PyArrayMethods,
     PyReadonlyArray as NumpyReadonlyArray, PyUntypedArrayMethods,
 };
@@ -8,10 +8,14 @@ use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict, PyList};
 
 use crate::model::*;
+use crate::cmtm_generic::{tangent_cmvecs, tangent_cmtm_vecs, tangent_mat4};
 use crate::pinocchio_like::PinocchioLikeWorkspace;
 use crate::spatial::*;
 use crate::types::{RustBatchOutwardData, RustCompiledRobot, RustFastData, RustOutwardData};
-use crate::workspace::{BulkDerivativeWorkspace, CmtmWorkspace, DynamicsCmtmWorkspace, Workspace};
+use crate::workspace::{
+    BulkDerivativeWorkspace, CmtmWorkspace, DynamicsCmtmTangentWorkspace, DynamicsCmtmWorkspace,
+    Workspace,
+};
 
 /// Read-only NumPy input with a guaranteed row-major logical layout.
 ///
@@ -66,6 +70,8 @@ where
 type PyReadonlyArray1<'py, T> = RowMajorArray<'py, T, Ix1>;
 type PyReadonlyArray2<'py, T> = RowMajorArray<'py, T, Ix2>;
 type PyReadonlyArray3<'py, T> = RowMajorArray<'py, T, Ix3>;
+type PyReadonlyArray4<'py, T> = RowMajorArray<'py, T, Ix4>;
+type PyReadonlyArray5<'py, T> = RowMajorArray<'py, T, Ix5>;
 
 fn gravity_vec3(gravity: Option<PyReadonlyArray1<'_, f64>>) -> PyResult<[f64; 3]> {
     let Some(gravity) = gravity else {
@@ -81,6 +87,37 @@ fn gravity_vec3(gravity: Option<PyReadonlyArray1<'_, f64>>) -> PyResult<[f64; 3]
         ));
     }
     Ok([gravity[0], gravity[1], gravity[2]])
+}
+
+/// Contract one scalar-major tangent buffer with a block of output
+/// cotangents.  Tangent values are laid out as `(output_scalar, input_scalar)`
+/// and the cotangent block as `(output_scalar, rhs)`.  This helper is shared
+/// by the outward CMTM VJP exports so every public output family has exactly
+/// the same transpose/layout convention.
+fn accumulate_cmtm_vjp(
+    out: &mut [f64],
+    tangent: &[f64],
+    cotangent: &[f64],
+    output_scalars: usize,
+    input_scalars: usize,
+    rhs_cols: usize,
+) {
+    debug_assert_eq!(tangent.len(), output_scalars * input_scalars);
+    debug_assert_eq!(cotangent.len(), output_scalars * rhs_cols);
+    for output in 0..output_scalars {
+        let tangent_row = &tangent[output * input_scalars..(output + 1) * input_scalars];
+        let cotangent_row = &cotangent[output * rhs_cols..(output + 1) * rhs_cols];
+        for input in 0..input_scalars {
+            let derivative = tangent_row[input];
+            if derivative == 0.0 {
+                continue;
+            }
+            for rhs in 0..rhs_cols {
+                out[input * rhs_cols + rhs] += derivative * cotangent_row[rhs];
+            }
+        }
+    }
+
 }
 
 fn cmtm_world_wrench_value(
@@ -115,6 +152,30 @@ fn cmtm_world_wrench_value(
         .iter()
         .map(|value| value * scale)
         .collect()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn cmtm_world_wrench_tangent_value_into(
+    mat: [[f64; 4]; 4],
+    vecs: &[f64],
+    dmat: [[f64; 4]; 4],
+    dvecs: &[f64],
+    rhs: &[f64],
+    drhs: &[f64],
+    key_order: usize,
+    fact: &[f64],
+    blocks: &mut [[[f64; 6]; 6]],
+    dblocks: &mut [[[f64; 6]; 6]],
+    out: &mut [f64],
+    dout: &mut [f64],
+) -> [f64; 6] {
+    cmtm_apply_mat_adj_wrench_tangent_into(
+        mat, vecs, dmat, dvecs, rhs, drhs, key_order, &fact[..key_order],
+        &mut blocks[..key_order], &mut dblocks[..key_order],
+        &mut out[..key_order * 6], &mut dout[..key_order * 6],
+    );
+    let start = (key_order - 1) * 6;
+    [dout[start], dout[start + 1], dout[start + 2], dout[start + 3], dout[start + 4], dout[start + 5]]
 }
 
 fn order1_link_momentum_value(
@@ -406,6 +467,23 @@ impl RustCompiledRobot {
             let child_cols = link_subtree_motion_columns[child].clone();
             merge_columns(&mut link_subtree_motion_columns[parent], &child_cols);
         }
+        // Keep a topology cache for subtree reductions which must include
+        // fixed links (the motion-column cache above intentionally cannot).
+        let mut link_subtree_links: Vec<Vec<usize>> =
+            (0..link_num).map(|link| vec![link]).collect();
+        for j in (0..joint_num).rev() {
+            let parent = parent_link[j];
+            let child_links = link_subtree_links[child_link[j]].clone();
+            link_subtree_links[parent].extend(child_links);
+        }
+        let mut topology_rank = vec![usize::MAX; link_num];
+        topology_rank[0] = 0;
+        for j in 0..joint_num {
+            topology_rank[child_link[j]] = j + 1;
+        }
+        for links in &mut link_subtree_links {
+            links.sort_unstable_by_key(|&link| topology_rank[link]);
+        }
 
         Ok(Self {
             link_num,
@@ -422,6 +500,7 @@ impl RustCompiledRobot {
             link_ancestors,
             link_motion_columns,
             link_subtree_motion_columns,
+            link_subtree_links,
             link_child_joints,
         })
     }
@@ -1188,6 +1267,648 @@ impl RustCompiledRobot {
         ))
     }
 
+    /// Analytic Jv of CMTM kinematics.  This is intentionally exposed while
+    /// the dynamics tangent is assembled in layers, so its product rule can
+    /// be regression-tested independently of force/torque propagation.
+    fn cmtm_kinematics_tangent<'py>(
+        &self,
+        py: Python<'py>,
+        motion: PyReadonlyArray1<'py, f64>,
+        motion_tangent: PyReadonlyArray2<'py, f64>,
+        order: usize,
+    ) -> PyResult<(Bound<'py, PyArray4<f64>>, Bound<'py, PyArray4<f64>>)> {
+        if order < 2 {
+            return Err(PyValueError::new_err("CMTM tangent order must be at least 2"));
+        }
+        let motion = motion.as_slice()?;
+        self.check_cmtm_motion(motion, order)?;
+        let tangent_shape = motion_tangent.shape();
+        if tangent_shape.len() != 2 || tangent_shape[0] != self.dof * order {
+            return Err(PyValueError::new_err(
+                "motion_tangent must have shape (robot dof * order, rhs_cols)",
+            ));
+        }
+        let rhs_cols = tangent_shape[1];
+        let motion_tangent = motion_tangent.as_slice()?;
+        let mut primal = CmtmWorkspace::new(self, order);
+        let mut tangent = DynamicsCmtmTangentWorkspace::new(self, order - 2, rhs_cols);
+        self.kinematics_cmtm_tangent_into(
+            motion,
+            motion_tangent,
+            order,
+            &mut primal,
+            &mut tangent,
+        );
+        Ok((
+            tangent
+                .link_mat
+                .into_pyarray(py)
+                .reshape([self.link_num, 4, 4, rhs_cols])?,
+            tangent
+                .link_vecs
+                .into_pyarray(py)
+                .reshape([self.link_num, order - 1, 6, rhs_cols])?,
+        ))
+    }
+
+    /// Analytic Jv for the local (pre-wrench-aggregation) CMTM dynamics
+    /// series.  Gravity and joint aggregation are added by the next layer.
+    #[pyo3(signature = (motion, motion_tangent, dynamics_order, gravity = None))]
+    fn cmtm_link_dynamics_tangent<'py>(
+        &self,
+        py: Python<'py>,
+        motion: PyReadonlyArray1<'py, f64>,
+        motion_tangent: PyReadonlyArray2<'py, f64>,
+        dynamics_order: usize,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
+    ) -> PyResult<(Bound<'py, PyArray4<f64>>, Bound<'py, PyArray4<f64>>)> {
+        let kin_order = dynamics_order + 2;
+        let motion = motion.as_slice()?;
+        self.check_cmtm_motion(motion, kin_order)?;
+        let tangent_shape = motion_tangent.shape();
+        if tangent_shape.len() != 2 || tangent_shape[0] != self.dof * kin_order {
+            return Err(PyValueError::new_err(
+                "motion_tangent must have shape (robot dof * (dynamics_order + 2), rhs_cols)",
+            ));
+        }
+        let rhs_cols = tangent_shape[1];
+        let motion_tangent = motion_tangent.as_slice()?;
+        let mut primal = DynamicsCmtmWorkspace::new(self, dynamics_order);
+        let mut tangent = DynamicsCmtmTangentWorkspace::new(self, dynamics_order, rhs_cols);
+        self.dynamics_cmtm_link_tangent_into(
+            motion,
+            motion_tangent,
+            dynamics_order,
+            gravity_vec3(gravity)?,
+            &mut primal,
+            &mut tangent,
+        );
+        Ok((
+            tangent
+                .link_momentum
+                .into_pyarray(py)
+                .reshape([self.link_num, dynamics_order + 1, 6, rhs_cols])?,
+            tangent
+                .link_force
+                .into_pyarray(py)
+                .reshape([self.link_num, dynamics_order, 6, rhs_cols])?,
+        ))
+    }
+
+    #[pyo3(signature = (motion, motion_tangent, dynamics_order, gravity = None))]
+    fn dynamics_joint_torque_series_tangent<'py>(
+        &self, py: Python<'py>, motion: PyReadonlyArray1<'py, f64>,
+        motion_tangent: PyReadonlyArray2<'py, f64>, dynamics_order: usize,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
+    ) -> PyResult<Bound<'py, PyArray3<f64>>> {
+        let kin_order = dynamics_order + 2;
+        let motion = motion.as_slice()?; self.check_cmtm_motion(motion, kin_order)?;
+        let shape = motion_tangent.shape();
+        if shape.len() != 2 || shape[0] != self.dof * kin_order {
+            return Err(PyValueError::new_err(
+                "motion_tangent must have shape (robot dof * (dynamics_order + 2), rhs_cols)",
+            ));
+        }
+        let cols = shape[1]; let directions = motion_tangent.as_slice()?;
+        let mut primal = DynamicsCmtmWorkspace::new(self, dynamics_order);
+        let mut tangent = DynamicsCmtmTangentWorkspace::new(self, dynamics_order, cols);
+        self.dynamics_cmtm_link_tangent_into(motion, directions, dynamics_order, gravity_vec3(gravity)?, &mut primal, &mut tangent);
+        Ok(tangent.joint_torque.into_pyarray(py).reshape([self.joint_num, dynamics_order, cols])?)
+    }
+
+    /// Batched analytic Jv for the complete CMTM torque series.  Keeping the
+    /// trajectory loop in Rust avoids a Python/C-API call per sample and
+    /// reuses the same primal/tangent workspaces.
+    #[pyo3(signature = (motions, motion_tangents, dynamics_order, gravity = None))]
+    fn dynamics_joint_torque_series_tangent_batch<'py>(
+        &self, py: Python<'py>, motions: PyReadonlyArray2<'py, f64>,
+        motion_tangents: PyReadonlyArray3<'py, f64>, dynamics_order: usize,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
+    ) -> PyResult<Bound<'py, PyArray4<f64>>> {
+        let input_len = self.dof * (dynamics_order + 2);
+        let motion_shape = motions.shape();
+        let tangent_shape = motion_tangents.shape();
+        if motion_shape.len() != 2 || motion_shape[1] != input_len
+            || tangent_shape.len() != 3 || tangent_shape[0] != motion_shape[0]
+            || tangent_shape[1] != input_len {
+            return Err(PyValueError::new_err(
+                "motions and motion_tangents must have shapes (batch, dof * (dynamics_order + 2)) and (batch, dof * (dynamics_order + 2), rhs_cols)",
+            ));
+        }
+        let batch = motion_shape[0]; let rhs_cols = tangent_shape[2];
+        let motions = motions.as_slice()?; let tangents = motion_tangents.as_slice()?;
+        let gravity = gravity_vec3(gravity)?;
+        let torque_len = self.joint_num * dynamics_order * rhs_cols;
+        let mut out = vec![0.0; batch * torque_len];
+        let mut primal = DynamicsCmtmWorkspace::new(self, dynamics_order);
+        let mut tangent = DynamicsCmtmTangentWorkspace::new(self, dynamics_order, rhs_cols);
+        for sample in 0..batch {
+            self.dynamics_cmtm_link_tangent_into(
+                &motions[sample * input_len..(sample + 1) * input_len],
+                &tangents[sample * input_len * rhs_cols..(sample + 1) * input_len * rhs_cols],
+                dynamics_order, gravity, &mut primal, &mut tangent,
+            );
+            out[sample * torque_len..(sample + 1) * torque_len]
+                .copy_from_slice(&tangent.joint_torque);
+        }
+        Ok(out.into_pyarray(py).reshape([batch, self.joint_num, dynamics_order, rhs_cols])?)
+    }
+
+    /// Vector-Jacobian product for the complete CMTM joint-torque series.
+    ///
+    /// Both input and output use scalar-major CMTM layouts.  Keeping the RHS
+    /// axis last makes a single primal recurrence serve an arbitrary block of
+    /// loss cotangents, which is the layout used by the Python Jacobian
+    /// transpose API.  The reverse workspace owns the final motion
+    /// cotangent; it is deliberately not exposed to Python.
+    #[pyo3(signature = (motion, torque_cotangent, dynamics_order, gravity = None))]
+    fn dynamics_joint_torque_series_transpose_matmul_rhs<'py>(
+        &self,
+        py: Python<'py>,
+        motion: PyReadonlyArray1<'py, f64>,
+        torque_cotangent: PyReadonlyArray3<'py, f64>,
+        dynamics_order: usize,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
+    ) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        let kin_order = dynamics_order + 2;
+        let motion = motion.as_slice()?;
+        self.check_cmtm_motion(motion, kin_order)?;
+        let shape = torque_cotangent.shape();
+        if shape.len() != 3 || shape[0] != self.joint_num || shape[1] != dynamics_order {
+            return Err(PyValueError::new_err(
+                "torque_cotangent must have shape (joint_num, dynamics_order, rhs_cols)",
+            ));
+        }
+        let rhs_cols = shape[2];
+        let cotangent = torque_cotangent.as_slice()?;
+        let input_len = self.dof * kin_order;
+
+        // The CMTM recurrence already provides an analytic multi-RHS Jv
+        // kernel.  Seed it with the scalar basis once, then contract its
+        // output axis with the requested cotangent block.  This is kept fully
+        // in Rust: no dense Jacobian crosses the Python boundary.
+        let mut basis = vec![0.0; input_len * input_len];
+        for i in 0..input_len { basis[i * input_len + i] = 1.0; }
+        let mut primal = DynamicsCmtmWorkspace::new(self, dynamics_order);
+        let mut tangent = DynamicsCmtmTangentWorkspace::new(self, dynamics_order, input_len);
+        self.dynamics_cmtm_link_tangent_into(
+            motion, &basis, dynamics_order, gravity_vec3(gravity)?, &mut primal, &mut tangent,
+        );
+        let mut out = vec![0.0; input_len * rhs_cols];
+        accumulate_cmtm_vjp(
+            &mut out,
+            &tangent.joint_torque,
+            cotangent,
+            self.joint_num * dynamics_order,
+            input_len,
+            rhs_cols,
+        );
+        Ok(out.into_pyarray(py).reshape([input_len, rhs_cols])?)
+    }
+
+    #[pyo3(signature = (motions, torque_cotangents, dynamics_order, gravity = None))]
+    fn dynamics_joint_torque_series_transpose_matmul_rhs_batch<'py>(
+        &self,
+        py: Python<'py>,
+        motions: PyReadonlyArray2<'py, f64>,
+        torque_cotangents: PyReadonlyArray4<'py, f64>,
+        dynamics_order: usize,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
+    ) -> PyResult<Bound<'py, PyArray3<f64>>> {
+        let kin_order = dynamics_order + 2;
+        let motion_shape = motions.shape();
+        let cotangent_shape = torque_cotangents.shape();
+        if motion_shape.len() != 2 || motion_shape[1] != self.dof * kin_order
+            || cotangent_shape.len() != 4 || cotangent_shape[0] != motion_shape[0]
+            || cotangent_shape[1] != self.joint_num || cotangent_shape[2] != dynamics_order {
+            return Err(PyValueError::new_err(
+                "motions and torque_cotangents shapes must be (batch, dof * (dynamics_order + 2)) and (batch, joint_num, dynamics_order, rhs_cols)",
+            ));
+        }
+        let batch = motion_shape[0];
+        let rhs_cols = cotangent_shape[3];
+        let input_len = self.dof * kin_order;
+        let motions = motions.as_slice()?;
+        let cotangents = torque_cotangents.as_slice()?;
+        let gravity = gravity_vec3(gravity)?;
+        let mut basis = vec![0.0; input_len * input_len];
+        for i in 0..input_len { basis[i * input_len + i] = 1.0; }
+        let mut out = vec![0.0; batch * input_len * rhs_cols];
+        let mut primal = DynamicsCmtmWorkspace::new(self, dynamics_order);
+        let mut tangent = DynamicsCmtmTangentWorkspace::new(self, dynamics_order, input_len);
+        for sample in 0..batch {
+            self.dynamics_cmtm_link_tangent_into(
+                &motions[sample * input_len..(sample + 1) * input_len], &basis,
+                dynamics_order, gravity, &mut primal, &mut tangent,
+            );
+            for joint in 0..self.joint_num {
+                for time in 0..dynamics_order {
+                    for input in 0..input_len {
+                        let derivative = tangent.joint_torque
+                            [(joint * dynamics_order + time) * input_len + input];
+                        for rhs in 0..rhs_cols {
+                            out[(sample * input_len + input) * rhs_cols + rhs] += derivative
+                                * cotangents[((sample * self.joint_num + joint) * dynamics_order + time) * rhs_cols + rhs];
+                        }
+                    }
+                }
+            }
+        }
+        Ok(out.into_pyarray(py).reshape([batch, input_len, rhs_cols])?)
+    }
+
+    /// VJP of link CMTM kinematics (homogeneous transforms and twist series).
+    /// The two cotangent inputs share their final RHS axis.
+    fn cmtm_kinematics_transpose_matmul_rhs<'py>(
+        &self,
+        py: Python<'py>,
+        motion: PyReadonlyArray1<'py, f64>,
+        link_mat_cotangent: PyReadonlyArray4<'py, f64>,
+        link_vec_cotangent: PyReadonlyArray4<'py, f64>,
+        order: usize,
+    ) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        if order < 2 {
+            return Err(PyValueError::new_err("CMTM reverse order must be at least 2"));
+        }
+        let input_len = self.dof * order;
+        let motion = motion.as_slice()?;
+        self.check_cmtm_motion(motion, order)?;
+        let mat_shape = link_mat_cotangent.shape();
+        let vec_shape = link_vec_cotangent.shape();
+        if mat_shape.len() != 4 || mat_shape[..3] != [self.link_num, 4, 4]
+            || vec_shape.len() != 4 || vec_shape[..3] != [self.link_num, order - 1, 6]
+            || mat_shape[3] != vec_shape[3]
+        {
+            return Err(PyValueError::new_err(
+                "kinematics cotangents must have shapes (link_num, 4, 4, rhs_cols) and (link_num, order - 1, 6, rhs_cols)",
+            ));
+        }
+        let rhs_cols = mat_shape[3];
+        let mut basis = vec![0.0; input_len * input_len];
+        for i in 0..input_len { basis[i * input_len + i] = 1.0; }
+        let mut primal = CmtmWorkspace::new(self, order);
+        let mut tangent = DynamicsCmtmTangentWorkspace::new(self, order - 2, input_len);
+        self.kinematics_cmtm_tangent_into(motion, &basis, order, &mut primal, &mut tangent);
+        let mut out = vec![0.0; input_len * rhs_cols];
+        accumulate_cmtm_vjp(
+            &mut out, &tangent.link_mat, link_mat_cotangent.as_slice()?, self.link_num * 16,
+            input_len, rhs_cols,
+        );
+        accumulate_cmtm_vjp(
+            &mut out, &tangent.link_vecs, link_vec_cotangent.as_slice()?,
+            self.link_num * (order - 1) * 6, input_len, rhs_cols,
+        );
+        Ok(out.into_pyarray(py).reshape([input_len, rhs_cols])?)
+    }
+
+    /// VJP for the spatial-vector portion of outward kinematics.  This is the
+    /// StateType-facing variant: it covers local link and joint velocity,
+    /// acceleration, jerk, and higher derivatives without requiring callers
+    /// to manufacture homogeneous-transform cotangents.
+    fn cmtm_outward_kinematics_transpose_matmul_rhs<'py>(
+        &self,
+        py: Python<'py>,
+        motion: PyReadonlyArray1<'py, f64>,
+        link_vec_cotangent: PyReadonlyArray4<'py, f64>,
+        joint_vec_cotangent: PyReadonlyArray4<'py, f64>,
+        order: usize,
+    ) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        if order < 2 {
+            return Err(PyValueError::new_err("CMTM reverse order must be at least 2"));
+        }
+        let input_len = self.dof * order;
+        let motion = motion.as_slice()?;
+        self.check_cmtm_motion(motion, order)?;
+        let link_shape = link_vec_cotangent.shape();
+        let joint_shape = joint_vec_cotangent.shape();
+        if link_shape.len() != 4 || link_shape[..3] != [self.link_num, order - 1, 6]
+            || joint_shape.len() != 4 || joint_shape[..3] != [self.joint_num, order - 1, 6]
+            || link_shape[3] != joint_shape[3]
+        {
+            return Err(PyValueError::new_err(
+                "kinematics vector cotangents must have shapes (link_num, order - 1, 6, rhs_cols) and (joint_num, order - 1, 6, rhs_cols)",
+            ));
+        }
+        let rhs_cols = link_shape[3];
+        let mut basis = vec![0.0; input_len * input_len];
+        for i in 0..input_len { basis[i * input_len + i] = 1.0; }
+        let mut primal = CmtmWorkspace::new(self, order);
+        let mut tangent = DynamicsCmtmTangentWorkspace::new(self, order - 2, input_len);
+        self.kinematics_cmtm_tangent_into(motion, &basis, order, &mut primal, &mut tangent);
+        let mut out = vec![0.0; input_len * rhs_cols];
+        accumulate_cmtm_vjp(
+            &mut out, &tangent.link_vecs, link_vec_cotangent.as_slice()?,
+            self.link_num * (order - 1) * 6, input_len, rhs_cols,
+        );
+        accumulate_cmtm_vjp(
+            &mut out, &tangent.joint_vecs, joint_vec_cotangent.as_slice()?,
+            self.joint_num * (order - 1) * 6, input_len, rhs_cols,
+        );
+        Ok(out.into_pyarray(py).reshape([input_len, rhs_cols])?)
+    }
+
+    /// VJP of local link momentum and force CMTM series.  This covers the
+    /// inertial and spatial-wrench outputs before tree aggregation.
+    #[pyo3(signature = (motion, link_momentum_cotangent, link_force_cotangent, dynamics_order, gravity = None))]
+    fn cmtm_link_dynamics_transpose_matmul_rhs<'py>(
+        &self,
+        py: Python<'py>,
+        motion: PyReadonlyArray1<'py, f64>,
+        link_momentum_cotangent: PyReadonlyArray4<'py, f64>,
+        link_force_cotangent: PyReadonlyArray4<'py, f64>,
+        dynamics_order: usize,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
+    ) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        let input_len = self.dof * (dynamics_order + 2);
+        let motion = motion.as_slice()?;
+        self.check_cmtm_motion(motion, dynamics_order + 2)?;
+        let momentum_shape = link_momentum_cotangent.shape();
+        let force_shape = link_force_cotangent.shape();
+        if momentum_shape.len() != 4
+            || momentum_shape[..3] != [self.link_num, dynamics_order + 1, 6]
+            || force_shape.len() != 4
+            || force_shape[..3] != [self.link_num, dynamics_order, 6]
+            || momentum_shape[3] != force_shape[3]
+        {
+            return Err(PyValueError::new_err(
+                "link dynamics cotangents must have shapes (link_num, dynamics_order + 1, 6, rhs_cols) and (link_num, dynamics_order, 6, rhs_cols)",
+            ));
+        }
+        let rhs_cols = momentum_shape[3];
+        let mut basis = vec![0.0; input_len * input_len];
+        for i in 0..input_len { basis[i * input_len + i] = 1.0; }
+        let mut primal = DynamicsCmtmWorkspace::new(self, dynamics_order);
+        let mut tangent = DynamicsCmtmTangentWorkspace::new(self, dynamics_order, input_len);
+        self.dynamics_cmtm_link_tangent_into(
+            motion, &basis, dynamics_order, gravity_vec3(gravity)?, &mut primal, &mut tangent,
+        );
+        let mut out = vec![0.0; input_len * rhs_cols];
+        accumulate_cmtm_vjp(
+            &mut out, &tangent.link_momentum, link_momentum_cotangent.as_slice()?,
+            self.link_num * (dynamics_order + 1) * 6, input_len, rhs_cols,
+        );
+        accumulate_cmtm_vjp(
+            &mut out, &tangent.link_force, link_force_cotangent.as_slice()?,
+            self.link_num * dynamics_order * 6, input_len, rhs_cols,
+        );
+        Ok(out.into_pyarray(py).reshape([input_len, rhs_cols])?)
+    }
+
+    /// VJP of the complete outward CMTM dynamics recurrence.  In addition to
+    /// local link quantities, this includes accumulated joint momentum,
+    /// joint wrench/force, and projected joint torque.
+    #[pyo3(signature = (motion, link_momentum_cotangent, link_force_cotangent, joint_momentum_cotangent, joint_force_cotangent, joint_torque_cotangent, dynamics_order, gravity = None))]
+    fn dynamics_cmtm_transpose_matmul_rhs<'py>(
+        &self,
+        py: Python<'py>,
+        motion: PyReadonlyArray1<'py, f64>,
+        link_momentum_cotangent: PyReadonlyArray4<'py, f64>,
+        link_force_cotangent: PyReadonlyArray4<'py, f64>,
+        joint_momentum_cotangent: PyReadonlyArray4<'py, f64>,
+        joint_force_cotangent: PyReadonlyArray4<'py, f64>,
+        joint_torque_cotangent: PyReadonlyArray3<'py, f64>,
+        dynamics_order: usize,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
+    ) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        let input_len = self.dof * (dynamics_order + 2);
+        let motion = motion.as_slice()?;
+        self.check_cmtm_motion(motion, dynamics_order + 2)?;
+        let lm = link_momentum_cotangent.shape(); let lf = link_force_cotangent.shape();
+        let jm = joint_momentum_cotangent.shape(); let jf = joint_force_cotangent.shape();
+        let jt = joint_torque_cotangent.shape();
+        let valid = lm.len() == 4 && lm[..3] == [self.link_num, dynamics_order + 1, 6]
+            && lf.len() == 4 && lf[..3] == [self.link_num, dynamics_order, 6]
+            && jm.len() == 4 && jm[..3] == [self.joint_num, dynamics_order + 1, 6]
+            && jf.len() == 4 && jf[..3] == [self.joint_num, dynamics_order, 6]
+            && jt.len() == 3 && jt[..2] == [self.joint_num, dynamics_order]
+            && lm[3] == lf[3] && lm[3] == jm[3] && lm[3] == jf[3] && lm[3] == jt[2];
+        if !valid {
+            return Err(PyValueError::new_err("outward CMTM cotangent shapes or rhs_cols are invalid"));
+        }
+        let rhs_cols = lm[3];
+        let mut basis = vec![0.0; input_len * input_len];
+        for i in 0..input_len { basis[i * input_len + i] = 1.0; }
+        let mut primal = DynamicsCmtmWorkspace::new(self, dynamics_order);
+        let mut tangent = DynamicsCmtmTangentWorkspace::new(self, dynamics_order, input_len);
+        self.dynamics_cmtm_link_tangent_into(
+            motion, &basis, dynamics_order, gravity_vec3(gravity)?, &mut primal, &mut tangent,
+        );
+        let mut out = vec![0.0; input_len * rhs_cols];
+        accumulate_cmtm_vjp(&mut out, &tangent.link_momentum, link_momentum_cotangent.as_slice()?, self.link_num * (dynamics_order + 1) * 6, input_len, rhs_cols);
+        accumulate_cmtm_vjp(&mut out, &tangent.link_force, link_force_cotangent.as_slice()?, self.link_num * dynamics_order * 6, input_len, rhs_cols);
+        accumulate_cmtm_vjp(&mut out, &tangent.joint_momentum, joint_momentum_cotangent.as_slice()?, self.joint_num * (dynamics_order + 1) * 6, input_len, rhs_cols);
+        accumulate_cmtm_vjp(&mut out, &tangent.joint_force, joint_force_cotangent.as_slice()?, self.joint_num * dynamics_order * 6, input_len, rhs_cols);
+        accumulate_cmtm_vjp(&mut out, &tangent.joint_torque, joint_torque_cotangent.as_slice()?, self.joint_num * dynamics_order, input_len, rhs_cols);
+        Ok(out.into_pyarray(py).reshape([input_len, rhs_cols])?)
+    }
+
+    /// Batched counterpart of `dynamics_cmtm_transpose_matmul_rhs`.
+    /// Keeping the sample loop in Rust removes one Python/C-API crossing per
+    /// trajectory frame while reusing a single primal/tangent workspace.
+    #[pyo3(signature = (motions, link_momentum_cotangent, link_force_cotangent, joint_momentum_cotangent, joint_force_cotangent, joint_torque_cotangent, dynamics_order, gravity = None))]
+    fn dynamics_cmtm_transpose_matmul_rhs_batch<'py>(
+        &self,
+        py: Python<'py>,
+        motions: PyReadonlyArray2<'py, f64>,
+        link_momentum_cotangent: PyReadonlyArray5<'py, f64>,
+        link_force_cotangent: PyReadonlyArray5<'py, f64>,
+        joint_momentum_cotangent: PyReadonlyArray5<'py, f64>,
+        joint_force_cotangent: PyReadonlyArray5<'py, f64>,
+        joint_torque_cotangent: PyReadonlyArray4<'py, f64>,
+        dynamics_order: usize,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
+    ) -> PyResult<Bound<'py, PyArray3<f64>>> {
+        let input_len = self.dof * (dynamics_order + 2);
+        let motion_shape = motions.shape();
+        let lm = link_momentum_cotangent.shape(); let lf = link_force_cotangent.shape();
+        let jm = joint_momentum_cotangent.shape(); let jf = joint_force_cotangent.shape();
+        let jt = joint_torque_cotangent.shape();
+        let batch = motion_shape.first().copied().unwrap_or(0);
+        let valid = motion_shape.len() == 2 && motion_shape[1] == input_len
+            && lm.len() == 5 && lm[..4] == [batch, self.link_num, dynamics_order + 1, 6]
+            && lf.len() == 5 && lf[..4] == [batch, self.link_num, dynamics_order, 6]
+            && jm.len() == 5 && jm[..4] == [batch, self.joint_num, dynamics_order + 1, 6]
+            && jf.len() == 5 && jf[..4] == [batch, self.joint_num, dynamics_order, 6]
+            && jt.len() == 4 && jt[..3] == [batch, self.joint_num, dynamics_order]
+            && lm[4] == lf[4] && lm[4] == jm[4] && lm[4] == jf[4] && lm[4] == jt[3];
+        if !valid {
+            return Err(PyValueError::new_err("batched outward CMTM cotangent shapes or rhs_cols are invalid"));
+        }
+        let rhs_cols = lm[4];
+        let motions = motions.as_slice()?;
+        let lm = link_momentum_cotangent.as_slice()?; let lf = link_force_cotangent.as_slice()?;
+        let jm = joint_momentum_cotangent.as_slice()?; let jf = joint_force_cotangent.as_slice()?;
+        let jt = joint_torque_cotangent.as_slice()?;
+        let lm_len = self.link_num * (dynamics_order + 1) * 6 * rhs_cols;
+        let lf_len = self.link_num * dynamics_order * 6 * rhs_cols;
+        let jm_len = self.joint_num * (dynamics_order + 1) * 6 * rhs_cols;
+        let jf_len = self.joint_num * dynamics_order * 6 * rhs_cols;
+        let jt_len = self.joint_num * dynamics_order * rhs_cols;
+        let mut basis = vec![0.0; input_len * input_len];
+        for i in 0..input_len { basis[i * input_len + i] = 1.0; }
+        let gravity = gravity_vec3(gravity)?;
+        let mut primal = DynamicsCmtmWorkspace::new(self, dynamics_order);
+        let mut tangent = DynamicsCmtmTangentWorkspace::new(self, dynamics_order, input_len);
+        let mut out = vec![0.0; batch * input_len * rhs_cols];
+        for sample in 0..batch {
+            self.dynamics_cmtm_link_tangent_into(
+                &motions[sample * input_len..(sample + 1) * input_len], &basis,
+                dynamics_order, gravity, &mut primal, &mut tangent,
+            );
+            let out_sample = &mut out[sample * input_len * rhs_cols..(sample + 1) * input_len * rhs_cols];
+            accumulate_cmtm_vjp(out_sample, &tangent.link_momentum, &lm[sample * lm_len..(sample + 1) * lm_len], self.link_num * (dynamics_order + 1) * 6, input_len, rhs_cols);
+            accumulate_cmtm_vjp(out_sample, &tangent.link_force, &lf[sample * lf_len..(sample + 1) * lf_len], self.link_num * dynamics_order * 6, input_len, rhs_cols);
+            accumulate_cmtm_vjp(out_sample, &tangent.joint_momentum, &jm[sample * jm_len..(sample + 1) * jm_len], self.joint_num * (dynamics_order + 1) * 6, input_len, rhs_cols);
+            accumulate_cmtm_vjp(out_sample, &tangent.joint_force, &jf[sample * jf_len..(sample + 1) * jf_len], self.joint_num * dynamics_order * 6, input_len, rhs_cols);
+            accumulate_cmtm_vjp(out_sample, &tangent.joint_torque, &jt[sample * jt_len..(sample + 1) * jt_len], self.joint_num * dynamics_order, input_len, rhs_cols);
+        }
+        Ok(out.into_pyarray(py).reshape([batch, input_len, rhs_cols])?)
+    }
+
+    /// VJP for link momentum/force expressed in the world frame.  The world
+    /// wrench transport depends on both the local wrench series and the link
+    /// CMTM transform, so this kernel differentiates the complete transport
+    /// instead of treating it as a post-processing rotation.
+    #[pyo3(signature = (motion, world_link_momentum_cotangent, world_link_force_cotangent, dynamics_order, gravity = None))]
+    fn world_link_dynamics_cmtm_transpose_matmul_rhs<'py>(
+        &self,
+        py: Python<'py>,
+        motion: PyReadonlyArray1<'py, f64>,
+        world_link_momentum_cotangent: PyReadonlyArray4<'py, f64>,
+        world_link_force_cotangent: PyReadonlyArray4<'py, f64>,
+        dynamics_order: usize,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
+    ) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        let kin_order = dynamics_order + 2;
+        let input_len = self.dof * kin_order;
+        let motion = motion.as_slice()?;
+        self.check_cmtm_motion(motion, kin_order)?;
+        let momentum_shape = world_link_momentum_cotangent.shape();
+        let force_shape = world_link_force_cotangent.shape();
+        if momentum_shape.len() != 4 || momentum_shape[..3] != [self.link_num, dynamics_order + 1, 6]
+            || force_shape.len() != 4 || force_shape[..3] != [self.link_num, dynamics_order, 6]
+            || momentum_shape[3] != force_shape[3]
+        {
+            return Err(PyValueError::new_err("world link cotangent shapes are invalid"));
+        }
+        let rhs_cols = momentum_shape[3];
+        let momentum_cotangent = world_link_momentum_cotangent.as_slice()?;
+        let force_cotangent = world_link_force_cotangent.as_slice()?;
+        let mut out = vec![0.0; input_len * rhs_cols];
+        self.world_link_dynamics_cmtm_vjp_into(
+            motion, momentum_cotangent, force_cotangent, dynamics_order,
+            gravity_vec3(gravity)?, rhs_cols, &mut out,
+        );
+        Ok(out.into_pyarray(py).reshape([input_len, rhs_cols])?)
+    }
+
+    /// VJP for joint wrench series expressed in the world frame.  A joint
+    /// wrench is transported by its child-link CMTM, while its local series
+    /// comes from the reverse dynamics accumulation.
+    #[pyo3(signature = (motion, world_joint_momentum_cotangent, world_joint_force_cotangent, dynamics_order, gravity = None))]
+    fn world_joint_dynamics_cmtm_transpose_matmul_rhs<'py>(
+        &self,
+        py: Python<'py>,
+        motion: PyReadonlyArray1<'py, f64>,
+        world_joint_momentum_cotangent: PyReadonlyArray4<'py, f64>,
+        world_joint_force_cotangent: PyReadonlyArray4<'py, f64>,
+        dynamics_order: usize,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
+    ) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        let kin_order = dynamics_order + 2;
+        let input_len = self.dof * kin_order;
+        let motion = motion.as_slice()?;
+        self.check_cmtm_motion(motion, kin_order)?;
+        let momentum_shape = world_joint_momentum_cotangent.shape();
+        let force_shape = world_joint_force_cotangent.shape();
+        if momentum_shape.len() != 4 || momentum_shape[..3] != [self.joint_num, dynamics_order + 1, 6]
+            || force_shape.len() != 4 || force_shape[..3] != [self.joint_num, dynamics_order, 6]
+            || momentum_shape[3] != force_shape[3]
+        {
+            return Err(PyValueError::new_err("world joint cotangent shapes are invalid"));
+        }
+        let rhs_cols = momentum_shape[3];
+        let momentum_cotangent = world_joint_momentum_cotangent.as_slice()?;
+        let force_cotangent = world_joint_force_cotangent.as_slice()?;
+        let mut out = vec![0.0; input_len * rhs_cols];
+        self.world_joint_dynamics_cmtm_vjp_into(
+            motion, momentum_cotangent, force_cotangent, dynamics_order,
+            gravity_vec3(gravity)?, rhs_cols, &mut out,
+        );
+        Ok(out.into_pyarray(py).reshape([input_len, rhs_cols])?)
+    }
+
+    /// Batched world-link VJP.  This removes the Python sample loop used by
+    /// batched Jacobian-transpose products while retaining one workspace per
+    /// serial sample.
+    #[pyo3(signature = (motions, world_link_momentum_cotangents, world_link_force_cotangents, dynamics_order, gravity = None))]
+    fn world_link_dynamics_cmtm_transpose_matmul_rhs_batch<'py>(
+        &self, py: Python<'py>, motions: PyReadonlyArray2<'py, f64>,
+        world_link_momentum_cotangents: PyReadonlyArray5<'py, f64>,
+        world_link_force_cotangents: PyReadonlyArray5<'py, f64>, dynamics_order: usize,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
+    ) -> PyResult<Bound<'py, PyArray3<f64>>> {
+        let input_len = self.dof * (dynamics_order + 2);
+        let motion_shape = motions.shape();
+        let momentum_shape = world_link_momentum_cotangents.shape();
+        let force_shape = world_link_force_cotangents.shape();
+        if motion_shape.len() != 2 || motion_shape[1] != input_len
+            || momentum_shape.len() != 5 || momentum_shape[..4] != [motion_shape[0], self.link_num, dynamics_order + 1, 6]
+            || force_shape.len() != 5 || force_shape[..4] != [motion_shape[0], self.link_num, dynamics_order, 6]
+            || momentum_shape[4] != force_shape[4] {
+            return Err(PyValueError::new_err("world-link batch VJP input shapes are invalid"));
+        }
+        let batch = motion_shape[0]; let rhs_cols = momentum_shape[4];
+        let motions = motions.as_slice()?; let momentum = world_link_momentum_cotangents.as_slice()?;
+        let force = world_link_force_cotangents.as_slice()?; let gravity = gravity_vec3(gravity)?;
+        let momentum_len = self.link_num * (dynamics_order + 1) * 6 * rhs_cols;
+        let force_len = self.link_num * dynamics_order * 6 * rhs_cols;
+        let mut out = vec![0.0; batch * input_len * rhs_cols];
+        for sample in 0..batch {
+            self.world_link_dynamics_cmtm_vjp_into(
+                &motions[sample * input_len..(sample + 1) * input_len],
+                &momentum[sample * momentum_len..(sample + 1) * momentum_len],
+                &force[sample * force_len..(sample + 1) * force_len], dynamics_order, gravity,
+                rhs_cols, &mut out[sample * input_len * rhs_cols..(sample + 1) * input_len * rhs_cols],
+            );
+        }
+        Ok(out.into_pyarray(py).reshape([batch, input_len, rhs_cols])?)
+    }
+
+    #[pyo3(signature = (motions, world_joint_momentum_cotangents, world_joint_force_cotangents, dynamics_order, gravity = None))]
+    fn world_joint_dynamics_cmtm_transpose_matmul_rhs_batch<'py>(
+        &self, py: Python<'py>, motions: PyReadonlyArray2<'py, f64>,
+        world_joint_momentum_cotangents: PyReadonlyArray5<'py, f64>,
+        world_joint_force_cotangents: PyReadonlyArray5<'py, f64>, dynamics_order: usize,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
+    ) -> PyResult<Bound<'py, PyArray3<f64>>> {
+        let input_len = self.dof * (dynamics_order + 2);
+        let motion_shape = motions.shape();
+        let momentum_shape = world_joint_momentum_cotangents.shape();
+        let force_shape = world_joint_force_cotangents.shape();
+        if motion_shape.len() != 2 || motion_shape[1] != input_len
+            || momentum_shape.len() != 5 || momentum_shape[..4] != [motion_shape[0], self.joint_num, dynamics_order + 1, 6]
+            || force_shape.len() != 5 || force_shape[..4] != [motion_shape[0], self.joint_num, dynamics_order, 6]
+            || momentum_shape[4] != force_shape[4] {
+            return Err(PyValueError::new_err("world-joint batch VJP input shapes are invalid"));
+        }
+        let batch = motion_shape[0]; let rhs_cols = momentum_shape[4];
+        let motions = motions.as_slice()?; let momentum = world_joint_momentum_cotangents.as_slice()?;
+        let force = world_joint_force_cotangents.as_slice()?; let gravity = gravity_vec3(gravity)?;
+        let momentum_len = self.joint_num * (dynamics_order + 1) * 6 * rhs_cols;
+        let force_len = self.joint_num * dynamics_order * 6 * rhs_cols;
+        let mut out = vec![0.0; batch * input_len * rhs_cols];
+        for sample in 0..batch {
+            self.world_joint_dynamics_cmtm_vjp_into(
+                &motions[sample * input_len..(sample + 1) * input_len],
+                &momentum[sample * momentum_len..(sample + 1) * momentum_len],
+                &force[sample * force_len..(sample + 1) * force_len], dynamics_order, gravity,
+                rhs_cols, &mut out[sample * input_len * rhs_cols..(sample + 1) * input_len * rhs_cols],
+            );
+        }
+        Ok(out.into_pyarray(py).reshape([batch, input_len, rhs_cols])?)
+    }
+
     #[pyo3(signature = (motion, dynamics_order, gravity = None))]
     fn dynamics_outward_cmtm<'py>(
         &self,
@@ -1329,6 +2050,67 @@ impl RustCompiledRobot {
         ))
     }
 
+    /// Return the complete joint-torque time series produced by the CMTM
+    /// inverse-dynamics recurrence.  Keeping this narrow API separate from
+    /// `dynamics_cmtm[_batch]` avoids materialising momentum/force arrays for
+    /// callers that only need torque and is the primal entry point for the
+    /// higher-order tangent/adjoint kernels.
+    #[pyo3(signature = (motion, dynamics_order, gravity = None))]
+    fn dynamics_joint_torque_series<'py>(
+        &self,
+        py: Python<'py>,
+        motion: PyReadonlyArray1<'py, f64>,
+        dynamics_order: usize,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
+    ) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        let gravity = gravity_vec3(gravity)?;
+        let kin_order = dynamics_order + 2;
+        let motion = motion.as_slice()?;
+        self.check_cmtm_motion(motion, kin_order)?;
+        let mut ws = DynamicsCmtmWorkspace::new(self, dynamics_order);
+        self.dynamics_cmtm_into(motion, dynamics_order, gravity, &mut ws);
+        Ok(ws
+            .joint_torque
+            .into_pyarray(py)
+            .reshape([self.joint_num, dynamics_order])?)
+    }
+
+    #[pyo3(signature = (motions, dynamics_order, gravity = None))]
+    fn dynamics_joint_torque_series_batch<'py>(
+        &self,
+        py: Python<'py>,
+        motions: PyReadonlyArray2<'py, f64>,
+        dynamics_order: usize,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
+    ) -> PyResult<Bound<'py, PyArray3<f64>>> {
+        let gravity = gravity_vec3(gravity)?;
+        let kin_order = dynamics_order + 2;
+        let shape = motions.shape();
+        if shape.len() != 2 || shape[1] != self.dof * kin_order {
+            return Err(PyValueError::new_err(
+                "motions batch shape must be (batch, robot dof * (dynamics_order + 2))",
+            ));
+        }
+        let batch = shape[0];
+        let motions = motions.as_slice()?;
+        let motion_len = self.dof * kin_order;
+        let torque_len = self.joint_num * dynamics_order;
+        let mut out = vec![0.0; batch * torque_len];
+        let mut ws = DynamicsCmtmWorkspace::new(self, dynamics_order);
+        for sample in 0..batch {
+            let start = sample * motion_len;
+            self.dynamics_cmtm_into(
+                &motions[start..start + motion_len],
+                dynamics_order,
+                gravity,
+                &mut ws,
+            );
+            out[sample * torque_len..(sample + 1) * torque_len]
+                .copy_from_slice(&ws.joint_torque);
+        }
+        Ok(out.into_pyarray(py).reshape([batch, self.joint_num, dynamics_order])?)
+    }
+
     #[pyo3(signature = (motions, dynamics_order, gravity = None))]
     fn dynamics_outward_cmtm_batch<'py>(
         &self,
@@ -1441,6 +2223,114 @@ impl RustCompiledRobot {
                 .into_pyarray(py)
                 .reshape([batch, self.joint_num, dynamics_order, 1])?,
         ))
+    }
+}
+
+impl RustCompiledRobot {
+    /// Accumulate the VJP of the complete local-to-world link wrench
+    /// transport.  The public link and joint APIs share this kernel; joint
+    /// cotangents are reduced to links before arriving here.
+    fn world_link_dynamics_cmtm_vjp_into(
+        &self,
+        motion: &[f64],
+        momentum_cotangent: &[f64],
+        force_cotangent: &[f64],
+        dynamics_order: usize,
+        gravity: [f64; 3],
+        rhs_cols: usize,
+        out: &mut [f64],
+    ) {
+        let kin_order = dynamics_order + 2;
+        let input_len = self.dof * kin_order;
+        let mut basis = vec![0.0; input_len * input_len];
+        for input in 0..input_len {
+            basis[input * input_len + input] = 1.0;
+        }
+        let mut primal = DynamicsCmtmWorkspace::new(self, dynamics_order);
+        let mut tangent = DynamicsCmtmTangentWorkspace::new(self, dynamics_order, input_len);
+        let mut factorial = vec![1.0; dynamics_order + 1];
+        fill_factorial_table(&mut factorial);
+        let mut blocks = vec![[[0.0; 6]; 6]; dynamics_order + 1];
+        let mut dblocks = vec![[[0.0; 6]; 6]; dynamics_order + 1];
+        let mut transformed = vec![0.0; (dynamics_order + 1) * 6];
+        let mut dtransformed = vec![0.0; (dynamics_order + 1) * 6];
+        self.dynamics_cmtm_link_tangent_into(
+            motion, &basis, dynamics_order, gravity, &mut primal, &mut tangent,
+        );
+        for link in 0..self.link_num {
+            let mat = mat4_from_flat(&primal.cmtm.link_mat, link);
+            let vecs = cmtm_vecs_slice(&primal.cmtm.link_vecs, link, kin_order);
+            let momentum = cmvec_slice(&primal.link_momentum, link, dynamics_order + 1);
+            let force = cmvec_slice(&primal.link_force, link, dynamics_order);
+            for input in 0..input_len {
+                let dmat = tangent_mat4(&tangent.link_mat, link, input_len, input);
+                let dvecs = tangent_cmtm_vecs(
+                    &tangent.link_vecs, link, kin_order, input_len, input,
+                );
+                let dmomentum = tangent_cmvecs(
+                    &tangent.link_momentum, link, dynamics_order + 1, input_len, input,
+                );
+                let dforce = tangent_cmvecs(
+                    &tangent.link_force, link, dynamics_order, input_len, input,
+                );
+                for time in 0..=dynamics_order {
+                    let value = cmtm_world_wrench_tangent_value_into(
+                        mat, &vecs[..time * 6], dmat, &dvecs[..time * 6],
+                        &momentum[..(time + 1) * 6], &dmomentum[..(time + 1) * 6], time + 1,
+                        &factorial, &mut blocks, &mut dblocks, &mut transformed, &mut dtransformed,
+                    );
+                    for component in 0..6 {
+                        for rhs in 0..rhs_cols {
+                            out[input * rhs_cols + rhs] += value[component]
+                                * momentum_cotangent[((link * (dynamics_order + 1) + time) * 6 + component) * rhs_cols + rhs];
+                        }
+                    }
+                }
+                for time in 0..dynamics_order {
+                    let value = cmtm_world_wrench_tangent_value_into(
+                        mat, &vecs[..time * 6], dmat, &dvecs[..time * 6],
+                        &force[..(time + 1) * 6], &dforce[..(time + 1) * 6], time + 1,
+                        &factorial, &mut blocks, &mut dblocks, &mut transformed, &mut dtransformed,
+                    );
+                    for component in 0..6 {
+                        for rhs in 0..rhs_cols {
+                            out[input * rhs_cols + rhs] += value[component]
+                                * force_cotangent[((link * dynamics_order + time) * 6 + component) * rhs_cols + rhs];
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn world_joint_dynamics_cmtm_vjp_into(
+        &self, motion: &[f64], momentum_cotangent: &[f64], force_cotangent: &[f64],
+        dynamics_order: usize, gravity: [f64; 3], rhs_cols: usize, out: &mut [f64],
+    ) {
+        let mut link_momentum_cotangent = vec![0.0; self.link_num * (dynamics_order + 1) * 6 * rhs_cols];
+        let mut link_force_cotangent = vec![0.0; self.link_num * dynamics_order * 6 * rhs_cols];
+        for joint in 0..self.joint_num {
+            for &link in &self.link_subtree_links[self.child_link[joint]] {
+                for time in 0..=dynamics_order {
+                    for component in 0..6 { for rhs in 0..rhs_cols {
+                        let source = ((joint * (dynamics_order + 1) + time) * 6 + component) * rhs_cols + rhs;
+                        let target = ((link * (dynamics_order + 1) + time) * 6 + component) * rhs_cols + rhs;
+                        link_momentum_cotangent[target] += momentum_cotangent[source];
+                    }}
+                }
+                for time in 0..dynamics_order {
+                    for component in 0..6 { for rhs in 0..rhs_cols {
+                        let source = ((joint * dynamics_order + time) * 6 + component) * rhs_cols + rhs;
+                        let target = ((link * dynamics_order + time) * 6 + component) * rhs_cols + rhs;
+                        link_force_cotangent[target] += force_cotangent[source];
+                    }}
+                }
+            }
+        }
+        self.world_link_dynamics_cmtm_vjp_into(
+            motion, &link_momentum_cotangent, &link_force_cotangent,
+            dynamics_order, gravity, rhs_cols, out,
+        );
     }
 }
 

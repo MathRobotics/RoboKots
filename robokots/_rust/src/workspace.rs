@@ -148,6 +148,12 @@ pub(crate) struct DynamicsCmtmWorkspace {
     pub(crate) joint_momentum: Vec<f64>,
     pub(crate) joint_force: Vec<f64>,
     pub(crate) joint_gravity_force: Vec<f64>,
+    /// World gravity expressed in each link frame and its time derivatives.
+    ///
+    /// This is primal data for the CMTM reverse pass.  Keeping it per-link is
+    /// important: the old `tmp_local_gravity` scratch is overwritten while
+    /// walking the tree and therefore cannot be used by a later VJP.
+    pub(crate) link_local_gravity: Vec<f64>,
     pub(crate) joint_torque: Vec<f64>,
     pub(crate) factorial: Vec<f64>,
     pub(crate) tmp_link_momentum: Vec<f64>,
@@ -162,6 +168,129 @@ pub(crate) struct DynamicsCmtmWorkspace {
     pub(crate) tmp_wrench_adj_c_blocks: Vec<[[f64; 3]; 3]>,
 }
 
+/// Cotangents for the complete CMTM inverse-dynamics recurrence.
+///
+/// Layout matches [`DynamicsCmtmTangentWorkspace`]: for every primal scalar,
+/// `rhs_cols` cotangents are contiguous.  A single workspace consequently
+/// supports the IOC use-case of several output cotangents per trajectory
+/// frame without materialising a dense Jacobian.
+#[allow(dead_code)]
+pub(crate) struct DynamicsCmtmReverseWorkspace {
+    pub(crate) rhs_cols: usize,
+    pub(crate) link_mat: Vec<f64>,
+    pub(crate) link_vecs: Vec<f64>,
+    pub(crate) joint_mat: Vec<f64>,
+    pub(crate) joint_vecs: Vec<f64>,
+    pub(crate) link_momentum: Vec<f64>,
+    pub(crate) link_force: Vec<f64>,
+    pub(crate) joint_momentum: Vec<f64>,
+    pub(crate) joint_force: Vec<f64>,
+    pub(crate) joint_gravity_force: Vec<f64>,
+    pub(crate) link_local_gravity: Vec<f64>,
+    pub(crate) joint_torque: Vec<f64>,
+    /// Final cotangent in the scalar-major motion layout accepted by CMTM.
+    pub(crate) motion: Vec<f64>,
+}
+
+#[allow(dead_code)]
+impl DynamicsCmtmReverseWorkspace {
+    pub(crate) fn new(
+        robot: &RustCompiledRobot,
+        dynamics_order: usize,
+        rhs_cols: usize,
+    ) -> Self {
+        let kin_order = dynamics_order + 2;
+        Self {
+            rhs_cols,
+            link_mat: vec![0.0; robot.link_num * 16 * rhs_cols],
+            link_vecs: vec![0.0; robot.link_num * (kin_order - 1) * 6 * rhs_cols],
+            joint_mat: vec![0.0; robot.joint_num * 16 * rhs_cols],
+            joint_vecs: vec![0.0; robot.joint_num * (kin_order - 1) * 6 * rhs_cols],
+            link_momentum: vec![0.0; robot.link_num * (dynamics_order + 1) * 6 * rhs_cols],
+            link_force: vec![0.0; robot.link_num * dynamics_order * 6 * rhs_cols],
+            joint_momentum: vec![0.0; robot.joint_num * (dynamics_order + 1) * 6 * rhs_cols],
+            joint_force: vec![0.0; robot.joint_num * dynamics_order * 6 * rhs_cols],
+            joint_gravity_force: vec![0.0; robot.joint_num * dynamics_order * 6 * rhs_cols],
+            link_local_gravity: vec![0.0; robot.link_num * dynamics_order * 3 * rhs_cols],
+            joint_torque: vec![0.0; robot.joint_num * dynamics_order * rhs_cols],
+            motion: vec![0.0; robot.dof * kin_order * rhs_cols],
+        }
+    }
+
+    pub(crate) fn clear(&mut self) {
+        self.link_mat.fill(0.0);
+        self.link_vecs.fill(0.0);
+        self.joint_mat.fill(0.0);
+        self.joint_vecs.fill(0.0);
+        self.link_momentum.fill(0.0);
+        self.link_force.fill(0.0);
+        self.joint_momentum.fill(0.0);
+        self.joint_force.fill(0.0);
+        self.joint_gravity_force.fill(0.0);
+        self.link_local_gravity.fill(0.0);
+        self.joint_torque.fill(0.0);
+        self.motion.fill(0.0);
+    }
+}
+
+/// Directional derivatives of the CMTM inverse-dynamics recurrence.
+///
+/// Every buffer is laid out with `rhs_cols` contiguous tangent components per
+/// primal scalar.  This is deliberately separate from `BulkDerivativeWorkspace`:
+/// the latter differentiates the order-3 RNEA recurrence, while this workspace
+/// retains the complete CMTM series needed for `torque_diff1` and higher.
+#[allow(dead_code)]
+pub(crate) struct DynamicsCmtmTangentWorkspace {
+    pub(crate) rhs_cols: usize,
+    pub(crate) link_mat: Vec<f64>,
+    pub(crate) link_vecs: Vec<f64>,
+    pub(crate) joint_mat: Vec<f64>,
+    pub(crate) joint_vecs: Vec<f64>,
+    pub(crate) link_momentum: Vec<f64>,
+    pub(crate) link_force: Vec<f64>,
+    pub(crate) joint_momentum: Vec<f64>,
+    pub(crate) joint_force: Vec<f64>,
+    pub(crate) joint_gravity_force: Vec<f64>,
+    pub(crate) joint_torque: Vec<f64>,
+}
+
+#[allow(dead_code)]
+impl DynamicsCmtmTangentWorkspace {
+    pub(crate) fn new(
+        robot: &RustCompiledRobot,
+        dynamics_order: usize,
+        rhs_cols: usize,
+    ) -> Self {
+        let kin_order = dynamics_order + 2;
+        Self {
+            rhs_cols,
+            link_mat: vec![0.0; robot.link_num * 16 * rhs_cols],
+            link_vecs: vec![0.0; robot.link_num * (kin_order - 1) * 6 * rhs_cols],
+            joint_mat: vec![0.0; robot.joint_num * 16 * rhs_cols],
+            joint_vecs: vec![0.0; robot.joint_num * (kin_order - 1) * 6 * rhs_cols],
+            link_momentum: vec![0.0; robot.link_num * (dynamics_order + 1) * 6 * rhs_cols],
+            link_force: vec![0.0; robot.link_num * dynamics_order * 6 * rhs_cols],
+            joint_momentum: vec![0.0; robot.joint_num * (dynamics_order + 1) * 6 * rhs_cols],
+            joint_force: vec![0.0; robot.joint_num * dynamics_order * 6 * rhs_cols],
+            joint_gravity_force: vec![0.0; robot.joint_num * dynamics_order * 6 * rhs_cols],
+            joint_torque: vec![0.0; robot.joint_num * dynamics_order * rhs_cols],
+        }
+    }
+
+    pub(crate) fn clear(&mut self) {
+        self.link_mat.fill(0.0);
+        self.link_vecs.fill(0.0);
+        self.joint_mat.fill(0.0);
+        self.joint_vecs.fill(0.0);
+        self.link_momentum.fill(0.0);
+        self.link_force.fill(0.0);
+        self.joint_momentum.fill(0.0);
+        self.joint_force.fill(0.0);
+        self.joint_gravity_force.fill(0.0);
+        self.joint_torque.fill(0.0);
+    }
+}
+
 impl DynamicsCmtmWorkspace {
     pub(crate) fn new(robot: &RustCompiledRobot, dynamics_order: usize) -> Self {
         Self {
@@ -171,6 +300,7 @@ impl DynamicsCmtmWorkspace {
             joint_momentum: vec![0.0; robot.joint_num * (dynamics_order + 1) * 6],
             joint_force: vec![0.0; robot.joint_num * dynamics_order * 6],
             joint_gravity_force: vec![0.0; robot.joint_num * dynamics_order * 6],
+            link_local_gravity: vec![0.0; robot.link_num * dynamics_order * 3],
             joint_torque: vec![0.0; robot.joint_num * dynamics_order],
             factorial: vec![1.0; (dynamics_order + 2).max(1)],
             tmp_link_momentum: vec![0.0; (dynamics_order + 1) * 6],
@@ -193,6 +323,7 @@ impl DynamicsCmtmWorkspace {
         self.joint_momentum.fill(0.0);
         self.joint_force.fill(0.0);
         self.joint_gravity_force.fill(0.0);
+        self.link_local_gravity.fill(0.0);
         self.joint_torque.fill(0.0);
         self.tmp_link_momentum.fill(0.0);
         self.tmp_joint_momentum.fill(0.0);
@@ -213,6 +344,7 @@ impl DynamicsCmtmWorkspace {
         self.tmp_joint_momentum.fill(0.0);
         self.tmp_force.fill(0.0);
         self.joint_gravity_force.fill(0.0);
+        self.link_local_gravity.fill(0.0);
         self.tmp_gravity_force.fill(0.0);
         self.tmp_local_gravity.fill(0.0);
         self.tmp_rel_vecs.fill(0.0);

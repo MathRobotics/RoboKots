@@ -611,6 +611,252 @@ def test_branched_fixed_rust_torque_diff1_jacobian_matches_numerical():
     )
 
 
+@pytest.mark.parametrize("batched", [False, True])
+def test_rust_cmtm_torque_diff1_jacobian_mul_uses_analytic_tangent_with_gravity(monkeypatch, batched):
+    """Higher-order torque Jv must not fall back to Python outward CMTM."""
+    pytest.importorskip("robokots._rust")
+    rng = np.random.default_rng(411 + int(batched))
+    order = 4
+    kots = Kots.from_urdf_file(str(BRANCHED_FIXED_MODEL_PATH), order=order)
+    sample_count = 3 if batched else None
+    motion = rng.standard_normal(((sample_count,) if batched else ()) + (order * kots.dof(),))
+    kots.import_motions(motion)
+    kots.dynamics(backend="rust", gravity=(0.3, -0.8, -9.81))
+    states = [StateType("total_joint", "total_joint", "torque_diff1")]
+    jacobian = kots.jacobian(states)
+    rhs = rng.standard_normal(((sample_count,) if batched else ()) + (order * kots.dof(), 2))
+    expected = jacobian @ rhs
+
+    def fail_outward(*args, **kwargs):
+        raise AssertionError("higher-order Rust Jv fell back to outward CMTM")
+
+    monkeypatch.setattr(outward_api, "outward_jacobian_matmul_rhs", fail_outward)
+    actual = kots.jacobian_mul(states, rhs)
+    np.testing.assert_allclose(actual, expected, atol=1e-9, rtol=1e-9)
+    monkeypatch.setattr(outward_api, "outward_jacobian_matvec", fail_outward)
+    np.testing.assert_allclose(
+        kots.jacobian_mul(states, rhs[..., 0]),
+        expected[..., 0],
+        atol=1e-9,
+        rtol=1e-9,
+    )
+
+
+@pytest.mark.parametrize("batched", [False, True])
+def test_rust_cmtm_torque_diff1_vjp_uses_analytic_reverse_with_gravity(monkeypatch, batched):
+    """The CMTM torque VJP must win over Python outward reverse mode.
+
+    This is deliberately an API-forward test: source builds which predate the
+    Rust reverse kernel still run the normal fallback and return here, while a
+    build exporting the kernel verifies both vector and multi-RHS dispatch.
+    """
+    pytest.importorskip("robokots._rust")
+    rng = np.random.default_rng(412 + int(batched))
+    order = 4
+    kots = Kots.from_urdf_file(str(BRANCHED_FIXED_MODEL_PATH), order=order)
+    sample_count = 3 if batched else None
+    motion = rng.standard_normal(((sample_count,) if batched else ()) + (order * kots.dof(),))
+    kots.import_motions(motion)
+    kots.dynamics(backend="rust", gravity=(0.3, -0.8, -9.81))
+    states = [StateType("total_joint", "total_joint", "torque_diff1")]
+    robot = kots._rust_compiled_robot()
+    if not hasattr(robot, "dynamics_joint_torque_series_transpose_matmul_rhs"):
+      # Keep this regression test usable during staged Rust/Python rollouts;
+      # it automatically becomes a strict fast-path test once the extension
+      # exposes the reverse kernel.
+      return
+
+    jacobian = kots.jacobian(states)
+    output_dim = jacobian.shape[-2]
+    vector = rng.standard_normal(((sample_count,) if batched else ()) + (output_dim,))
+    matrix = rng.standard_normal(((sample_count,) if batched else ()) + (output_dim, 2))
+
+    def fail_outward(*args, **kwargs):
+      raise AssertionError("higher-order Rust VJP fell back to outward CMTM")
+
+    monkeypatch.setattr(outward_api, "outward_jacobian_transpose_matvec", fail_outward)
+    np.testing.assert_allclose(
+      kots.jacobian_transpose_mul(states, vector),
+      (np.swapaxes(jacobian, -1, -2) @ vector[..., None])[..., 0],
+      atol=2e-9,
+      rtol=2e-9,
+    )
+    np.testing.assert_allclose(
+      kots.jacobian_transpose_mul(states, matrix),
+      np.swapaxes(jacobian, -1, -2) @ matrix,
+      atol=2e-9,
+      rtol=2e-9,
+    )
+
+
+@pytest.mark.parametrize("batched", [False, True])
+def test_rust_cmtm_local_momentum_force_wrench_vjp_dispatches(monkeypatch, batched):
+    pytest.importorskip("robokots._rust")
+    rng = np.random.default_rng(413 + int(batched))
+    order = 4
+    kots = _make_kots(order=order)
+    batch = (2,) if batched else ()
+    kots.import_motions(rng.standard_normal(batch + (order * kots.dof(),)))
+    kots.dynamics(backend="rust", gravity=(0.3, -0.8, -9.81))
+    states = [
+        StateType("link", "arm3", "momentum_diff1"),
+        StateType("link", "arm3", "force_diff1"),
+        StateType("joint", "joint3", "momentum"),
+        StateType("joint", "joint3", "force"),
+        StateType("joint", "joint3", "torque_diff1"),
+    ]
+    jacobian = kots.jacobian(states)
+    rhs = rng.standard_normal(batch + (jacobian.shape[-2], 2))
+
+    def fail_outward(*args, **kwargs):
+        raise AssertionError("local CMTM VJP fell back to Python outward reverse mode")
+
+    monkeypatch.setattr(outward_api, "outward_jacobian_transpose_matvec", fail_outward)
+    actual = kots.jacobian_transpose_mul(states, rhs)
+    np.testing.assert_allclose(
+        actual,
+        np.swapaxes(jacobian, -1, -2) @ rhs,
+        atol=2e-9,
+        rtol=2e-9,
+    )
+
+
+def test_rust_cmtm_link_kinematics_vjp_dispatches():
+    pytest.importorskip("robokots._rust")
+    rng = np.random.default_rng(414)
+    order = 4
+    kots = _make_kots(order=order)
+    motion = rng.standard_normal(order * kots.dof())
+    kots.import_motions(motion)
+    kots.kinematics(backend="rust")
+    state = StateType("link", "arm3", "jerk")
+    rhs = rng.standard_normal((6, 2))
+
+    actual = kots.jacobian_transpose_mul(state, rhs)
+    robot = kots._rust_compiled_robot()
+    _, link_vec_tangent = robot.cmtm_kinematics_tangent(
+        motion, np.eye(order * kots.dof()), order,
+    )
+    link_id = next(i for i, link in enumerate(kots.robot_.links) if link.name == "arm3")
+    expected = link_vec_tangent[link_id, 2].T @ rhs
+    np.testing.assert_allclose(actual, expected, atol=1e-12, rtol=1e-12)
+
+
+def test_rust_cmtm_mixed_local_kinematics_and_dynamics_vjp_composes():
+    pytest.importorskip("robokots._rust")
+    rng = np.random.default_rng(415)
+    order = 4
+    kots = _make_kots(order=order)
+    kots.import_motions(rng.standard_normal(order * kots.dof()))
+    kots.dynamics(backend="rust")
+    kinematic = StateType("link", "arm3", "jerk")
+    dynamic = StateType("joint", "joint3", "force_diff1")
+    rhs = rng.standard_normal((12, 2))
+
+    actual = kots.jacobian_transpose_mul([kinematic, dynamic], rhs)
+    expected = (
+        kots.jacobian_transpose_mul(kinematic, rhs[:6])
+        + kots.jacobian_transpose_mul(dynamic, rhs[6:])
+    )
+    np.testing.assert_allclose(actual, expected, atol=2e-12, rtol=2e-12)
+
+
+@pytest.mark.parametrize("data_type", ["force", "force_diff1"])
+def test_world_link_force_dense_jvp_and_vjp_match_independent_difference(data_type):
+    pytest.importorskip("robokots._rust")
+    rng = np.random.default_rng(416 + (data_type == "force_diff1"))
+    order = 4
+    kots = _make_kots(order=order)
+    motion = rng.standard_normal(order * kots.dof())
+    kots.import_motions(motion)
+    kots.dynamics(backend="rust")
+    state = StateType("link", "arm3", data_type, "world")
+    state_order = state.time_order
+    reduced_motion = motion.reshape(kots.dof(), order)[:, :state_order].reshape(-1)
+    direction = rng.standard_normal(reduced_motion.shape)
+    eps = 1e-7
+
+    def value_at(reduced):
+        full = motion.reshape(kots.dof(), order).copy()
+        full[:, :state_order] = reduced.reshape(kots.dof(), state_order)
+        sample = _make_kots(order=order)
+        sample.import_motions(full.reshape(-1))
+        sample.dynamics(backend="rust")
+        return np.asarray(sample.state_info(state)).reshape(-1)
+
+    finite = (
+        value_at(reduced_motion + eps * direction)
+        - value_at(reduced_motion - eps * direction)
+    ) / (2.0 * eps)
+    jacobian = kots.jacobian(state)
+    np.testing.assert_allclose(jacobian @ direction, finite, atol=2e-6, rtol=2e-6)
+    np.testing.assert_allclose(
+        kots.jacobian_mul(state, direction), finite, atol=2e-6, rtol=2e-6
+    )
+    cotangent = rng.standard_normal(6)
+    np.testing.assert_allclose(
+        kots.jacobian_transpose_mul(state, cotangent),
+        jacobian.T @ cotangent,
+        atol=2e-9,
+        rtol=2e-9,
+    )
+
+
+@pytest.mark.parametrize("data_type", ["force", "force_diff1"])
+def test_world_joint_force_dense_jvp_and_vjp_match_independent_difference(data_type):
+    rng = np.random.default_rng(418 + (data_type == "force_diff1"))
+    order = 4
+    kots = _make_kots(order=order)
+    motion = rng.standard_normal(order * kots.dof())
+    kots.import_motions(motion)
+    kots.dynamics()
+    state = StateType("joint", "joint3", data_type, "world")
+    state_order = state.time_order
+    reduced = motion.reshape(kots.dof(), order)[:, :state_order].reshape(-1)
+    direction = rng.standard_normal(reduced.shape)
+    eps = 1e-7
+
+    def value_at(value):
+        full = motion.reshape(kots.dof(), order).copy()
+        full[:, :state_order] = value.reshape(kots.dof(), state_order)
+        sample = _make_kots(order=order)
+        sample.import_motions(full.reshape(-1))
+        sample.dynamics()
+        return np.asarray(sample.state_info(state)).reshape(-1)
+
+    finite = (value_at(reduced + eps * direction) - value_at(reduced - eps * direction)) / (2 * eps)
+    jacobian = kots.jacobian(state)
+    np.testing.assert_allclose(jacobian @ direction, finite, atol=2e-6, rtol=2e-6)
+    np.testing.assert_allclose(kots.jacobian_mul(state, direction), finite, atol=2e-6, rtol=2e-6)
+    cotangent = rng.standard_normal(6)
+    np.testing.assert_allclose(
+        kots.jacobian_transpose_mul(state, cotangent), jacobian.T @ cotangent,
+        atol=2e-9, rtol=2e-9,
+    )
+
+
+@pytest.mark.parametrize("batched", [False, True])
+def test_rust_world_joint_wrench_vjp_matches_dense_jacobian(batched):
+    pytest.importorskip("robokots._rust")
+    rng = np.random.default_rng(420 + int(batched))
+    kots = _make_kots(order=4)
+    shape = (2, kots.dof() * 4) if batched else (kots.dof() * 4,)
+    kots.import_motions(rng.standard_normal(shape))
+    kots.dynamics(backend="rust", gravity=(0.2, -0.3, -9.81))
+    states = [
+        StateType("joint", "joint3", "momentum", "world"),
+        StateType("joint", "joint3", "force_diff1", "world"),
+    ]
+    jacobian = kots.jacobian(states)
+    rhs = rng.standard_normal(((2,) if batched else ()) + (12, 2))
+    np.testing.assert_allclose(
+        kots.jacobian_transpose_mul(states, rhs),
+        np.swapaxes(jacobian, -1, -2) @ rhs,
+        atol=2e-8,
+        rtol=2e-8,
+    )
+
+
 def test_branched_fixed_mixed_dynamics_jacobian_matches_numerical_and_products():
     rng = np.random.default_rng(42)
     order = 4
@@ -2335,6 +2581,139 @@ def test_rust_gravity_torque_jacobian_uses_rnea_kernels(monkeypatch, batched):
         np.swapaxes(actual, -1, -2) @ cotangent,
         atol=2e-10,
         rtol=2e-10,
+    )
+
+
+def test_rust_cmtm_kinematics_tangent_matches_directional_difference():
+    pytest.importorskip("robokots._rust")
+    order = 4
+    rng = np.random.default_rng(855)
+    kots = _make_kots(order=order)
+    motion = rng.standard_normal(kots.dof() * order)
+    directions = rng.standard_normal((kots.dof() * order, 3))
+    robot = kots._rust_compiled_robot()
+
+    dmat, dvecs = robot.cmtm_kinematics_tangent(motion, directions, order)
+    eps = 1e-7
+    for column in range(directions.shape[-1]):
+        plus = robot.kinematics_cmtm(motion + eps * directions[:, column], order)
+        minus = robot.kinematics_cmtm(motion - eps * directions[:, column], order)
+        np.testing.assert_allclose(
+            dmat[..., column],
+            (plus[0] - minus[0]) / (2.0 * eps),
+            atol=2e-8,
+            rtol=2e-8,
+        )
+        np.testing.assert_allclose(
+            dvecs[..., column],
+            (plus[1] - minus[1]) / (2.0 * eps),
+            atol=3e-8,
+            rtol=3e-8,
+        )
+
+
+def test_rust_cmtm_link_dynamics_tangent_matches_directional_difference():
+    pytest.importorskip("robokots._rust")
+    dynamics_order = 2
+    order = dynamics_order + 2
+    rng = np.random.default_rng(856)
+    kots = _make_kots(order=order)
+    motion = rng.standard_normal(kots.dof() * order)
+    directions = rng.standard_normal((kots.dof() * order, 2))
+    robot = kots._rust_compiled_robot()
+    dmomentum, dforce = robot.cmtm_link_dynamics_tangent(
+        motion, directions, dynamics_order,
+    )
+    eps = 1e-7
+    for column in range(directions.shape[-1]):
+        plus = robot.dynamics_cmtm(motion + eps * directions[:, column], dynamics_order)
+        minus = robot.dynamics_cmtm(motion - eps * directions[:, column], dynamics_order)
+        np.testing.assert_allclose(
+            dmomentum[..., column],
+            (plus[0] - minus[0]) / (2.0 * eps),
+            atol=3e-7,
+            rtol=3e-7,
+        )
+        np.testing.assert_allclose(
+            dforce[..., column],
+            (plus[1] - minus[1]) / (2.0 * eps),
+            atol=3e-7,
+            rtol=3e-7,
+        )
+
+
+def test_rust_cmtm_kinematics_vjp_is_tangent_transpose():
+    pytest.importorskip("robokots._rust")
+    order = 4
+    rhs_cols = 3
+    rng = np.random.default_rng(857)
+    kots = _make_kots(order=order)
+    robot = kots._rust_compiled_robot()
+    motion = rng.standard_normal(kots.dof() * order)
+    mat_rhs = rng.standard_normal((robot.link_num, 4, 4, rhs_cols))
+    vec_rhs = rng.standard_normal((robot.link_num, order - 1, 6, rhs_cols))
+
+    actual = robot.cmtm_kinematics_transpose_matmul_rhs(
+        motion, mat_rhs, vec_rhs, order,
+    )
+    basis = np.eye(kots.dof() * order)
+    dmat, dvec = robot.cmtm_kinematics_tangent(motion, basis, order)
+    expected = (
+        np.einsum("lpqi,lpqr->ir", dmat, mat_rhs)
+        + np.einsum("ltsi,ltsr->ir", dvec, vec_rhs)
+    )
+    np.testing.assert_allclose(actual, expected, atol=1e-12, rtol=1e-12)
+
+
+def test_rust_cmtm_outward_dynamics_vjp_includes_each_wrench_output():
+    pytest.importorskip("robokots._rust")
+    dynamics_order = 2
+    order = dynamics_order + 2
+    rhs_cols = 2
+    rng = np.random.default_rng(858)
+    kots = _make_kots(order=order)
+    robot = kots._rust_compiled_robot()
+    motion = rng.standard_normal(kots.dof() * order)
+    link_momentum_rhs = rng.standard_normal((robot.link_num, dynamics_order + 1, 6, rhs_cols))
+    link_force_rhs = rng.standard_normal((robot.link_num, dynamics_order, 6, rhs_cols))
+    joint_momentum_rhs = rng.standard_normal((robot.joint_num, dynamics_order + 1, 6, rhs_cols))
+    joint_force_rhs = rng.standard_normal((robot.joint_num, dynamics_order, 6, rhs_cols))
+    joint_torque_rhs = rng.standard_normal((robot.joint_num, dynamics_order, rhs_cols))
+
+    actual = robot.dynamics_cmtm_transpose_matmul_rhs(
+        motion,
+        link_momentum_rhs,
+        link_force_rhs,
+        joint_momentum_rhs,
+        joint_force_rhs,
+        joint_torque_rhs,
+        dynamics_order,
+    )
+    basis = np.eye(kots.dof() * order)
+    d_link_momentum, d_link_force = robot.cmtm_link_dynamics_tangent(
+        motion, basis, dynamics_order,
+    )
+    # Isolate the joint series through the complete kernel; this guards the
+    # momentum/force/torque packing independently of the link primitives.
+    joint_only = robot.dynamics_cmtm_transpose_matmul_rhs(
+        motion,
+        np.zeros_like(link_momentum_rhs),
+        np.zeros_like(link_force_rhs),
+        joint_momentum_rhs,
+        joint_force_rhs,
+        joint_torque_rhs,
+        dynamics_order,
+    )
+    link_only = robot.cmtm_link_dynamics_transpose_matmul_rhs(
+        motion, link_momentum_rhs, link_force_rhs, dynamics_order,
+    )
+    np.testing.assert_allclose(actual, link_only + joint_only, atol=1e-12, rtol=1e-12)
+    np.testing.assert_allclose(
+        link_only,
+        np.einsum("ltsi,ltsr->ir", d_link_momentum, link_momentum_rhs)
+        + np.einsum("ltsi,ltsr->ir", d_link_force, link_force_rhs),
+        atol=1e-12,
+        rtol=1e-12,
     )
 
 

@@ -1314,6 +1314,95 @@ def _selected_coord_to_world_link_momentum_grad_mat(
     return mat
 
 
+def _selected_coord_to_world_link_force_grad_mat(
+    robot: RobotStruct,
+    state: dict,
+    links: list,
+    force_order: int = 1,
+    input_order: int | None = None,
+    dim: int = 3,
+) -> np.ndarray:
+    """Coordinate Jacobian of local link-force series transported to world.
+
+    A world force is not merely the local-force Jacobian with a different
+    label: the link CMTM itself varies with the motion.  This mirrors the two
+    product-rule terms used for world momentum, with the force series as the
+    transported arbitrary wrench.
+    """
+    if input_order is None:
+        input_order = force_order + 2
+    dof = dim_to_dof(dim)
+    n_f = dof * force_order
+    mat_link_force = _selected_coord_to_link_force_grad_mat(
+        robot, state, links, force_order=force_order, dim=dim
+    )
+    mat_tan_kine = _selected_coord_to_link_tan_vel_grad_mat(
+        robot, state, links, out_order=force_order, in_order=input_order, dim=dim
+    )
+    mat = np.zeros_like(mat_link_force)
+    factorial = Factorial.mat(force_order, dof)
+    factorial_inv = Factorial.mat_inv(force_order, dof)
+    for i, link in enumerate(links):
+        if link is None:
+            raise ValueError("link_name_list contains invalid link name")
+        row = i * n_f
+        cmtm_wrench = state_dict_to_cmtm_wrench(state, link.name, "link", force_order)
+        block_force = factorial @ cmtm_wrench.mat_adj() @ factorial_inv
+        link_force = state_dict_to_cmvec(state, link.name, "link", "force", force_order)
+        block_tan = factorial @ cmtm_wrench.mat_var_x_arb_vec_jacob(
+            link_force, frame="bframe"
+        )
+        mat[row:row+n_f, :] = (
+            block_force @ mat_link_force[row:row+n_f, :]
+            + block_tan @ mat_tan_kine[row:row+n_f, :]
+        )
+    return mat
+
+
+def _selected_coord_to_world_joint_force_grad_mat(
+    robot: RobotStruct,
+    state: dict,
+    joints: list,
+    force_order: int = 1,
+    input_order: int | None = None,
+    dim: int = 3,
+) -> np.ndarray:
+    if input_order is None:
+        input_order = force_order + 2
+    dof = dim_to_dof(dim)
+    n_f = dof * force_order
+    mat_joint_force = _selected_coord_to_joint_force_grad_mat(
+        robot, state, joints, force_order=force_order, dim=dim
+    )
+    child_links = [robot.links[joint.child_link_id] for joint in joints]
+    mat_tan_kine = _selected_coord_to_link_tan_vel_grad_mat(
+        robot, state, child_links, out_order=force_order,
+        in_order=input_order, dim=dim,
+    )
+    mat = np.zeros_like(mat_joint_force)
+    factorial = Factorial.mat(force_order, dof)
+    factorial_inv = Factorial.mat_inv(force_order, dof)
+    for i, (joint, child_link) in enumerate(zip(joints, child_links)):
+        if joint is None:
+            raise ValueError("joint_name_list contains invalid joint name")
+        row = i * n_f
+        cmtm_wrench = state_dict_to_cmtm_wrench(
+            state, child_link.name, "link", force_order
+        )
+        block_force = factorial @ cmtm_wrench.mat_adj() @ factorial_inv
+        joint_force = state_dict_to_cmvec(
+            state, joint.name, "joint", "force", force_order
+        )
+        block_tan = factorial @ cmtm_wrench.mat_var_x_arb_vec_jacob(
+            joint_force, frame="bframe"
+        )
+        mat[row:row+n_f, :] = (
+            block_force @ mat_joint_force[row:row+n_f, :]
+            + block_tan @ mat_tan_kine[row:row+n_f, :]
+        )
+    return mat
+
+
 def _selected_coord_to_link_force_grad_mat(
     robot: RobotStruct,
     state: dict,
@@ -2313,6 +2402,16 @@ def _outward_link_only_jacobian(
             cache["mat_link_force"] = _selected_coord_to_link_force_grad_mat(robot, state, links, force_order=max_time_order-2, dim=dim)
         return cache["mat_link_force"]
 
+    def get_mat_link_wforce() -> np.ndarray:
+        if max_time_order < 3:
+            raise ValueError("force jacobian requires max_time_order >= 3")
+        if "mat_link_wforce" not in cache:
+            cache["mat_link_wforce"] = _selected_coord_to_world_link_force_grad_mat(
+                robot, state, links, force_order=max_time_order-2,
+                input_order=max_time_order, dim=dim,
+            )
+        return cache["mat_link_wforce"]
+
     jacob_list = []
     for st in state_type_list:
         link = robot.link(st.owner_name)
@@ -2335,7 +2434,8 @@ def _outward_link_only_jacobian(
                 jacob_part = get_mat_link_mom()[..., base + dof*order : base + dof*(order+1), :]
         elif st.data_type in keys_force:
             base = link_id * dof * (max_time_order-2)
-            jacob_part = get_mat_link_force()[..., base + dof*order : base + dof*(order+1), :]
+            source = get_mat_link_wforce() if st.frame_name == "world" else get_mat_link_force()
+            jacob_part = source[..., base + dof*order : base + dof*(order+1), :]
         else:
             raise ValueError("link-only fast path supports only kinematics, momentum, and force states")
 
@@ -2393,6 +2493,16 @@ def _outward_joint_only_jacobian(
             )
         return cache["mat_joint_force"]
 
+    def get_mat_joint_wforce() -> np.ndarray:
+        if max_time_order < 3:
+            raise ValueError("force jacobian requires max_time_order >= 3")
+        if "mat_joint_wforce" not in cache:
+            cache["mat_joint_wforce"] = _selected_coord_to_world_joint_force_grad_mat(
+                robot, state, joints, force_order=max_time_order - 2,
+                input_order=max_time_order, dim=dim,
+            )
+        return cache["mat_joint_wforce"]
+
     def get_mat_joint_torque() -> np.ndarray:
         if max_time_order < 3:
             raise ValueError("torque jacobian requires max_time_order >= 3")
@@ -2419,7 +2529,8 @@ def _outward_joint_only_jacobian(
                 jacob_part = get_mat_joint_mom()[..., base + dof*order : base + dof*(order+1), :]
         elif st.data_type in keys_force:
             base = joint_id * dof * (max_time_order - 2)
-            jacob_part = get_mat_joint_force()[..., base + dof*order : base + dof*(order+1), :]
+            source = get_mat_joint_wforce() if st.frame_name == "world" else get_mat_joint_force()
+            jacob_part = source[..., base + dof*order : base + dof*(order+1), :]
         elif st.data_type in keys_torque:
             base = torque_offset[joint.name]
             jacob_part = get_mat_joint_torque()[..., base + joint.dof*order : base + joint.dof*(order+1), :]

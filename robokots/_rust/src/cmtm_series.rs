@@ -1,6 +1,7 @@
 use crate::spatial::*;
+use crate::cmtm_generic::{set_tangent_cmvecs, tangent_cmvecs, tangent_cmtm_vecs, tangent_mat4};
 use crate::types::RustCompiledRobot;
-use crate::workspace::DynamicsCmtmWorkspace;
+use crate::workspace::{DynamicsCmtmTangentWorkspace, DynamicsCmtmWorkspace};
 
 fn gravity_is_zero(gravity: [f64; 3]) -> bool {
     gravity == [0.0; 3]
@@ -67,7 +68,218 @@ fn gravity_force_series_into(
     }
 }
 
+/// Analytic directional derivative of moving-frame gravity force series.
+#[allow(clippy::too_many_arguments)]
+fn gravity_force_series_tangent_into(
+    link_mat: [[f64; 4]; 4],
+    dlink_mat: [[f64; 4]; 4],
+    link_vel: &[f64],
+    dlink_vel: &[f64],
+    inertia: [[f64; 6]; 6],
+    gravity: [f64; 3],
+    order: usize,
+    local_gravity: &mut [f64],
+    dlocal_gravity: &mut [f64],
+    out: &mut [f64],
+) {
+    if order == 0 { return; }
+    let rt = mat3_transpose(mat3_from_mat4(link_mat));
+    let drt = mat3_transpose(mat3_from_mat4(dlink_mat));
+    local_gravity[..3].copy_from_slice(&mat3_vec(rt, gravity));
+    dlocal_gravity[..3].copy_from_slice(&mat3_vec(drt, gravity));
+    for n in 1..order {
+        let mut value = [0.0; 3];
+        let mut dvalue = [0.0; 3];
+        for k in 0..n {
+            let omega = vec6_from_flat(link_vel, k);
+            let domega = vec6_from_flat(dlink_vel, k);
+            let g = [local_gravity[(n - 1 - k) * 3], local_gravity[(n - 1 - k) * 3 + 1], local_gravity[(n - 1 - k) * 3 + 2]];
+            let dg = [dlocal_gravity[(n - 1 - k) * 3], dlocal_gravity[(n - 1 - k) * 3 + 1], dlocal_gravity[(n - 1 - k) * 3 + 2]];
+            let c = binomial(n - 1, k);
+            for i in 0..3 {
+                value[i] -= c * cross([omega[0], omega[1], omega[2]], g)[i];
+                dvalue[i] -= c * (cross([domega[0], domega[1], domega[2]], g)[i] + cross([omega[0], omega[1], omega[2]], dg)[i]);
+            }
+        }
+        local_gravity[n * 3..(n + 1) * 3].copy_from_slice(&value);
+        dlocal_gravity[n * 3..(n + 1) * 3].copy_from_slice(&dvalue);
+    }
+    for n in 0..order {
+        let dg = [dlocal_gravity[n * 3], dlocal_gravity[n * 3 + 1], dlocal_gravity[n * 3 + 2]];
+        let value = mat6_vec6(inertia, [0.0, 0.0, 0.0, dg[0], dg[1], dg[2]]);
+        for i in 0..6 { out[n * 6 + i] = -value[i]; }
+    }
+}
+
 impl RustCompiledRobot {
+    /// Differentiate local link momentum and force series after the CMTM
+    /// kinematics tangent has been propagated.  Joint wrench accumulation and
+    /// gravity are intentionally layered above this primitive.
+    #[allow(dead_code)]
+    pub(crate) fn dynamics_cmtm_link_tangent_into(
+        &self,
+        motion: &[f64],
+        motion_tangent: &[f64],
+        dynamics_order: usize,
+        gravity: [f64; 3],
+        primal: &mut DynamicsCmtmWorkspace,
+        tangent: &mut DynamicsCmtmTangentWorkspace,
+    ) {
+        let kin_order = dynamics_order + 2;
+        let momentum_order = dynamics_order + 1;
+        self.dynamics_cmtm_into(motion, dynamics_order, gravity, primal);
+        self.kinematics_cmtm_tangent_into(
+            motion,
+            motion_tangent,
+            kin_order,
+            &mut primal.cmtm,
+            tangent,
+        );
+        for link in 0..self.link_num {
+            let vel = cmtm_vecs_slice(&primal.cmtm.link_vecs, link, kin_order);
+            for rhs_col in 0..tangent.rhs_cols {
+                let dvel = tangent_cmtm_vecs(
+                    &tangent.link_vecs,
+                    link,
+                    kin_order,
+                    tangent.rhs_cols,
+                    rhs_col,
+                );
+                let mut dmomentum = vec![0.0; momentum_order * 6];
+                for k in 0..momentum_order {
+                    set_vec6_flat(
+                        &mut dmomentum,
+                        k,
+                        mat6_vec6(self.link_inertia[link], vec6_from_flat(&dvel, k)),
+                    );
+                }
+                set_tangent_cmvecs(
+                    &mut tangent.link_momentum,
+                    link,
+                    momentum_order,
+                    tangent.rhs_cols,
+                    rhs_col,
+                    &dmomentum,
+                );
+                if dynamics_order > 0 {
+                    let momentum = cmvec_slice(&primal.link_momentum, link, momentum_order);
+                    let mut dforce = vec![0.0; dynamics_order * 6];
+                    force_from_velocity_momentum_tangent_into(
+                        vel,
+                        &dvel,
+                        momentum,
+                        &dmomentum,
+                        dynamics_order,
+                        &primal.factorial,
+                        &mut dforce,
+                    );
+                    if !gravity_is_zero(gravity) {
+                        let dmat = tangent_mat4(&tangent.link_mat, link, tangent.rhs_cols, rhs_col);
+                        let mut dgravity = vec![0.0; dynamics_order * 6];
+                        let mut local_g = vec![0.0; dynamics_order * 3];
+                        let mut dlocal_g = vec![0.0; dynamics_order * 3];
+                        gravity_force_series_tangent_into(
+                            mat4_from_flat(&primal.cmtm.link_mat, link), dmat, vel, &dvel,
+                            self.link_inertia[link], gravity, dynamics_order,
+                            &mut local_g, &mut dlocal_g, &mut dgravity,
+                        );
+                        for i in 0..dynamics_order * 6 { dforce[i] += dgravity[i]; }
+                    }
+                    set_tangent_cmvecs(
+                        &mut tangent.link_force,
+                        link,
+                        dynamics_order,
+                        tangent.rhs_cols,
+                        rhs_col,
+                        &dforce,
+                    );
+                }
+            }
+        }
+        // Reverse-tree accumulation mirrors dynamics_cmtm_into.  At this
+        // layer gravity transport is added separately; this block handles the
+        // inertial joint momentum and torque path.
+        for j in (0..self.joint_num).rev() {
+            let child = self.child_link[j];
+            let child_joint_ids = &self.link_child_joints[child];
+            let vel = cmtm_vecs_slice(&primal.cmtm.link_vecs, child, kin_order);
+            for rhs_col in 0..tangent.rhs_cols {
+                let mut d_joint_momentum = tangent_cmvecs(
+                    &tangent.link_momentum, child, momentum_order, tangent.rhs_cols, rhs_col,
+                );
+                for &child_joint in child_joint_ids {
+                    let joint_mat = mat4_from_flat(&primal.cmtm.joint_mat, child_joint);
+                    let origin = mat4_from_rot_pos(self.origin_r[child_joint], self.origin_p[child_joint]);
+                    let rel_mat = mat4_mul(origin, joint_mat);
+                    let drel_mat = mat4_mul(
+                        origin,
+                        tangent_mat4(&tangent.joint_mat, child_joint, tangent.rhs_cols, rhs_col),
+                    );
+                    let rel_vecs = cmtm_vecs_slice(&primal.cmtm.joint_vecs, child_joint, kin_order);
+                    let drel_vecs = tangent_cmtm_vecs(
+                        &tangent.joint_vecs, child_joint, kin_order, tangent.rhs_cols, rhs_col,
+                    );
+                    let rhs = cmvec_slice(&primal.joint_momentum, child_joint, momentum_order);
+                    let drhs = tangent_cmvecs(
+                        &tangent.joint_momentum, child_joint, momentum_order, tangent.rhs_cols, rhs_col,
+                    );
+                    let mut blocks = vec![[[0.0; 6]; 6]; momentum_order];
+                    let mut dblocks = vec![[[0.0; 6]; 6]; momentum_order];
+                    let mut transported = vec![0.0; momentum_order * 6];
+                    let mut dtransported = vec![0.0; momentum_order * 6];
+                    cmtm_apply_mat_adj_wrench_tangent_into(
+                        rel_mat, &rel_vecs[..(momentum_order - 1) * 6], drel_mat, &drel_vecs[..(momentum_order - 1) * 6],
+                        rhs, &drhs, momentum_order, &primal.factorial,
+                        &mut blocks, &mut dblocks, &mut transported, &mut dtransported,
+                    );
+                    for i in 0..momentum_order * 6 { d_joint_momentum[i] += dtransported[i]; }
+                }
+                set_tangent_cmvecs(&mut tangent.joint_momentum, j, momentum_order, tangent.rhs_cols, rhs_col, &d_joint_momentum);
+                let mut dgravity_force = vec![0.0; dynamics_order * 6];
+                if !gravity_is_zero(gravity) {
+                    let dvel = tangent_cmtm_vecs(&tangent.link_vecs, child, kin_order, tangent.rhs_cols, rhs_col);
+                    let mut local_g = vec![0.0; dynamics_order * 3];
+                    let mut dlocal_g = vec![0.0; dynamics_order * 3];
+                    gravity_force_series_tangent_into(
+                        mat4_from_flat(&primal.cmtm.link_mat, child),
+                        tangent_mat4(&tangent.link_mat, child, tangent.rhs_cols, rhs_col),
+                        vel, &dvel, self.link_inertia[child], gravity, dynamics_order,
+                        &mut local_g, &mut dlocal_g, &mut dgravity_force,
+                    );
+                    for &child_joint in child_joint_ids {
+                        let origin = mat4_from_rot_pos(self.origin_r[child_joint], self.origin_p[child_joint]);
+                        let rel_mat = mat4_mul(origin, mat4_from_flat(&primal.cmtm.joint_mat, child_joint));
+                        let drel_mat = mat4_mul(origin, tangent_mat4(&tangent.joint_mat, child_joint, tangent.rhs_cols, rhs_col));
+                        let rel_vecs = cmtm_vecs_slice(&primal.cmtm.joint_vecs, child_joint, kin_order);
+                        let drel_vecs = tangent_cmtm_vecs(&tangent.joint_vecs, child_joint, kin_order, tangent.rhs_cols, rhs_col);
+                        let rhs = cmvec_slice(&primal.joint_gravity_force, child_joint, dynamics_order);
+                        let drhs = tangent_cmvecs(&tangent.joint_gravity_force, child_joint, dynamics_order, tangent.rhs_cols, rhs_col);
+                        let mut blocks = vec![[[0.0; 6]; 6]; dynamics_order];
+                        let mut dblocks = vec![[[0.0; 6]; 6]; dynamics_order];
+                        let mut transported = vec![0.0; dynamics_order * 6];
+                        let mut dtransported = vec![0.0; dynamics_order * 6];
+                        cmtm_apply_mat_adj_wrench_tangent_into(rel_mat, &rel_vecs[..dynamics_order.saturating_sub(1) * 6], drel_mat, &drel_vecs[..dynamics_order.saturating_sub(1) * 6], rhs, &drhs, dynamics_order, &primal.factorial, &mut blocks, &mut dblocks, &mut transported, &mut dtransported);
+                        for i in 0..dynamics_order * 6 { dgravity_force[i] += dtransported[i]; }
+                    }
+                    set_tangent_cmvecs(&mut tangent.joint_gravity_force, j, dynamics_order, tangent.rhs_cols, rhs_col, &dgravity_force);
+                }
+                let mut dforce = vec![0.0; dynamics_order * 6];
+                force_from_velocity_momentum_tangent_into(
+                    vel, &tangent_cmtm_vecs(&tangent.link_vecs, child, kin_order, tangent.rhs_cols, rhs_col),
+                    cmvec_slice(&primal.joint_momentum, j, momentum_order), &d_joint_momentum,
+                    dynamics_order, &primal.factorial, &mut dforce,
+                );
+                for i in 0..dynamics_order * 6 { dforce[i] += dgravity_force[i]; }
+                set_tangent_cmvecs(&mut tangent.joint_force, j, dynamics_order, tangent.rhs_cols, rhs_col, &dforce);
+                if self.q_index[j] >= 0 {
+                    for k in 0..dynamics_order {
+                        tangent.joint_torque[(j * dynamics_order + k) * tangent.rhs_cols + rhs_col] =
+                            dot3(self.axis[j], [dforce[k * 6], dforce[k * 6 + 1], dforce[k * 6 + 2]]);
+                    }
+                }
+            }
+        }
+    }
     pub(crate) fn dynamics_cmtm_into(
         &self,
         motion: &[f64],
@@ -121,6 +333,9 @@ impl RustCompiledRobot {
                         &mut ws.tmp_local_gravity,
                         &mut ws.tmp_gravity_force,
                     );
+                    let gravity_offset = child * dynamics_order * 3;
+                    ws.link_local_gravity[gravity_offset..gravity_offset + dynamics_order * 3]
+                        .copy_from_slice(&ws.tmp_local_gravity[..dynamics_order * 3]);
                     for i in 0..dynamics_order * 6 {
                         ws.tmp_force[i] += ws.tmp_gravity_force[i];
                     }
@@ -238,6 +453,9 @@ impl RustCompiledRobot {
                     &mut ws.tmp_local_gravity,
                     &mut ws.tmp_gravity_force,
                 );
+                let gravity_offset = world * dynamics_order * 3;
+                ws.link_local_gravity[gravity_offset..gravity_offset + dynamics_order * 3]
+                    .copy_from_slice(&ws.tmp_local_gravity[..dynamics_order * 3]);
                 for i in 0..dynamics_order * 6 {
                     ws.tmp_force[i] += ws.tmp_gravity_force[i];
                 }
