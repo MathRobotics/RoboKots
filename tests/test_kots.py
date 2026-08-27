@@ -2607,6 +2607,40 @@ def test_rust_gravity_torque_jacobian_uses_rnea_kernels(monkeypatch, batched):
     )
 
 
+@pytest.mark.parametrize("batched", [False, True])
+def test_jacobian_transpose_mul_many_fuses_torque_state_refs(monkeypatch, batched):
+    pytest.importorskip("robokots._rust")
+    rng = np.random.default_rng(854 + int(batched))
+    order = 4
+    kots = _make_kots(order=order)
+    motion_shape = (2, kots.dof() * order) if batched else (kots.dof() * order,)
+    kots.import_motions(rng.standard_normal(motion_shape))
+    kots.dynamics(backend="rust", gravity=(0.2, -0.3, -9.81), materialize_dict=False)
+    torque = StateType("joint", "joint3", "torque")
+    torque_d1 = StateType("joint", "joint3", "torque_diff1")
+    rhs_shape = (2, 1, 3) if batched else (1, 3)
+    torque_rhs = rng.standard_normal(rhs_shape)
+    torque_d1_rhs = rng.standard_normal(rhs_shape)
+    fused_rhs = np.concatenate([torque_rhs, torque_d1_rhs], axis=-2)
+    expected = kots.jacobian_transpose_mul([torque, torque_d1], fused_rhs)
+
+    calls = 0
+    original = kots._rust_cmtm_outward_dynamics_jacobian_transpose_apply
+
+    def counted(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(kots, "_rust_cmtm_outward_dynamics_jacobian_transpose_apply", counted)
+    actual = kots.jacobian_transpose_mul_many([
+        (torque, torque_rhs),
+        (torque_d1, torque_d1_rhs),
+    ])
+    assert calls == 1
+    np.testing.assert_allclose(actual, expected, atol=2e-10, rtol=2e-10)
+
+
 def test_rust_cmtm_kinematics_tangent_matches_directional_difference():
     pytest.importorskip("robokots._rust")
     order = 4

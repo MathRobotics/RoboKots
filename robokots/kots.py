@@ -2416,6 +2416,61 @@ class Kots():
     state = self.outward_state_ if self.outward_state_ is not None else self.state_dict_
     return self._jacobian_transpose_mul_from_state(state, state_type_list, max_order, rhs, batch_shape, rhs_is_matrix)
 
+  def jacobian_transpose_mul_many(self, state_rhs_pairs, numerical : bool = False):
+    """Fuse VJPs for several state references into one reverse pass.
+
+    ``state_rhs_pairs`` is a non-empty sequence of ``(state_type, rhs)``
+    pairs.  Each ``state_type`` accepts the same ``StateType`` or list form as
+    :meth:`jacobian_transpose_mul`; its RHS uses that state's own output-row
+    count.  All pairs must use either vectors or matrices.  Matrix RHS inputs
+    must have a common final column count.  The returned VJP is the sum over
+    pairs, retaining that common RHS-column axis.
+
+    This is intended for callers which naturally group cotangents by a state
+    reference (for example ``torque`` and ``torque_diff1``).  The state rows
+    are concatenated before dispatch, so compatible CMTM dynamics states use
+    one Rust reverse recurrence rather than one recurrence per group.
+    """
+    if not isinstance(state_rhs_pairs, (list, tuple)) or not state_rhs_pairs:
+      raise ValueError("state_rhs_pairs must be a non-empty sequence of (state_type, rhs) pairs")
+
+    batch_shape = self.batch_shape_ if self.batch_shape_ else self.motions_.batch_shape()
+    state_type_list = []
+    rhs_parts = []
+    rhs_is_matrix = None
+    rhs_cols = None
+
+    for index, pair in enumerate(state_rhs_pairs):
+      if not isinstance(pair, (list, tuple)) or len(pair) != 2:
+        raise ValueError(f"state_rhs_pairs[{index}] must be a (state_type, rhs) pair")
+      pair_states = self._state_type_list(pair[0])
+      if not pair_states:
+        raise ValueError(f"state_rhs_pairs[{index}] must contain at least one StateType")
+      pair_output_dim = self._jacobian_output_dim(pair_states)
+      pair_rhs, pair_is_matrix = batch_api.broadcast_feature_rhs(
+        pair[1], batch_shape, pair_output_dim, name=f"state_rhs_pairs[{index}][1]",
+      )
+      if rhs_is_matrix is None:
+        rhs_is_matrix = pair_is_matrix
+        rhs_cols = pair_rhs.shape[-1] if pair_is_matrix else None
+      elif rhs_is_matrix != pair_is_matrix:
+        raise ValueError("all state_rhs_pairs RHS values must all be vectors or all be matrices")
+      elif pair_is_matrix and pair_rhs.shape[-1] != rhs_cols:
+        raise ValueError("all matrix RHS values must have the same number of columns")
+      state_type_list.extend(pair_states)
+      rhs_parts.append(pair_rhs)
+
+    fused_rhs = np.concatenate(rhs_parts, axis=-2 if rhs_is_matrix else -1)
+    max_order = StateType.max_time_order(state_type_list)
+    if numerical:
+      return self._jacobian_transpose_mul_numerical(
+        state_type_list, max_order, fused_rhs, rhs_is_matrix,
+      )
+    state = self.outward_state_ if self.outward_state_ is not None else self.state_dict_
+    return self._jacobian_transpose_mul_from_state(
+      state, state_type_list, max_order, fused_rhs, batch_shape, rhs_is_matrix,
+    )
+
   def jacobian_tensor(self, state_type, numerical : bool = False) -> JacobianTensor:
     state_type_list = self._state_type_list(state_type)
     return JacobianTensor.from_array(self.jacobian(state_type_list, numerical=numerical), state_type_list)
