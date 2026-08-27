@@ -8,7 +8,6 @@ use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict, PyList};
 
 use crate::model::*;
-use crate::cmtm_generic::{tangent_cmvecs, tangent_cmtm_vecs, tangent_mat4};
 use crate::pinocchio_like::PinocchioLikeWorkspace;
 use crate::spatial::*;
 use crate::types::{RustBatchOutwardData, RustCompiledRobot, RustFastData, RustOutwardData};
@@ -89,37 +88,6 @@ fn gravity_vec3(gravity: Option<PyReadonlyArray1<'_, f64>>) -> PyResult<[f64; 3]
     Ok([gravity[0], gravity[1], gravity[2]])
 }
 
-/// Contract one scalar-major tangent buffer with a block of output
-/// cotangents.  Tangent values are laid out as `(output_scalar, input_scalar)`
-/// and the cotangent block as `(output_scalar, rhs)`.  This helper is shared
-/// by the outward CMTM VJP exports so every public output family has exactly
-/// the same transpose/layout convention.
-fn accumulate_cmtm_vjp(
-    out: &mut [f64],
-    tangent: &[f64],
-    cotangent: &[f64],
-    output_scalars: usize,
-    input_scalars: usize,
-    rhs_cols: usize,
-) {
-    debug_assert_eq!(tangent.len(), output_scalars * input_scalars);
-    debug_assert_eq!(cotangent.len(), output_scalars * rhs_cols);
-    for output in 0..output_scalars {
-        let tangent_row = &tangent[output * input_scalars..(output + 1) * input_scalars];
-        let cotangent_row = &cotangent[output * rhs_cols..(output + 1) * rhs_cols];
-        for input in 0..input_scalars {
-            let derivative = tangent_row[input];
-            if derivative == 0.0 {
-                continue;
-            }
-            for rhs in 0..rhs_cols {
-                out[input * rhs_cols + rhs] += derivative * cotangent_row[rhs];
-            }
-        }
-    }
-
-}
-
 fn cmtm_world_wrench_value(
     elem_mat: [[f64; 4]; 4],
     elem_vecs: &[f64],
@@ -152,30 +120,6 @@ fn cmtm_world_wrench_value(
         .iter()
         .map(|value| value * scale)
         .collect()
-}
-
-#[allow(clippy::too_many_arguments)]
-fn cmtm_world_wrench_tangent_value_into(
-    mat: [[f64; 4]; 4],
-    vecs: &[f64],
-    dmat: [[f64; 4]; 4],
-    dvecs: &[f64],
-    rhs: &[f64],
-    drhs: &[f64],
-    key_order: usize,
-    fact: &[f64],
-    blocks: &mut [[[f64; 6]; 6]],
-    dblocks: &mut [[[f64; 6]; 6]],
-    out: &mut [f64],
-    dout: &mut [f64],
-) -> [f64; 6] {
-    cmtm_apply_mat_adj_wrench_tangent_into(
-        mat, vecs, dmat, dvecs, rhs, drhs, key_order, &fact[..key_order],
-        &mut blocks[..key_order], &mut dblocks[..key_order],
-        &mut out[..key_order * 6], &mut dout[..key_order * 6],
-    );
-    let start = (key_order - 1) * 6;
-    [dout[start], dout[start + 1], dout[start + 2], dout[start + 3], dout[start + 4], dout[start + 5]]
 }
 
 fn order1_link_momentum_value(
@@ -1443,25 +1387,11 @@ impl RustCompiledRobot {
         let cotangent = torque_cotangent.as_slice()?;
         let input_len = self.dof * kin_order;
 
-        // The CMTM recurrence already provides an analytic multi-RHS Jv
-        // kernel.  Seed it with the scalar basis once, then contract its
-        // output axis with the requested cotangent block.  This is kept fully
-        // in Rust: no dense Jacobian crosses the Python boundary.
-        let mut basis = vec![0.0; input_len * input_len];
-        for i in 0..input_len { basis[i * input_len + i] = 1.0; }
         let mut primal = DynamicsCmtmWorkspace::new(self, dynamics_order);
-        let mut tangent = DynamicsCmtmTangentWorkspace::new(self, dynamics_order, input_len);
-        self.dynamics_cmtm_link_tangent_into(
-            motion, &basis, dynamics_order, gravity_vec3(gravity)?, &mut primal, &mut tangent,
-        );
         let mut out = vec![0.0; input_len * rhs_cols];
-        accumulate_cmtm_vjp(
-            &mut out,
-            &tangent.joint_torque,
-            cotangent,
-            self.joint_num * dynamics_order,
-            input_len,
-            rhs_cols,
+        self.dynamics_joint_torque_series_reverse_into(
+            motion, cotangent, dynamics_order, gravity_vec3(gravity)?, rhs_cols,
+            &mut primal, &mut out,
         );
         Ok(out.into_pyarray(py).reshape([input_len, rhs_cols])?)
     }
@@ -1491,28 +1421,15 @@ impl RustCompiledRobot {
         let motions = motions.as_slice()?;
         let cotangents = torque_cotangents.as_slice()?;
         let gravity = gravity_vec3(gravity)?;
-        let mut basis = vec![0.0; input_len * input_len];
-        for i in 0..input_len { basis[i * input_len + i] = 1.0; }
         let mut out = vec![0.0; batch * input_len * rhs_cols];
         let mut primal = DynamicsCmtmWorkspace::new(self, dynamics_order);
-        let mut tangent = DynamicsCmtmTangentWorkspace::new(self, dynamics_order, input_len);
         for sample in 0..batch {
-            self.dynamics_cmtm_link_tangent_into(
-                &motions[sample * input_len..(sample + 1) * input_len], &basis,
-                dynamics_order, gravity, &mut primal, &mut tangent,
+            self.dynamics_joint_torque_series_reverse_into(
+                &motions[sample * input_len..(sample + 1) * input_len],
+                &cotangents[sample * self.joint_num * dynamics_order * rhs_cols..(sample + 1) * self.joint_num * dynamics_order * rhs_cols],
+                dynamics_order, gravity, rhs_cols, &mut primal,
+                &mut out[sample * input_len * rhs_cols..(sample + 1) * input_len * rhs_cols],
             );
-            for joint in 0..self.joint_num {
-                for time in 0..dynamics_order {
-                    for input in 0..input_len {
-                        let derivative = tangent.joint_torque
-                            [(joint * dynamics_order + time) * input_len + input];
-                        for rhs in 0..rhs_cols {
-                            out[(sample * input_len + input) * rhs_cols + rhs] += derivative
-                                * cotangents[((sample * self.joint_num + joint) * dynamics_order + time) * rhs_cols + rhs];
-                        }
-                    }
-                }
-            }
         }
         Ok(out.into_pyarray(py).reshape([batch, input_len, rhs_cols])?)
     }
@@ -1544,19 +1461,13 @@ impl RustCompiledRobot {
             ));
         }
         let rhs_cols = mat_shape[3];
-        let mut basis = vec![0.0; input_len * input_len];
-        for i in 0..input_len { basis[i * input_len + i] = 1.0; }
         let mut primal = CmtmWorkspace::new(self, order);
-        let mut tangent = DynamicsCmtmTangentWorkspace::new(self, order - 2, input_len);
-        self.kinematics_cmtm_tangent_into(motion, &basis, order, &mut primal, &mut tangent);
         let mut out = vec![0.0; input_len * rhs_cols];
-        accumulate_cmtm_vjp(
-            &mut out, &tangent.link_mat, link_mat_cotangent.as_slice()?, self.link_num * 16,
-            input_len, rhs_cols,
-        );
-        accumulate_cmtm_vjp(
-            &mut out, &tangent.link_vecs, link_vec_cotangent.as_slice()?,
-            self.link_num * (order - 1) * 6, input_len, rhs_cols,
+        let joint_mat_zero = vec![0.0; self.joint_num * 16 * rhs_cols];
+        let joint_vec_zero = vec![0.0; self.joint_num * (order - 1) * 6 * rhs_cols];
+        self.kinematics_cmtm_outward_reverse_into(
+            motion, order, link_mat_cotangent.as_slice()?, link_vec_cotangent.as_slice()?,
+            &joint_mat_zero, &joint_vec_zero, rhs_cols, &mut primal, &mut out,
         );
         Ok(out.into_pyarray(py).reshape([input_len, rhs_cols])?)
     }
@@ -1590,19 +1501,13 @@ impl RustCompiledRobot {
             ));
         }
         let rhs_cols = link_shape[3];
-        let mut basis = vec![0.0; input_len * input_len];
-        for i in 0..input_len { basis[i * input_len + i] = 1.0; }
         let mut primal = CmtmWorkspace::new(self, order);
-        let mut tangent = DynamicsCmtmTangentWorkspace::new(self, order - 2, input_len);
-        self.kinematics_cmtm_tangent_into(motion, &basis, order, &mut primal, &mut tangent);
         let mut out = vec![0.0; input_len * rhs_cols];
-        accumulate_cmtm_vjp(
-            &mut out, &tangent.link_vecs, link_vec_cotangent.as_slice()?,
-            self.link_num * (order - 1) * 6, input_len, rhs_cols,
-        );
-        accumulate_cmtm_vjp(
-            &mut out, &tangent.joint_vecs, joint_vec_cotangent.as_slice()?,
-            self.joint_num * (order - 1) * 6, input_len, rhs_cols,
+        let link_mat_zero = vec![0.0; self.link_num * 16 * rhs_cols];
+        let joint_mat_zero = vec![0.0; self.joint_num * 16 * rhs_cols];
+        self.kinematics_cmtm_outward_reverse_into(
+            motion, order, &link_mat_zero, link_vec_cotangent.as_slice()?,
+            &joint_mat_zero, joint_vec_cotangent.as_slice()?, rhs_cols, &mut primal, &mut out,
         );
         Ok(out.into_pyarray(py).reshape([input_len, rhs_cols])?)
     }
@@ -1635,21 +1540,14 @@ impl RustCompiledRobot {
             ));
         }
         let rhs_cols = momentum_shape[3];
-        let mut basis = vec![0.0; input_len * input_len];
-        for i in 0..input_len { basis[i * input_len + i] = 1.0; }
         let mut primal = DynamicsCmtmWorkspace::new(self, dynamics_order);
-        let mut tangent = DynamicsCmtmTangentWorkspace::new(self, dynamics_order, input_len);
-        self.dynamics_cmtm_link_tangent_into(
-            motion, &basis, dynamics_order, gravity_vec3(gravity)?, &mut primal, &mut tangent,
-        );
         let mut out = vec![0.0; input_len * rhs_cols];
-        accumulate_cmtm_vjp(
-            &mut out, &tangent.link_momentum, link_momentum_cotangent.as_slice()?,
-            self.link_num * (dynamics_order + 1) * 6, input_len, rhs_cols,
-        );
-        accumulate_cmtm_vjp(
-            &mut out, &tangent.link_force, link_force_cotangent.as_slice()?,
-            self.link_num * dynamics_order * 6, input_len, rhs_cols,
+        self.dynamics_cmtm_reverse_into(
+            motion, link_momentum_cotangent.as_slice()?, link_force_cotangent.as_slice()?,
+            &vec![0.0; self.joint_num * (dynamics_order + 1) * 6 * rhs_cols],
+            &vec![0.0; self.joint_num * dynamics_order * 6 * rhs_cols],
+            &vec![0.0; self.joint_num * dynamics_order * rhs_cols], dynamics_order,
+            gravity_vec3(gravity)?, rhs_cols, &mut primal, &mut out,
         );
         Ok(out.into_pyarray(py).reshape([input_len, rhs_cols])?)
     }
@@ -1686,19 +1584,14 @@ impl RustCompiledRobot {
             return Err(PyValueError::new_err("outward CMTM cotangent shapes or rhs_cols are invalid"));
         }
         let rhs_cols = lm[3];
-        let mut basis = vec![0.0; input_len * input_len];
-        for i in 0..input_len { basis[i * input_len + i] = 1.0; }
         let mut primal = DynamicsCmtmWorkspace::new(self, dynamics_order);
-        let mut tangent = DynamicsCmtmTangentWorkspace::new(self, dynamics_order, input_len);
-        self.dynamics_cmtm_link_tangent_into(
-            motion, &basis, dynamics_order, gravity_vec3(gravity)?, &mut primal, &mut tangent,
-        );
         let mut out = vec![0.0; input_len * rhs_cols];
-        accumulate_cmtm_vjp(&mut out, &tangent.link_momentum, link_momentum_cotangent.as_slice()?, self.link_num * (dynamics_order + 1) * 6, input_len, rhs_cols);
-        accumulate_cmtm_vjp(&mut out, &tangent.link_force, link_force_cotangent.as_slice()?, self.link_num * dynamics_order * 6, input_len, rhs_cols);
-        accumulate_cmtm_vjp(&mut out, &tangent.joint_momentum, joint_momentum_cotangent.as_slice()?, self.joint_num * (dynamics_order + 1) * 6, input_len, rhs_cols);
-        accumulate_cmtm_vjp(&mut out, &tangent.joint_force, joint_force_cotangent.as_slice()?, self.joint_num * dynamics_order * 6, input_len, rhs_cols);
-        accumulate_cmtm_vjp(&mut out, &tangent.joint_torque, joint_torque_cotangent.as_slice()?, self.joint_num * dynamics_order, input_len, rhs_cols);
+        self.dynamics_cmtm_reverse_into(
+            motion, link_momentum_cotangent.as_slice()?, link_force_cotangent.as_slice()?,
+            joint_momentum_cotangent.as_slice()?, joint_force_cotangent.as_slice()?,
+            joint_torque_cotangent.as_slice()?, dynamics_order, gravity_vec3(gravity)?,
+            rhs_cols, &mut primal, &mut out,
+        );
         Ok(out.into_pyarray(py).reshape([input_len, rhs_cols])?)
     }
 
@@ -1744,23 +1637,20 @@ impl RustCompiledRobot {
         let jm_len = self.joint_num * (dynamics_order + 1) * 6 * rhs_cols;
         let jf_len = self.joint_num * dynamics_order * 6 * rhs_cols;
         let jt_len = self.joint_num * dynamics_order * rhs_cols;
-        let mut basis = vec![0.0; input_len * input_len];
-        for i in 0..input_len { basis[i * input_len + i] = 1.0; }
         let gravity = gravity_vec3(gravity)?;
         let mut primal = DynamicsCmtmWorkspace::new(self, dynamics_order);
-        let mut tangent = DynamicsCmtmTangentWorkspace::new(self, dynamics_order, input_len);
         let mut out = vec![0.0; batch * input_len * rhs_cols];
         for sample in 0..batch {
-            self.dynamics_cmtm_link_tangent_into(
-                &motions[sample * input_len..(sample + 1) * input_len], &basis,
-                dynamics_order, gravity, &mut primal, &mut tangent,
-            );
             let out_sample = &mut out[sample * input_len * rhs_cols..(sample + 1) * input_len * rhs_cols];
-            accumulate_cmtm_vjp(out_sample, &tangent.link_momentum, &lm[sample * lm_len..(sample + 1) * lm_len], self.link_num * (dynamics_order + 1) * 6, input_len, rhs_cols);
-            accumulate_cmtm_vjp(out_sample, &tangent.link_force, &lf[sample * lf_len..(sample + 1) * lf_len], self.link_num * dynamics_order * 6, input_len, rhs_cols);
-            accumulate_cmtm_vjp(out_sample, &tangent.joint_momentum, &jm[sample * jm_len..(sample + 1) * jm_len], self.joint_num * (dynamics_order + 1) * 6, input_len, rhs_cols);
-            accumulate_cmtm_vjp(out_sample, &tangent.joint_force, &jf[sample * jf_len..(sample + 1) * jf_len], self.joint_num * dynamics_order * 6, input_len, rhs_cols);
-            accumulate_cmtm_vjp(out_sample, &tangent.joint_torque, &jt[sample * jt_len..(sample + 1) * jt_len], self.joint_num * dynamics_order, input_len, rhs_cols);
+            self.dynamics_cmtm_reverse_into(
+                &motions[sample * input_len..(sample + 1) * input_len],
+                &lm[sample * lm_len..(sample + 1) * lm_len],
+                &lf[sample * lf_len..(sample + 1) * lf_len],
+                &jm[sample * jm_len..(sample + 1) * jm_len],
+                &jf[sample * jf_len..(sample + 1) * jf_len],
+                &jt[sample * jt_len..(sample + 1) * jt_len], dynamics_order, gravity,
+                rhs_cols, &mut primal, out_sample,
+            );
         }
         Ok(out.into_pyarray(py).reshape([batch, input_len, rhs_cols])?)
     }
@@ -1795,7 +1685,7 @@ impl RustCompiledRobot {
         let momentum_cotangent = world_link_momentum_cotangent.as_slice()?;
         let force_cotangent = world_link_force_cotangent.as_slice()?;
         let mut out = vec![0.0; input_len * rhs_cols];
-        self.world_link_dynamics_cmtm_vjp_into(
+        self.world_link_dynamics_cmtm_reverse_vjp_into(
             motion, momentum_cotangent, force_cotangent, dynamics_order,
             gravity_vec3(gravity)?, rhs_cols, &mut out,
         );
@@ -1865,7 +1755,7 @@ impl RustCompiledRobot {
         let force_len = self.link_num * dynamics_order * 6 * rhs_cols;
         let mut out = vec![0.0; batch * input_len * rhs_cols];
         for sample in 0..batch {
-            self.world_link_dynamics_cmtm_vjp_into(
+            self.world_link_dynamics_cmtm_reverse_vjp_into(
                 &motions[sample * input_len..(sample + 1) * input_len],
                 &momentum[sample * momentum_len..(sample + 1) * momentum_len],
                 &force[sample * force_len..(sample + 1) * force_len], dynamics_order, gravity,
@@ -2227,80 +2117,85 @@ impl RustCompiledRobot {
 }
 
 impl RustCompiledRobot {
-    /// Accumulate the VJP of the complete local-to-world link wrench
-    /// transport.  The public link and joint APIs share this kernel; joint
-    /// cotangents are reduced to links before arriving here.
-    fn world_link_dynamics_cmtm_vjp_into(
-        &self,
-        motion: &[f64],
-        momentum_cotangent: &[f64],
-        force_cotangent: &[f64],
-        dynamics_order: usize,
-        gravity: [f64; 3],
-        rhs_cols: usize,
-        out: &mut [f64],
+    /// True reverse VJP for local link wrenches expressed in world frame.
+    /// The world transport is reversed into local wrench and kinematics
+    /// cotangents, then the shared local dynamics/kinematics reverse kernels
+    /// complete the propagation to motion.
+    fn world_link_dynamics_cmtm_reverse_vjp_into(
+        &self, motion: &[f64], momentum_cotangent: &[f64], force_cotangent: &[f64],
+        dynamics_order: usize, gravity: [f64; 3], rhs_cols: usize, out: &mut [f64],
     ) {
         let kin_order = dynamics_order + 2;
         let input_len = self.dof * kin_order;
-        let mut basis = vec![0.0; input_len * input_len];
-        for input in 0..input_len {
-            basis[input * input_len + input] = 1.0;
-        }
+        let momentum_order = dynamics_order + 1;
+        let vec_len = (kin_order - 1) * 6;
         let mut primal = DynamicsCmtmWorkspace::new(self, dynamics_order);
-        let mut tangent = DynamicsCmtmTangentWorkspace::new(self, dynamics_order, input_len);
-        let mut factorial = vec![1.0; dynamics_order + 1];
-        fill_factorial_table(&mut factorial);
-        let mut blocks = vec![[[0.0; 6]; 6]; dynamics_order + 1];
-        let mut dblocks = vec![[[0.0; 6]; 6]; dynamics_order + 1];
-        let mut transformed = vec![0.0; (dynamics_order + 1) * 6];
-        let mut dtransformed = vec![0.0; (dynamics_order + 1) * 6];
-        self.dynamics_cmtm_link_tangent_into(
-            motion, &basis, dynamics_order, gravity, &mut primal, &mut tangent,
-        );
+        self.dynamics_cmtm_into(motion, dynamics_order, gravity, &mut primal);
+        let mut local_momentum_bar = vec![0.0; self.link_num * momentum_order * 6 * rhs_cols];
+        let mut local_force_bar = vec![0.0; self.link_num * dynamics_order * 6 * rhs_cols];
+        let mut link_mat_bar = vec![0.0; self.link_num * 16 * rhs_cols];
+        let mut link_vec_bar = vec![0.0; self.link_num * vec_len * rhs_cols];
+
         for link in 0..self.link_num {
             let mat = mat4_from_flat(&primal.cmtm.link_mat, link);
             let vecs = cmtm_vecs_slice(&primal.cmtm.link_vecs, link, kin_order);
-            let momentum = cmvec_slice(&primal.link_momentum, link, dynamics_order + 1);
+            let momentum = cmvec_slice(&primal.link_momentum, link, momentum_order);
             let force = cmvec_slice(&primal.link_force, link, dynamics_order);
-            for input in 0..input_len {
-                let dmat = tangent_mat4(&tangent.link_mat, link, input_len, input);
-                let dvecs = tangent_cmtm_vecs(
-                    &tangent.link_vecs, link, kin_order, input_len, input,
-                );
-                let dmomentum = tangent_cmvecs(
-                    &tangent.link_momentum, link, dynamics_order + 1, input_len, input,
-                );
-                let dforce = tangent_cmvecs(
-                    &tangent.link_force, link, dynamics_order, input_len, input,
-                );
-                for time in 0..=dynamics_order {
-                    let value = cmtm_world_wrench_tangent_value_into(
-                        mat, &vecs[..time * 6], dmat, &dvecs[..time * 6],
-                        &momentum[..(time + 1) * 6], &dmomentum[..(time + 1) * 6], time + 1,
-                        &factorial, &mut blocks, &mut dblocks, &mut transformed, &mut dtransformed,
-                    );
-                    for component in 0..6 {
-                        for rhs in 0..rhs_cols {
-                            out[input * rhs_cols + rhs] += value[component]
-                                * momentum_cotangent[((link * (dynamics_order + 1) + time) * 6 + component) * rhs_cols + rhs];
-                        }
+            for rhs in 0..rhs_cols {
+                // The transport reverse handles every output coefficient at
+                // once.  This replaces the former O(order^2) sequence of
+                // prefix-series calls and preserves cross-coefficient terms.
+                let mut reverse_transport = |raw_rhs: &[f64], target: &[f64], order: usize,
+                                             local_bar: &mut [f64]| {
+                    let mut target_bar = vec![0.0; order * 6];
+                    for i in 0..order * 6 {
+                        target_bar[i] = target[(link * order * 6 + i) * rhs_cols + rhs];
                     }
-                }
-                for time in 0..dynamics_order {
-                    let value = cmtm_world_wrench_tangent_value_into(
-                        mat, &vecs[..time * 6], dmat, &dvecs[..time * 6],
-                        &force[..(time + 1) * 6], &dforce[..(time + 1) * 6], time + 1,
-                        &factorial, &mut blocks, &mut dblocks, &mut transformed, &mut dtransformed,
+                    let mut rhs_bar = vec![0.0; order * 6];
+                    let mut vec_bar = vec![0.0; order.saturating_sub(1) * 6];
+                    let mut mat_bar = [[0.0; 4]; 4];
+                    let mut a = vec![[[0.0; 3]; 3]; order];
+                    let mut c_blocks = vec![[[0.0; 3]; 3]; order];
+                    let mut a_bar = vec![[[0.0; 3]; 3]; order];
+                    let mut c_bar = vec![[[0.0; 3]; 3]; order];
+                    let mut scaled = vec![0.0; order.saturating_sub(1) * 6];
+                    cmtm_accumulate_mat_adj_wrench_series_reverse_accumulate_into(
+                        mat, &vecs[..order.saturating_sub(1) * 6], raw_rhs, &target_bar,
+                        order, &primal.factorial, &mut scaled, &mut a, &mut c_blocks,
+                        &mut a_bar, &mut c_bar, &mut rhs_bar, &mut vec_bar, &mut mat_bar,
                     );
-                    for component in 0..6 {
-                        for rhs in 0..rhs_cols {
-                            out[input * rhs_cols + rhs] += value[component]
-                                * force_cotangent[((link * dynamics_order + time) * 6 + component) * rhs_cols + rhs];
-                        }
+                    for i in 0..order * 6 {
+                        local_bar[(link * order * 6 + i) * rhs_cols + rhs] += rhs_bar[i];
                     }
-                }
+                    for i in 0..order.saturating_sub(1) * 6 {
+                        link_vec_bar[(link * vec_len + i) * rhs_cols + rhs] += vec_bar[i];
+                    }
+                    for row in 0..4 { for col in 0..4 {
+                        link_mat_bar[(link * 16 + row * 4 + col) * rhs_cols + rhs] += mat_bar[row][col];
+                    }}
+                };
+                reverse_transport(momentum, momentum_cotangent, momentum_order, &mut local_momentum_bar);
+                reverse_transport(force, force_cotangent, dynamics_order, &mut local_force_bar);
             }
         }
+
+        let mut dynamics_out = vec![0.0; input_len * rhs_cols];
+        self.dynamics_cmtm_reverse_into(
+            motion, &local_momentum_bar, &local_force_bar,
+            &vec![0.0; self.joint_num * momentum_order * 6 * rhs_cols],
+            &vec![0.0; self.joint_num * dynamics_order * 6 * rhs_cols],
+            &vec![0.0; self.joint_num * dynamics_order * rhs_cols], dynamics_order,
+            gravity, rhs_cols, &mut primal, &mut dynamics_out,
+        );
+        let mut kinematics_out = vec![0.0; input_len * rhs_cols];
+        let mut kinematics = CmtmWorkspace::new(self, kin_order);
+        self.kinematics_cmtm_outward_reverse_into(
+            motion, kin_order, &link_mat_bar, &link_vec_bar,
+            &vec![0.0; self.joint_num * 16 * rhs_cols],
+            &vec![0.0; self.joint_num * vec_len * rhs_cols], rhs_cols,
+            &mut kinematics, &mut kinematics_out,
+        );
+        for i in 0..out.len() { out[i] = dynamics_out[i] + kinematics_out[i]; }
     }
 
     fn world_joint_dynamics_cmtm_vjp_into(
@@ -2327,7 +2222,7 @@ impl RustCompiledRobot {
                 }
             }
         }
-        self.world_link_dynamics_cmtm_vjp_into(
+        self.world_link_dynamics_cmtm_reverse_vjp_into(
             motion, &link_momentum_cotangent, &link_force_cotangent,
             dynamics_order, gravity, rhs_cols, out,
         );

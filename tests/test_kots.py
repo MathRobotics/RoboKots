@@ -689,6 +689,29 @@ def test_rust_cmtm_torque_diff1_vjp_uses_analytic_reverse_with_gravity(monkeypat
     )
 
 
+@pytest.mark.parametrize("gravity", [np.zeros(3), np.array([0.4, -1.1, -9.3])])
+def test_rust_cmtm_full_torque_series_reverse_matches_basis_tangent(gravity):
+    """Cover every URDF joint row, including fixed rows which are zero."""
+    pytest.importorskip("robokots._rust")
+    rng = np.random.default_rng(416)
+    order = 5
+    dynamics_order = order - 2
+    rhs_cols = 3
+    kots = Kots.from_urdf_file(str(BRANCHED_FIXED_MODEL_PATH), order=order)
+    robot = kots._rust_compiled_robot()
+    motion = rng.standard_normal(kots.dof() * order)
+    cotangent = rng.standard_normal((robot.joint_num, dynamics_order, rhs_cols))
+    actual = robot.dynamics_joint_torque_series_transpose_matmul_rhs(
+        motion, cotangent, dynamics_order, gravity=gravity,
+    )
+    basis = np.eye(motion.size)
+    tangent = robot.dynamics_joint_torque_series_tangent(
+        motion, basis, dynamics_order, gravity=gravity,
+    )
+    expected = np.einsum("jti,jtr->ir", tangent, cotangent)
+    np.testing.assert_allclose(actual, expected, atol=2e-11, rtol=2e-11)
+
+
 @pytest.mark.parametrize("batched", [False, True])
 def test_rust_cmtm_local_momentum_force_wrench_vjp_dispatches(monkeypatch, batched):
     pytest.importorskip("robokots._rust")
@@ -2665,6 +2688,31 @@ def test_rust_cmtm_kinematics_vjp_is_tangent_transpose():
     np.testing.assert_allclose(actual, expected, atol=1e-12, rtol=1e-12)
 
 
+@pytest.mark.parametrize("order", [3, 4, 5])
+def test_rust_cmtm_outward_kinematics_reverse_vjp_matches_directional_difference(order):
+    """The vector-only VJP is a reverse recurrence, not basis tangents."""
+    pytest.importorskip("robokots._rust")
+    rng = np.random.default_rng(860 + order)
+    rhs_cols = 3
+    kots = _make_kots(order=order)
+    robot = kots._rust_compiled_robot()
+    motion = rng.standard_normal(kots.dof() * order)
+    direction = rng.standard_normal(motion.size)
+    link_rhs = rng.standard_normal((robot.link_num, order - 1, 6, rhs_cols))
+    joint_rhs = rng.standard_normal((robot.joint_num, order - 1, 6, rhs_cols))
+    actual = robot.cmtm_outward_kinematics_transpose_matmul_rhs(
+        motion, link_rhs, joint_rhs, order,
+    )
+
+    def loss(x):
+        _, link_vec, _, joint_vec = robot.kinematics_cmtm(x, order)
+        return np.einsum("ltsr,lts->r", link_rhs, link_vec) + np.einsum("jtsr,jts->r", joint_rhs, joint_vec)
+
+    eps = 1e-6
+    finite_difference = (loss(motion + eps * direction) - loss(motion - eps * direction)) / (2.0 * eps)
+    np.testing.assert_allclose(direction @ actual, finite_difference, atol=6e-7, rtol=6e-7)
+
+
 def test_rust_cmtm_outward_dynamics_vjp_includes_each_wrench_output():
     pytest.importorskip("robokots._rust")
     dynamics_order = 2
@@ -2715,6 +2763,43 @@ def test_rust_cmtm_outward_dynamics_vjp_includes_each_wrench_output():
         atol=1e-12,
         rtol=1e-12,
     )
+
+
+def test_rust_cmtm_complete_reverse_vjp_matches_directional_difference_with_gravity():
+    pytest.importorskip("robokots._rust")
+    rng = np.random.default_rng(871)
+    order = 5
+    dynamics_order = order - 2
+    rhs_cols = 2
+    gravity = np.array([0.4, -1.1, -9.3])
+    kots = Kots.from_urdf_file(str(BRANCHED_FIXED_MODEL_PATH), order=order)
+    robot = kots._rust_compiled_robot()
+    motion = rng.standard_normal(kots.dof() * order)
+    direction = rng.standard_normal(motion.size)
+    lm = rng.standard_normal((robot.link_num, dynamics_order + 1, 6, rhs_cols))
+    lf = rng.standard_normal((robot.link_num, dynamics_order, 6, rhs_cols))
+    jm = rng.standard_normal((robot.joint_num, dynamics_order + 1, 6, rhs_cols))
+    jf = rng.standard_normal((robot.joint_num, dynamics_order, 6, rhs_cols))
+    jt = rng.standard_normal((robot.joint_num, dynamics_order, rhs_cols))
+    actual = robot.dynamics_cmtm_transpose_matmul_rhs(
+        motion, lm, lf, jm, jf, jt, dynamics_order, gravity=gravity,
+    )
+
+    def loss(x):
+        link_momentum, link_force, joint_momentum, joint_force, joint_torque = robot.dynamics_cmtm(
+            x, dynamics_order, gravity=gravity,
+        )
+        return (
+            np.einsum("ltdr,ltd->r", lm, link_momentum)
+            + np.einsum("ltdr,ltd->r", lf, link_force)
+            + np.einsum("jtdr,jtd->r", jm, joint_momentum)
+            + np.einsum("jtdr,jtd->r", jf, joint_force)
+            + np.einsum("jtr,jt->r", jt, np.asarray(joint_torque)[..., 0])
+        )
+
+    eps = 1e-6
+    finite_difference = (loss(motion + eps * direction) - loss(motion - eps * direction)) / (2.0 * eps)
+    np.testing.assert_allclose(direction @ actual, finite_difference, atol=8e-7, rtol=8e-7)
 
 
 def test_rust_rnea_jacobian_api_accepts_gravity():
