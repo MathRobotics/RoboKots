@@ -51,6 +51,12 @@ class TargetList:
           raise ValueError("TargetList.from_dict: total_joint targets require active_joint_names")
         owner_type = "joint"
         owner_names.extend(robot.active_joint_names)
+      elif target["owner_type"] == "total_body":
+        if target["owner_name"] != "total_body":
+          raise ValueError("TargetList.from_dict: total_body owner_name must be 'total_body'")
+        if any(dt != "kinetic_energy" for dt in data_types):
+          raise ValueError("TargetList.from_dict: total_body currently supports kinetic_energy only")
+        owner_names.append("total_body")
 
       for dt in data_types:
         for owner_name in owner_names:

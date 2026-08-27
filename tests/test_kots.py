@@ -2692,6 +2692,49 @@ def test_rust_kinetic_energy_jvp_vjp_and_batch_match_finite_difference(batched):
     )
 
 
+@pytest.mark.parametrize("batched", [False, True])
+def test_total_body_kinetic_energy_state_type_uses_energy_kernels(batched):
+    pytest.importorskip("robokots._rust")
+    rng = np.random.default_rng(8542 + int(batched))
+    kots = _make_kots(order=4)
+    motion_shape = (2, kots.dof() * 4) if batched else (kots.dof() * 4,)
+    kots.import_motions(rng.standard_normal(motion_shape))
+    energy = StateType("total_body", "total_body", "kinetic_energy")
+    value = kots.state_info(energy)
+    np.testing.assert_allclose(value, kots.kinetic_energy_state())
+
+    jacobian = kots.jacobian(energy)
+    directions = rng.standard_normal((2, kots.dof() * 2, 2) if batched else (kots.dof() * 2, 2))
+    cotangent = rng.standard_normal((2, 1, 2) if batched else (1, 2))
+    np.testing.assert_allclose(kots.jacobian_mul(energy, directions), jacobian @ directions)
+    np.testing.assert_allclose(
+        kots.jacobian_transpose_mul(energy, cotangent),
+        np.swapaxes(jacobian, -1, -2) @ cotangent,
+    )
+    assert energy.alliance == "total_body_kinetic_energy"
+
+
+def test_total_body_kinetic_energy_mixes_with_torque_vjp():
+    pytest.importorskip("robokots._rust")
+    rng = np.random.default_rng(8543)
+    kots = _make_kots(order=4)
+    kots.import_motions(rng.standard_normal(kots.dof() * 4))
+    kots.dynamics(backend="rust", gravity=(0.2, -0.3, -9.81), materialize_dict=False)
+    energy = StateType("total_body", "total_body", "kinetic_energy")
+    torque = StateType("joint", "joint3", "torque_diff1")
+    states = [energy, torque]
+    jacobian = kots.jacobian(states)
+    rhs = rng.standard_normal((2, 3))
+    direction = rng.standard_normal(kots.dof() * 4)
+    np.testing.assert_allclose(kots.jacobian_mul(states, direction), jacobian @ direction)
+    np.testing.assert_allclose(
+        kots.jacobian_transpose_mul(states, rhs),
+        jacobian.T @ rhs,
+        atol=2e-10,
+        rtol=2e-10,
+    )
+
+
 def test_rust_cmtm_kinematics_tangent_matches_directional_difference():
     pytest.importorskip("robokots._rust")
     order = 4

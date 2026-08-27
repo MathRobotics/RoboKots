@@ -286,6 +286,8 @@ class Kots():
     return self.outward_state_ if self.outward_state_ is not None else self.state_dict_
 
   def state_info(self, state_type : StateType):
+    if self._is_total_body_kinetic_energy(state_type):
+      return self.kinetic_energy_state()
     if state_type.owner_type == "total_joint":
       values = self.state_info_list(self._state_type_list(state_type))
       if not self.batch_shape_:
@@ -300,6 +302,13 @@ class Kots():
 
   def state_info_list(self, state_type_list : List[StateType], list_output : bool = False) -> List[np.ndarray]:
     state_type_list = self._state_type_list(state_type_list)
+    if any(self._is_total_body_kinetic_energy(st) for st in state_type_list):
+      state_list = [self.state_info(st) for st in state_type_list]
+      if list_output:
+        return state_list
+      if self.batch_shape_:
+        return np.concatenate([np.asarray(v).reshape(self.batch_shape_ + (-1,)) for v in state_list], axis=-1)
+      return np.concatenate([np.asarray(v).reshape(-1) for v in state_list], axis=-1)
     motion_values = self._joint_motion_state_info_list(state_type_list)
     if motion_values is not None:
       if list_output:
@@ -820,6 +829,43 @@ class Kots():
       )
     return expanded
 
+  @staticmethod
+  def _is_total_body_kinetic_energy(state_type) -> bool:
+    return (
+      state_type.owner_type == "total_body"
+      and state_type.owner_name == "total_body"
+      and state_type.data_type == "kinetic_energy"
+      and state_type.frame_name is None
+    )
+
+  def _select_motion_order_rhs(self, rhs, source_order: int, target_order: int, rhs_is_matrix: bool):
+    """Take q..source_order coefficients from a larger scalar-major motion RHS."""
+    trailing = (rhs.shape[-1],) if rhs_is_matrix else ()
+    head = rhs.shape[:-(2 if rhs_is_matrix else 1)]
+    shaped = rhs.reshape(head + (self.robot_.dof, target_order) + trailing)
+    return shaped[..., :source_order, :].reshape(head + (self.robot_.dof * source_order,) + trailing) if rhs_is_matrix \
+      else shaped[..., :source_order].reshape(head + (self.robot_.dof * source_order,))
+
+  def _embed_motion_order_rhs(self, rhs, source_order: int, target_order: int, rhs_is_matrix: bool):
+    """Zero-pad a q..source_order motion result into a larger motion order."""
+    trailing = (rhs.shape[-1],) if rhs_is_matrix else ()
+    head = rhs.shape[:-(2 if rhs_is_matrix else 1)]
+    shaped = rhs.reshape(head + (self.robot_.dof, source_order) + trailing)
+    out = np.zeros(head + (self.robot_.dof, target_order) + trailing, dtype=rhs.dtype)
+    if rhs_is_matrix:
+      out[..., :source_order, :] = shaped
+    else:
+      out[..., :source_order] = shaped
+    return out.reshape(head + (self.robot_.dof * target_order,) + trailing)
+
+  def _embed_motion_order_jacobian(self, jacobian, source_order: int, target_order: int):
+    head = jacobian.shape[:-2]
+    rows = jacobian.shape[-2]
+    shaped = jacobian.reshape(head + (rows, self.robot_.dof, source_order))
+    out = np.zeros(head + (rows, self.robot_.dof, target_order), dtype=jacobian.dtype)
+    out[..., :source_order] = shaped
+    return out.reshape(head + (rows, self.robot_.dof * target_order))
+
   def _joint_motion_index(self, data_type : str):
     order_map = {
       "coord": 0,
@@ -1124,7 +1170,9 @@ class Kots():
     dim_dof = dim_to_dof(self.dim_)
     output_dim = 0
     for st in state_type_list:
-      if self._is_joint_motion_state(st):
+      if self._is_total_body_kinetic_energy(st):
+        output_dim += 1
+      elif self._is_joint_motion_state(st):
         joint = self.robot_.joint(st.owner_name)
         if joint is None:
           raise ValueError(f"Invalid joint name: {st.owner_name}")
@@ -2369,6 +2417,22 @@ class Kots():
 
   def jacobian(self, state_type, numerical : bool = False, list_output : bool = False):
     state_type_list = self._state_type_list(state_type)
+    if any(self._is_total_body_kinetic_energy(st) for st in state_type_list) and not all(self._is_total_body_kinetic_energy(st) for st in state_type_list):
+      max_order = StateType.max_time_order(state_type_list)
+      parts = []
+      for st in state_type_list:
+        part = self.jacobian(st, numerical=numerical)
+        source_order = StateType.max_time_order([st])
+        parts.append(self._embed_motion_order_jacobian(np.asarray(part), source_order, max_order))
+      return parts if list_output else np.concatenate(parts, axis=-2)
+    if state_type_list and all(self._is_total_body_kinetic_energy(st) for st in state_type_list):
+      if numerical:
+        raise NotImplementedError("numerical Jacobian is not implemented for total_body kinetic_energy")
+      batch_shape = self.batch_shape_ if self.batch_shape_ else self.motions_.batch_shape()
+      ones = np.ones(batch_shape + (1,)) if batch_shape else np.ones(1)
+      jacobian = self.kinetic_energy_jacobian_transpose_mul(ones)[..., None, :]
+      parts = [jacobian for _ in state_type_list]
+      return parts if list_output else np.concatenate(parts, axis=-2)
     max_order = StateType.max_time_order(state_type_list)
     if numerical:
       return self._jacobian_numerical(state_type_list, max_order, list_output)
@@ -2390,6 +2454,23 @@ class Kots():
     batch_shape = self.batch_shape_ if self.batch_shape_ else self.motions_.batch_shape()
     rhs, rhs_is_matrix = batch_api.broadcast_feature_rhs(rhs, batch_shape, input_dim, name="rhs")
 
+    if any(self._is_total_body_kinetic_energy(st) for st in state_type_list) and not all(self._is_total_body_kinetic_energy(st) for st in state_type_list):
+      parts = []
+      for st in state_type_list:
+        source_order = StateType.max_time_order([st])
+        part_rhs = self._select_motion_order_rhs(rhs, source_order, max_order, rhs_is_matrix)
+        parts.append(self.jacobian_mul(st, part_rhs, numerical=numerical))
+      return parts if list_output else np.concatenate(parts, axis=-2 if rhs_is_matrix else -1)
+
+    if state_type_list and all(self._is_total_body_kinetic_energy(st) for st in state_type_list):
+      if numerical:
+        raise NotImplementedError("numerical Jacobian is not implemented for total_body kinetic_energy")
+      value = self.kinetic_energy_jacobian_mul(rhs)
+      parts = [value for _ in state_type_list]
+      if list_output:
+        return parts
+      return np.concatenate(parts, axis=-2 if rhs_is_matrix else -1)
+
     if numerical:
       return self._jacobian_mul_numerical(state_type_list, max_order, rhs, rhs_is_matrix, list_output)
 
@@ -2409,6 +2490,24 @@ class Kots():
     output_dim = self._jacobian_output_dim(state_type_list)
     batch_shape = self.batch_shape_ if self.batch_shape_ else self.motions_.batch_shape()
     rhs, rhs_is_matrix = batch_api.broadcast_feature_rhs(rhs, batch_shape, output_dim, name="rhs")
+
+    if any(self._is_total_body_kinetic_energy(st) for st in state_type_list) and not all(self._is_total_body_kinetic_energy(st) for st in state_type_list):
+      out = np.zeros(rhs.shape[:-(2 if rhs_is_matrix else 1)] + (self.robot_.dof * max_order,) + ((rhs.shape[-1],) if rhs_is_matrix else ()), dtype=rhs.dtype)
+      row = 0
+      for st in state_type_list:
+        width = self._jacobian_output_dim([st])
+        part_rhs = rhs[..., row:row + width, :] if rhs_is_matrix else rhs[..., row:row + width]
+        source_order = StateType.max_time_order([st])
+        part = self.jacobian_transpose_mul(st, part_rhs, numerical=numerical)
+        out += self._embed_motion_order_rhs(np.asarray(part), source_order, max_order, rhs_is_matrix)
+        row += width
+      return out
+
+    if state_type_list and all(self._is_total_body_kinetic_energy(st) for st in state_type_list):
+      if numerical:
+        raise NotImplementedError("numerical Jacobian is not implemented for total_body kinetic_energy")
+      energy_rhs = np.sum(rhs, axis=-2 if rhs_is_matrix else -1, keepdims=True)
+      return self.kinetic_energy_jacobian_transpose_mul(energy_rhs)
 
     if numerical:
       return self._jacobian_transpose_mul_numerical(state_type_list, max_order, rhs, rhs_is_matrix)

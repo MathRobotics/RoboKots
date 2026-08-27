@@ -2,8 +2,8 @@ from typing import List
 
 frame_names = ("world","local")
 
-data_owner_types = ("joint","link","total_link","total_joint","total")
-total_owner_names = ("total_link", "total_joint", "total")
+data_owner_types = ("joint","link","total_link","total_joint","total","total_body")
+total_owner_names = ("total_link", "total_joint", "total", "total_body")
 
 
 def state_data_name(data_type: str) -> str:
@@ -116,7 +116,12 @@ keys_force = \
 keys_torque = \
     ("torque", "torque_diff1", "torque_diff2", "torque_diff3", "torque_diff4", "torque_diff5", "torque_diff6", "torque_diff7")
 
-keys = keys_kinematics + keys_joint_motion + keys_momentum + keys_force + keys_torque
+# Whole-body scalar quantities.  They intentionally do not belong to the
+# spatial kinematics/dynamics families above: their canonical owner is
+# `total_body`, not an individual link or joint.
+keys_total_body = ("kinetic_energy",)
+
+keys = keys_kinematics + keys_joint_motion + keys_momentum + keys_force + keys_torque + keys_total_body
 
 def is_in_keys_kinematics(keys_list):
     for k in keys_list:
@@ -196,6 +201,7 @@ keys_time_order = {
 keys_time_order.update({key: i + 2 for i, key in enumerate(keys_momentum)})
 keys_time_order.update({key: i + 3 for i, key in enumerate(keys_force)})
 keys_time_order.update({key: i + 3 for i, key in enumerate(keys_torque)})
+keys_time_order.update({"kinetic_energy": 2})
 
 keys_order_kinematics = {
     "coord": 1,
@@ -221,6 +227,7 @@ keys_order_momentum = {key: i + 1 for i, key in enumerate(keys_momentum)}
 keys_order_torque = {key: i + 1 for i, key in enumerate(keys_torque)}
 
 keys_order = {**keys_order_kinematics, **keys_order_momentum, **keys_order_force, **keys_order_torque}
+keys_order["kinetic_energy"] = 1
 
 keys_name = {
     "coord" : "coord",
@@ -264,6 +271,7 @@ keys_name = {
     "torque_diff5" : "torque_diff5",
     "torque_diff6" : "torque_diff6",
     "torque_diff7" : "torque_diff7",
+    "kinetic_energy" : "kinetic_energy",
 }
 
 def data_type_to_sub_func(data_type : str):
@@ -276,7 +284,7 @@ def data_type_to_sub_func(data_type : str):
     elif data_type == "cmtm":
         from mathrobo import CMTM
         return CMTM.sub_vec
-    elif data_type in ["coord", "veloc", "accel"]:
+    elif data_type in ["coord", "veloc", "accel", "kinetic_energy"]:
         return None
     elif data_type in ["pos", "vel", "acc"] \
         or data_type in ["jerk", "snap", "crackle", "pop", "lock", "drop", "shot", "put"]  \
@@ -296,7 +304,7 @@ def data_type_offset(data_type : str):
         return 0
 
 def data_type_dof(data_type : str, order = None, dim = 3):
-    if data_type in ("coord", "veloc", "accel") or data_type in keys_torque:
+    if data_type in ("coord", "veloc", "accel", "kinetic_energy") or data_type in keys_torque:
         return 1
     elif data_type == "pos" or data_type == "rot":
         return dim
