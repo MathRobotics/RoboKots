@@ -291,6 +291,41 @@ fn fill_link_local_jacobian(
     Ok(())
 }
 
+impl RustCompiledRobot {
+    /// Evaluate kinetic energy and its gradient with respect to the compact
+    /// `(q, qdot)` CMTM input.  The gradient is obtained by seeding each
+    /// link's local velocity with the energy derivative and using the shared
+    /// kinematics reverse recurrence; no dynamics or basis tangent is built.
+    fn kinetic_energy_gradient_into(
+        &self, motion: &[f64], primal: &mut CmtmWorkspace, gradient: &mut [f64],
+    ) -> f64 {
+        const ORDER: usize = 2;
+        self.kinematics_cmtm_into(motion, ORDER, primal);
+        let mut energy = 0.0;
+        let mut link_vec_bar = vec![0.0; self.link_num * 6];
+        for link in 0..self.link_num {
+            let velocity = vec6_from_flat(cmtm_vecs_slice(&primal.link_vecs, link, ORDER), 0);
+            let iv = mat6_vec6(self.link_inertia[link], velocity);
+            let itv = mat6_transpose_vec6(self.link_inertia[link], velocity);
+            energy += 0.5 * velocity.iter().zip(iv.iter()).map(|(a, b)| a * b).sum::<f64>();
+            for c in 0..6 {
+                // `0.5 * v^T I v` differentiates to `0.5 * (I + I^T) v`.
+                // Spatial inertias are symmetric, but retaining both terms
+                // makes this correct for every accepted inertia matrix.
+                link_vec_bar[link * 6 + c] = 0.5 * (iv[c] + itv[c]);
+            }
+        }
+        let link_mat_zero = vec![0.0; self.link_num * 16];
+        let joint_mat_zero = vec![0.0; self.joint_num * 16];
+        let joint_vec_zero = vec![0.0; self.joint_num * 6];
+        self.kinematics_cmtm_outward_reverse_into(
+            motion, ORDER, &link_mat_zero, &link_vec_bar, &joint_mat_zero,
+            &joint_vec_zero, 1, primal, gradient,
+        );
+        energy
+    }
+}
+
 #[pymethods]
 impl RustCompiledRobot {
     #[pyo3(signature = (model_data, allow_prismatic = false))]
@@ -1209,6 +1244,128 @@ impl RustCompiledRobot {
                 .into_pyarray(py)
                 .reshape([self.joint_num, dynamics_order, 1])?,
         ))
+    }
+
+    /// Kinetic energy of the current `(q, qdot)` CMTM motion.
+    fn kinetic_energy<'py>(
+        &self, py: Python<'py>, motion: PyReadonlyArray1<'py, f64>,
+    ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+        let motion = motion.as_slice()?;
+        self.check_cmtm_motion(motion, 2)?;
+        let mut primal = CmtmWorkspace::new(self, 2);
+        let mut gradient = vec![0.0; self.dof * 2];
+        let energy = self.kinetic_energy_gradient_into(motion, &mut primal, &mut gradient);
+        Ok(vec![energy].into_pyarray(py))
+    }
+
+    /// Batched kinetic energy.  A CMTM workspace is reused across samples.
+    fn kinetic_energy_batch<'py>(
+        &self, py: Python<'py>, motions: PyReadonlyArray2<'py, f64>,
+    ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+        let shape = motions.shape();
+        if shape.len() != 2 || shape[1] != self.dof * 2 {
+            return Err(PyValueError::new_err("motions must have shape (batch, robot dof * 2)"));
+        }
+        let motions = motions.as_slice()?;
+        let mut primal = CmtmWorkspace::new(self, 2);
+        let mut gradient = vec![0.0; self.dof * 2];
+        let mut out = vec![0.0; shape[0]];
+        for sample in 0..shape[0] {
+            out[sample] = self.kinetic_energy_gradient_into(
+                &motions[sample * self.dof * 2..(sample + 1) * self.dof * 2],
+                &mut primal, &mut gradient,
+            );
+        }
+        Ok(out.into_pyarray(py))
+    }
+
+    /// Jacobian product of scalar kinetic energy with one or more motion directions.
+    fn kinetic_energy_jacobian_mul_rhs<'py>(
+        &self, py: Python<'py>, motion: PyReadonlyArray1<'py, f64>,
+        motion_tangent: PyReadonlyArray2<'py, f64>,
+    ) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        let motion = motion.as_slice()?;
+        self.check_cmtm_motion(motion, 2)?;
+        let shape = motion_tangent.shape();
+        if shape.len() != 2 || shape[0] != self.dof * 2 {
+            return Err(PyValueError::new_err("motion_tangent must have shape (robot dof * 2, rhs_cols)"));
+        }
+        let tangent = motion_tangent.as_slice()?;
+        let mut primal = CmtmWorkspace::new(self, 2);
+        let mut gradient = vec![0.0; self.dof * 2];
+        self.kinetic_energy_gradient_into(motion, &mut primal, &mut gradient);
+        let mut out = vec![0.0; shape[1]];
+        for input in 0..gradient.len() {
+            for rhs in 0..shape[1] { out[rhs] += gradient[input] * tangent[input * shape[1] + rhs]; }
+        }
+        Ok(out.into_pyarray(py).reshape([1, shape[1]])?)
+    }
+
+    fn kinetic_energy_jacobian_mul_rhs_batch<'py>(
+        &self, py: Python<'py>, motions: PyReadonlyArray2<'py, f64>,
+        motion_tangents: PyReadonlyArray3<'py, f64>,
+    ) -> PyResult<Bound<'py, PyArray3<f64>>> {
+        let motion_shape = motions.shape(); let tangent_shape = motion_tangents.shape();
+        if motion_shape.len() != 2 || motion_shape[1] != self.dof * 2
+            || tangent_shape.len() != 3 || tangent_shape[0] != motion_shape[0]
+            || tangent_shape[1] != self.dof * 2 {
+            return Err(PyValueError::new_err("motions and motion_tangents must have shapes (batch, robot dof * 2) and (batch, robot dof * 2, rhs_cols)"));
+        }
+        let motions = motions.as_slice()?; let tangents = motion_tangents.as_slice()?;
+        let cols = tangent_shape[2]; let input_len = self.dof * 2;
+        let mut primal = CmtmWorkspace::new(self, 2); let mut gradient = vec![0.0; input_len];
+        let mut out = vec![0.0; motion_shape[0] * cols];
+        for sample in 0..motion_shape[0] {
+            self.kinetic_energy_gradient_into(&motions[sample * input_len..(sample + 1) * input_len], &mut primal, &mut gradient);
+            for input in 0..input_len { for rhs in 0..cols {
+                out[sample * cols + rhs] += gradient[input] * tangents[(sample * input_len + input) * cols + rhs];
+            }}
+        }
+        Ok(out.into_pyarray(py).reshape([motion_shape[0], 1, cols])?)
+    }
+
+    /// VJP of scalar kinetic energy.  The reverse kinematics recurrence is
+    /// evaluated once, then broadcast over all scalar output cotangents.
+    fn kinetic_energy_jacobian_transpose_mul_rhs<'py>(
+        &self, py: Python<'py>, motion: PyReadonlyArray1<'py, f64>,
+        energy_cotangent: PyReadonlyArray2<'py, f64>,
+    ) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        let motion = motion.as_slice()?; self.check_cmtm_motion(motion, 2)?;
+        let shape = energy_cotangent.shape();
+        if shape.len() != 2 || shape[0] != 1 {
+            return Err(PyValueError::new_err("energy_cotangent must have shape (1, rhs_cols)"));
+        }
+        let cotangent = energy_cotangent.as_slice()?;
+        let mut primal = CmtmWorkspace::new(self, 2); let mut gradient = vec![0.0; self.dof * 2];
+        self.kinetic_energy_gradient_into(motion, &mut primal, &mut gradient);
+        let mut out = vec![0.0; gradient.len() * shape[1]];
+        for input in 0..gradient.len() { for rhs in 0..shape[1] {
+            out[input * shape[1] + rhs] = gradient[input] * cotangent[rhs];
+        }}
+        Ok(out.into_pyarray(py).reshape([gradient.len(), shape[1]])?)
+    }
+
+    fn kinetic_energy_jacobian_transpose_mul_rhs_batch<'py>(
+        &self, py: Python<'py>, motions: PyReadonlyArray2<'py, f64>,
+        energy_cotangents: PyReadonlyArray3<'py, f64>,
+    ) -> PyResult<Bound<'py, PyArray3<f64>>> {
+        let motion_shape = motions.shape(); let cotangent_shape = energy_cotangents.shape();
+        if motion_shape.len() != 2 || motion_shape[1] != self.dof * 2
+            || cotangent_shape.len() != 3 || cotangent_shape[0] != motion_shape[0]
+            || cotangent_shape[1] != 1 {
+            return Err(PyValueError::new_err("motions and energy_cotangents must have shapes (batch, robot dof * 2) and (batch, 1, rhs_cols)"));
+        }
+        let motions = motions.as_slice()?; let cotangents = energy_cotangents.as_slice()?;
+        let input_len = self.dof * 2; let cols = cotangent_shape[2];
+        let mut primal = CmtmWorkspace::new(self, 2); let mut gradient = vec![0.0; input_len];
+        let mut out = vec![0.0; motion_shape[0] * input_len * cols];
+        for sample in 0..motion_shape[0] {
+            self.kinetic_energy_gradient_into(&motions[sample * input_len..(sample + 1) * input_len], &mut primal, &mut gradient);
+            for input in 0..input_len { for rhs in 0..cols {
+                out[(sample * input_len + input) * cols + rhs] = gradient[input] * cotangents[sample * cols + rhs];
+            }}
+        }
+        Ok(out.into_pyarray(py).reshape([motion_shape[0], input_len, cols])?)
     }
 
     /// Analytic Jv of CMTM kinematics.  This is intentionally exposed while

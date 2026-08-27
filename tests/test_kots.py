@@ -2641,6 +2641,57 @@ def test_jacobian_transpose_mul_many_fuses_torque_state_refs(monkeypatch, batche
     np.testing.assert_allclose(actual, expected, atol=2e-10, rtol=2e-10)
 
 
+@pytest.mark.parametrize("batched", [False, True])
+def test_rust_kinetic_energy_jvp_vjp_and_batch_match_finite_difference(batched):
+    pytest.importorskip("robokots._rust")
+    rng = np.random.default_rng(8540 + int(batched))
+    order = 4
+    kots = _make_kots(order=order)
+    batch = 3
+    motion_shape = (batch, kots.dof() * order) if batched else (kots.dof() * order,)
+    motion = rng.standard_normal(motion_shape)
+    kots.import_motions(motion)
+
+    input_dim = kots.dof() * 2
+    rhs_cols = 3
+    direction_shape = (batch, input_dim, rhs_cols) if batched else (input_dim, rhs_cols)
+    energy_rhs_shape = (batch, 1, rhs_cols) if batched else (1, rhs_cols)
+    directions = rng.standard_normal(direction_shape)
+    energy_rhs = rng.standard_normal(energy_rhs_shape)
+    ones_shape = (batch, 1) if batched else (1,)
+    gradient = kots.kinetic_energy_jacobian_transpose_mul(np.ones(ones_shape))
+    jvp = kots.kinetic_energy_jacobian_mul(directions)
+    vjp = kots.kinetic_energy_jacobian_transpose_mul(energy_rhs)
+
+    expected_jvp = np.einsum("...i,...ik->...k", gradient, directions)[..., None, :]
+    expected_vjp = gradient[..., :, None] * energy_rhs[..., 0, :][..., None, :]
+    np.testing.assert_allclose(jvp, expected_jvp, atol=2e-11, rtol=2e-11)
+    np.testing.assert_allclose(vjp, expected_vjp, atol=2e-11, rtol=2e-11)
+    np.testing.assert_allclose(
+        np.sum(jvp * energy_rhs, axis=(-2, -1)),
+        np.sum(directions * vjp, axis=(-2, -1)),
+        atol=2e-11,
+        rtol=2e-11,
+    )
+
+    sample_motion = motion[0] if batched else motion
+    sample_direction = directions[0, :, 0] if batched else directions[:, 0]
+    sample = _make_kots(order=order)
+    eps = 1e-6
+    values = []
+    for sign in (-1.0, 1.0):
+        perturbed = sample_motion.reshape(kots.dof(), order).copy()
+        perturbed[:, :2] += sign * eps * sample_direction.reshape(kots.dof(), 2)
+        sample.import_motions(perturbed.reshape(-1))
+        values.append(sample.kinetic_energy_state())
+    np.testing.assert_allclose(
+        (values[1] - values[0]) / (2.0 * eps),
+        gradient[0] @ sample_direction if batched else gradient @ sample_direction,
+        atol=2e-7,
+        rtol=2e-7,
+    )
+
+
 def test_rust_cmtm_kinematics_tangent_matches_directional_difference():
     pytest.importorskip("robokots._rust")
     order = 4

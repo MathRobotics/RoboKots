@@ -2471,6 +2471,66 @@ class Kots():
       state, state_type_list, max_order, fused_rhs, batch_shape, rhs_is_matrix,
     )
 
+  def kinetic_energy_state(self):
+    """Return total kinetic energy from the current joint coordinates and velocities.
+
+    Energy depends only on ``motion(2)`` (`q`, `qdot`).  The non-batched
+    result is a Python float; batched motions return an array with the motion
+    batch shape.
+    """
+    motion = np.asarray(self.motion(2), dtype=float)
+    batch_shape = motion.shape[:-1] if batch_api.is_batched_feature_array(motion) else ()
+    robot = self._rust_compiled_robot()
+    if not batch_shape:
+      return float(np.asarray(robot.kinetic_energy(np.ascontiguousarray(motion)))[0])
+    flat_motion = np.ascontiguousarray(motion.reshape((-1, motion.shape[-1])))
+    return np.asarray(robot.kinetic_energy_batch(flat_motion)).reshape(batch_shape)
+
+  def kinetic_energy_jacobian_mul(self, rhs : np.ndarray):
+    """Apply the kinetic-energy Jacobian to q/qdot directions.
+
+    ``rhs`` follows :meth:`jacobian_mul` conventions with input dimension
+    ``2 * dof``.  The scalar energy output retains its row dimension of one.
+    """
+    motion = np.asarray(self.motion(2), dtype=float)
+    batch_shape = motion.shape[:-1] if batch_api.is_batched_feature_array(motion) else ()
+    input_dim = self.robot_.dof * 2
+    rhs, rhs_is_matrix = batch_api.broadcast_feature_rhs(rhs, batch_shape, input_dim, name="rhs")
+    tangent = rhs if rhs_is_matrix else rhs[..., None]
+    robot = self._rust_compiled_robot()
+    if not batch_shape:
+      out = np.asarray(robot.kinetic_energy_jacobian_mul_rhs(
+        np.ascontiguousarray(motion), np.ascontiguousarray(tangent),
+      ))
+    else:
+      flat_motion = np.ascontiguousarray(motion.reshape((-1, motion.shape[-1])))
+      out = np.asarray(robot.kinetic_energy_jacobian_mul_rhs_batch(
+        flat_motion, np.ascontiguousarray(tangent),
+      )).reshape(batch_shape + (1, tangent.shape[-1]))
+    return out if rhs_is_matrix else out[..., 0]
+
+  def kinetic_energy_jacobian_transpose_mul(self, rhs : np.ndarray):
+    """Apply the kinetic-energy VJP to scalar output cotangents.
+
+    ``rhs`` has one output row, with optional final RHS-column axis.  The
+    returned gradient is ordered ``[q0, qdot0, q1, qdot1, ...]``.
+    """
+    motion = np.asarray(self.motion(2), dtype=float)
+    batch_shape = motion.shape[:-1] if batch_api.is_batched_feature_array(motion) else ()
+    rhs, rhs_is_matrix = batch_api.broadcast_feature_rhs(rhs, batch_shape, 1, name="rhs")
+    cotangent = rhs if rhs_is_matrix else rhs[..., None]
+    robot = self._rust_compiled_robot()
+    if not batch_shape:
+      out = np.asarray(robot.kinetic_energy_jacobian_transpose_mul_rhs(
+        np.ascontiguousarray(motion), np.ascontiguousarray(cotangent),
+      ))
+    else:
+      flat_motion = np.ascontiguousarray(motion.reshape((-1, motion.shape[-1])))
+      out = np.asarray(robot.kinetic_energy_jacobian_transpose_mul_rhs_batch(
+        flat_motion, np.ascontiguousarray(cotangent),
+      )).reshape(batch_shape + (self.robot_.dof * 2, cotangent.shape[-1]))
+    return out if rhs_is_matrix else out[..., 0]
+
   def jacobian_tensor(self, state_type, numerical : bool = False) -> JacobianTensor:
     state_type_list = self._state_type_list(state_type)
     return JacobianTensor.from_array(self.jacobian(state_type_list, numerical=numerical), state_type_list)
