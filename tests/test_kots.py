@@ -2735,6 +2735,114 @@ def test_total_body_kinetic_energy_mixes_with_torque_vjp():
     )
 
 
+@pytest.mark.parametrize("batched", [False, True])
+def test_inward_forward_dynamics_reference_inverts_rnea(batched):
+    pytest.importorskip("robokots._rust")
+    rng = np.random.default_rng(8544 + int(batched))
+    kots = _make_kots(order=3)
+    shape = (3, kots.dof()) if batched else (kots.dof(),)
+    q = rng.standard_normal(shape)
+    v = rng.standard_normal(shape)
+    acceleration = rng.standard_normal(shape)
+    gravity = np.array([0.2, -0.3, -9.81])
+    torque = kots.inverse_dynamics(q, v, acceleration, gravity=gravity)
+    actual = kots.forward_dynamics(q, v, torque, gravity=gravity)
+    np.testing.assert_allclose(actual, acceleration, atol=2e-10, rtol=2e-10)
+    rust = kots.forward_dynamics(q, v, torque, gravity=gravity, backend="rust")
+    np.testing.assert_allclose(rust, acceleration, atol=2e-10, rtol=2e-10)
+
+
+@pytest.mark.parametrize("batched", [False, True])
+@pytest.mark.parametrize("gravity", [np.zeros(3), np.array([0.2, -0.3, -9.81])])
+def test_rust_aba_inverts_rnea_on_branched_fixed_tree(batched, gravity):
+    """ABA must preserve the child-to-parent reduction through fixed branches."""
+    pytest.importorskip("robokots._rust")
+    rng = np.random.default_rng(8546 + int(batched) + int(np.any(gravity)))
+    kots = Kots.from_urdf_file(str(BRANCHED_FIXED_MODEL_PATH), order=3)
+    shape = (4, kots.dof()) if batched else (kots.dof(),)
+    q = rng.standard_normal(shape)
+    v = rng.standard_normal(shape)
+    expected = rng.standard_normal(shape)
+    tau = kots.inverse_dynamics(q, v, expected, gravity=gravity)
+    actual = kots.forward_dynamics(q, v, tau, gravity=gravity, backend="rust")
+    np.testing.assert_allclose(actual, expected, atol=2e-10, rtol=2e-10)
+
+
+def test_rust_aba_data_reuses_workspace():
+    pytest.importorskip("robokots._rust")
+    kots = Kots.from_urdf_file(str(BRANCHED_FIXED_MODEL_PATH), order=3)
+    robot = kots._rust_inverse_dynamics_robot()
+    data = robot.create_aba_data()
+    q = np.array([0.1, -0.2, 0.3])
+    v = np.array([0.4, -0.1, 0.2])
+    tau = np.array([0.2, 0.3, -0.4])
+    gravity = np.array([0.2, -0.3, -9.81])
+    np.testing.assert_allclose(
+        data.compute(q, v, tau, gravity), robot.aba(q, v, tau, gravity), atol=2e-12, rtol=2e-12
+    )
+
+
+def test_inward_cache_matches_rust_aba_and_many_rhs():
+    pytest.importorskip("robokots._rust")
+    rng = np.random.default_rng(8550)
+    kots = Kots.from_urdf_file(str(BRANCHED_FIXED_MODEL_PATH), order=3)
+    q = rng.standard_normal(kots.dof())
+    v = rng.standard_normal(kots.dof())
+    tau = rng.standard_normal(kots.dof())
+    tau_many = rng.standard_normal((5, kots.dof()))
+    gravity = np.array([0.2, -0.3, -9.81])
+    cache = kots.create_inward_cache().prepare(q, v, gravity)
+    np.testing.assert_allclose(
+        cache.forward_dynamics(tau),
+        kots.forward_dynamics(q, v, tau, gravity=gravity),
+        atol=2e-10,
+        rtol=2e-10,
+    )
+    np.testing.assert_allclose(
+        cache.forward_dynamics_many(tau_many),
+        np.stack([kots.forward_dynamics(q, v, item, gravity=gravity) for item in tau_many]),
+        atol=2e-10,
+        rtol=2e-10,
+    )
+    changed_q = q + 0.1
+    cache.prepare(changed_q, v, gravity)
+    np.testing.assert_allclose(
+        cache.forward_dynamics(tau),
+        kots.forward_dynamics(changed_q, v, tau, gravity=gravity),
+        atol=2e-10,
+        rtol=2e-10,
+    )
+
+
+@pytest.mark.parametrize("batched", [False, True])
+def test_rust_aba_inverts_rnea_with_prismatic_joint(tmp_path, batched):
+    """The ABA motion subspace must use linear, not angular, prismatic axes."""
+    pytest.importorskip("robokots._rust")
+    urdf = """<robot name="aba_prismatic">
+  <link name="base"/>
+  <link name="slider"><inertial><origin xyz="0.1 0.2 0.1"/><mass value="2.1"/>
+    <inertia ixx="0.1" ixy="0.02" ixz="0.01" iyy="0.2" iyz="0.01" izz="0.25"/></inertial></link>
+  <link name="tip"><inertial><origin xyz="0.2 0.1 0"/><mass value="1.2"/>
+    <inertia ixx="0.07" ixy="0.01" ixz="0" iyy="0.08" iyz="0.01" izz="0.09"/></inertial></link>
+  <joint name="slide" type="prismatic"><parent link="base"/><child link="slider"/>
+    <origin xyz="0.1 0 0" rpy="0.1 -0.2 0.3"/><axis xyz="1 2 3"/></joint>
+  <joint name="spin" type="revolute"><parent link="slider"/><child link="tip"/>
+    <origin xyz="0.2 -0.1 0.3" rpy="-0.2 0.3 -0.1"/><axis xyz="-2 1 2"/></joint>
+</robot>"""
+    path = tmp_path / "aba_prismatic.urdf"
+    path.write_text(urdf, encoding="utf-8")
+    kots = Kots.from_urdf_file(str(path), order=3)
+    rng = np.random.default_rng(8548 + int(batched))
+    shape = (4, kots.dof()) if batched else (kots.dof(),)
+    q = rng.standard_normal(shape)
+    v = rng.standard_normal(shape)
+    expected = rng.standard_normal(shape)
+    gravity = np.array([0.3, -0.1, -9.7])
+    tau = kots.inverse_dynamics(q, v, expected, gravity=gravity)
+    actual = kots.forward_dynamics(q, v, tau, gravity=gravity, backend="rust")
+    np.testing.assert_allclose(actual, expected, atol=2e-10, rtol=2e-10)
+
+
 def test_rust_cmtm_kinematics_tangent_matches_directional_difference():
     pytest.importorskip("robokots._rust")
     order = 4

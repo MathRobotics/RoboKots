@@ -17,6 +17,17 @@ pub(crate) struct Workspace {
 
 impl Workspace {
     pub(crate) fn new(robot: &RustCompiledRobot) -> Self {
+        Self::new_impl(robot, true)
+    }
+
+    /// Kinematics and RNEA do not require the dense geometric Jacobian.
+    /// Keeping this allocation out of ABA is important for large models:
+    /// otherwise each one-shot ABA call allocates O(links * dof) unused data.
+    pub(crate) fn new_without_jacobian(robot: &RustCompiledRobot) -> Self {
+        Self::new_impl(robot, false)
+    }
+
+    fn new_impl(robot: &RustCompiledRobot, with_jacobian: bool) -> Self {
         Self {
             r: vec![0.0; robot.link_num * 9],
             p: vec![0.0; robot.link_num * 3],
@@ -26,9 +37,9 @@ impl Workspace {
             lin_a: vec![0.0; robot.link_num * 3],
             forces: vec![0.0; robot.link_num * 6],
             tau: vec![0.0; robot.dof],
-            jac: vec![0.0; robot.link_num * 6 * robot.dof],
-            active_axes: vec![[0.0; 3]; robot.dof],
-            active_points: vec![[0.0; 3]; robot.dof],
+            jac: if with_jacobian { vec![0.0; robot.link_num * 6 * robot.dof] } else { Vec::new() },
+            active_axes: if with_jacobian { vec![[0.0; 3]; robot.dof] } else { Vec::new() },
+            active_points: if with_jacobian { vec![[0.0; 3]; robot.dof] } else { Vec::new() },
             zero_motion: vec![0.0; robot.dof],
         }
     }
@@ -40,6 +51,34 @@ impl Workspace {
         self.lin_v.fill(0.0);
         self.alpha.fill(0.0);
         self.lin_a.fill(0.0);
+    }
+}
+
+/// Allocation-free order-zero articulated-body workspace.
+///
+/// Kept independent from `DynamicsCmtmWorkspace`: ABA's hot path must not
+/// touch series/factorial buffers, while a future CMTM ABA will need series
+/// articulated inertias rather than these scalar blocks.
+pub(crate) struct AbaWorkspace {
+    pub(crate) kinematics: Workspace,
+    pub(crate) ia: Vec<[[f64; 6]; 6]>, pub(crate) pa: Vec<[f64; 6]>,
+    pub(crate) c: Vec<[f64; 6]>, pub(crate) accel: Vec<[f64; 6]>,
+    pub(crate) s: Vec<[f64; 6]>, pub(crate) u_vec: Vec<[f64; 6]>,
+    pub(crate) u: Vec<f64>, pub(crate) d: Vec<f64>, pub(crate) qdd: Vec<f64>,
+    pub(crate) bias_qdd: Vec<f64>,
+    pub(crate) zero: Vec<f64>,
+}
+
+impl AbaWorkspace {
+    pub(crate) fn new(robot: &RustCompiledRobot) -> Self {
+        Self {
+            kinematics: Workspace::new_without_jacobian(robot),
+            ia: vec![[[0.0; 6]; 6]; robot.link_num], pa: vec![[0.0; 6]; robot.link_num],
+            c: vec![[0.0; 6]; robot.link_num], accel: vec![[0.0; 6]; robot.link_num],
+            s: vec![[0.0; 6]; robot.joint_num], u_vec: vec![[0.0; 6]; robot.joint_num],
+            u: vec![0.0; robot.joint_num], d: vec![0.0; robot.joint_num],
+            qdd: vec![0.0; robot.dof], bias_qdd: vec![0.0; robot.dof], zero: vec![0.0; robot.dof],
+        }
     }
 }
 

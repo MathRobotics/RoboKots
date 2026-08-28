@@ -500,6 +500,40 @@ class Kots():
       return rust_robot.rnea(q, v, a, gravity)
     return rust_robot.rnea_batch(q, v, a, gravity)
 
+  def forward_dynamics(
+      self,
+      q,
+      v,
+      tau,
+      gravity=(0.0, 0.0, -9.81),
+      external_wrenches=None,
+      backend: str = "rust",
+  ):
+    """Solve fixed-base forward dynamics for generalized acceleration.
+
+    The default ``rust`` backend uses the O(dof) articulated-body algorithm.
+    ``reference`` (or ``numpy``) constructs ``M(q)`` with RNEA and solves
+    ``M a = tau - bias`` in NumPy; it remains a correctness oracle.  This
+    method is pure: it never changes the Kots motion/state cache.
+    """
+    if external_wrenches is not None:
+      raise NotImplementedError("external_wrenches are not implemented for forward dynamics yet")
+    if backend not in ("reference", "numpy", "rust"):
+      raise ValueError("Unsupported forward dynamics backend: use 'reference', 'numpy', or 'rust'.")
+    q, v, tau = self._fast_qva(q, v, tau)
+    gravity = self._validate_gravity(gravity)
+    if backend == "rust":
+      robot = self._rust_inverse_dynamics_robot()
+      if q.ndim == 1:
+        return robot.aba(q, v, tau, gravity)
+      return robot.aba_batch(q, v, tau, gravity)
+    from .inward.dynamics import forward_dynamics_reference
+
+    def rnea(q_value, v_value, a_value, gravity_value):
+      return self.inverse_dynamics(q_value, v_value, a_value, gravity=gravity_value, backend="rust")
+
+    return forward_dynamics_reference(q, v, tau, gravity, rnea)
+
   def _rust_fast_joint_jacobians(self, q, backend : str = "rust"):
     self._fast_backend(backend)
     q = np.asarray(q, dtype=float)
@@ -518,6 +552,15 @@ class Kots():
 
   def _create_rust_pinocchio_like_data(self):
     return self._rust_compiled_robot().create_pinocchio_like_data()
+
+  def _create_rust_aba_data(self):
+    """Create reusable Rust ABA storage for high-rate single-state loops."""
+    return self._rust_inverse_dynamics_robot().create_aba_data()
+
+  def create_inward_cache(self):
+    """Create reusable fixed-base inward-dynamics cache for this robot."""
+    from .inward import InwardCache
+    return InwardCache(self)
 
   def _create_rust_outward_state(self, order : int = None):
     if order is None:

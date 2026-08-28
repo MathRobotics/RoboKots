@@ -10,9 +10,9 @@ use pyo3::types::{PyAny, PyDict, PyList};
 use crate::model::*;
 use crate::pinocchio_like::PinocchioLikeWorkspace;
 use crate::spatial::*;
-use crate::types::{RustBatchOutwardData, RustCompiledRobot, RustFastData, RustOutwardData};
+use crate::types::{RustAbaData, RustBatchOutwardData, RustCompiledRobot, RustFastData, RustOutwardData};
 use crate::workspace::{
-    BulkDerivativeWorkspace, CmtmWorkspace, DynamicsCmtmTangentWorkspace, DynamicsCmtmWorkspace,
+    AbaWorkspace, BulkDerivativeWorkspace, CmtmWorkspace, DynamicsCmtmTangentWorkspace, DynamicsCmtmWorkspace,
     Workspace,
 };
 
@@ -520,6 +520,15 @@ impl RustCompiledRobot {
         self.create_pinocchio_like_data()
     }
 
+    /// Allocate reusable ABA storage for repeated single-state evaluations.
+    fn create_aba_data(&self) -> RustAbaData {
+        RustAbaData {
+            robot: self.clone(), workspace: AbaWorkspace::new(self),
+            factor_q: Vec::new(), bias_q: Vec::new(), bias_v: Vec::new(),
+            bias_gravity: [0.0; 3], prepared: false,
+        }
+    }
+
     fn create_pinocchio_like_data(&self) -> RustFastData {
         RustFastData {
             robot: self.clone(),
@@ -690,6 +699,37 @@ impl RustCompiledRobot {
                 &mut ws,
             );
             out[start..end].copy_from_slice(&ws.tau);
+        }
+        Ok(out.into_pyarray(py).reshape([batch, self.dof])?)
+    }
+
+    #[pyo3(signature = (q, v, tau, gravity = None))]
+    fn aba<'py>(
+        &self, py: Python<'py>, q: PyReadonlyArray1<'py, f64>, v: PyReadonlyArray1<'py, f64>,
+        tau: PyReadonlyArray1<'py, f64>, gravity: Option<PyReadonlyArray1<'py, f64>>,
+    ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+        let q = q.as_slice()?; let v = v.as_slice()?; let tau = tau.as_slice()?;
+        self.check_motion(q, v, tau)?;
+        let mut ws = AbaWorkspace::new(self);
+        self.aba_with_gravity_into(q, v, tau, gravity_vec3(gravity)?, &mut ws)
+            .map_err(PyValueError::new_err)?;
+        Ok(ws.qdd.into_pyarray(py))
+    }
+
+    #[pyo3(signature = (q, v, tau, gravity = None))]
+    fn aba_batch<'py>(
+        &self, py: Python<'py>, q: PyReadonlyArray2<'py, f64>, v: PyReadonlyArray2<'py, f64>,
+        tau: PyReadonlyArray2<'py, f64>, gravity: Option<PyReadonlyArray1<'py, f64>>,
+    ) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        let batch = self.check_motion_batch(q.shape(), v.shape(), tau.shape())?;
+        let q = q.as_slice()?; let v = v.as_slice()?; let tau = tau.as_slice()?;
+        let gravity = gravity_vec3(gravity)?; let mut ws = AbaWorkspace::new(self);
+        let mut out = vec![0.0; batch * self.dof];
+        for sample in 0..batch {
+            let start = sample * self.dof; let end = start + self.dof;
+            self.aba_with_gravity_into(&q[start..end], &v[start..end], &tau[start..end], gravity, &mut ws)
+                .map_err(PyValueError::new_err)?;
+            out[start..end].copy_from_slice(&ws.qdd);
         }
         Ok(out.into_pyarray(py).reshape([batch, self.dof])?)
     }
@@ -2383,6 +2423,117 @@ impl RustCompiledRobot {
             motion, &link_momentum_cotangent, &link_force_cotangent,
             dynamics_order, gravity, rhs_cols, out,
         );
+    }
+}
+
+impl RustAbaData {
+    fn prepare_into(&mut self, q: &[f64], v: &[f64], gravity: [f64; 3]) -> PyResult<()> {
+        if q.len() != self.robot.dof || v.len() != self.robot.dof {
+            return Err(PyValueError::new_err("q/v length must match robot dof"));
+        }
+        let changed = !self.prepared
+            || self.bias_q.as_slice() != q
+            || self.bias_v.as_slice() != v
+            || self.bias_gravity != gravity;
+        if changed {
+            let zero = vec![0.0; self.robot.dof];
+            self.robot
+                .aba_with_gravity_into(q, v, &zero, gravity, &mut self.workspace)
+                .map_err(PyValueError::new_err)?;
+            self.workspace.bias_qdd.copy_from_slice(&self.workspace.qdd);
+            self.robot
+                .aba_factorize_mass_into(q, &mut self.workspace)
+                .map_err(PyValueError::new_err)?;
+            self.factor_q.clear(); self.factor_q.extend_from_slice(q);
+            self.bias_q.clear(); self.bias_q.extend_from_slice(q);
+            self.bias_v.clear(); self.bias_v.extend_from_slice(v);
+            self.bias_gravity = gravity;
+            self.prepared = true;
+        }
+        Ok(())
+    }
+
+    fn solve_into(&mut self, tau: &[f64]) -> PyResult<()> {
+        if !self.prepared {
+            return Err(PyValueError::new_err("call prepare before solve"));
+        }
+        self.robot
+            .aba_solve_mass_into(tau, &mut self.workspace)
+            .map_err(PyValueError::new_err)?;
+        for i in 0..self.robot.dof { self.workspace.qdd[i] += self.workspace.bias_qdd[i]; }
+        Ok(())
+    }
+}
+
+#[pymethods]
+impl RustAbaData {
+    #[pyo3(signature = (q, v, gravity = None))]
+    fn prepare(
+        &mut self,
+        q: PyReadonlyArray1<'_, f64>,
+        v: PyReadonlyArray1<'_, f64>,
+        gravity: Option<PyReadonlyArray1<'_, f64>>,
+    ) -> PyResult<()> {
+        self.prepare_into(q.as_slice()?, v.as_slice()?, gravity_vec3(gravity)?)
+    }
+
+    fn solve<'py>(
+        &mut self, py: Python<'py>, tau: PyReadonlyArray1<'py, f64>,
+    ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+        self.solve_into(tau.as_slice()?)?;
+        Ok(self.workspace.qdd.clone().into_pyarray(py))
+    }
+
+    #[pyo3(signature = (q, v, tau, gravity = None))]
+    fn compute<'py>(
+        &mut self,
+        py: Python<'py>,
+        q: PyReadonlyArray1<'py, f64>,
+        v: PyReadonlyArray1<'py, f64>,
+        tau: PyReadonlyArray1<'py, f64>,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
+    ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+        let q = q.as_slice()?;
+        let v = v.as_slice()?;
+        let tau = tau.as_slice()?;
+        self.robot.check_motion(q, v, tau)?;
+        self.prepare_into(q, v, gravity_vec3(gravity)?)?;
+        self.solve_into(tau)?;
+        Ok(self.workspace.qdd.clone().into_pyarray(py))
+    }
+
+    /// Evaluate several generalized-force right-hand sides with one reusable
+    /// ABA mass factor.  The articulated inertia factorization and bias are
+    /// prepared once, then each row is a triangular mass solve.
+    #[pyo3(signature = (q, v, tau, gravity = None))]
+    fn compute_many<'py>(
+        &mut self,
+        py: Python<'py>,
+        q: PyReadonlyArray1<'py, f64>,
+        v: PyReadonlyArray1<'py, f64>,
+        tau: PyReadonlyArray2<'py, f64>,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
+    ) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        let q = q.as_slice()?;
+        let v = v.as_slice()?;
+        if q.len() != self.robot.dof || v.len() != self.robot.dof {
+            return Err(PyValueError::new_err("q/v length must match robot dof"));
+        }
+        if tau.shape().len() != 2 || tau.shape()[1] != self.robot.dof {
+            return Err(PyValueError::new_err("tau shape must be (rhs, robot dof)"));
+        }
+        let rhs = tau.shape()[0];
+        let tau = tau.as_slice()?;
+        let gravity = gravity_vec3(gravity)?;
+        self.prepare_into(q, v, gravity)?;
+        let mut out = vec![0.0; rhs * self.robot.dof];
+        for column in 0..rhs {
+            let start = column * self.robot.dof;
+            let end = start + self.robot.dof;
+            self.solve_into(&tau[start..end])?;
+            out[start..end].copy_from_slice(&self.workspace.qdd);
+        }
+        Ok(out.into_pyarray(py).reshape([rhs, self.robot.dof])?)
     }
 }
 

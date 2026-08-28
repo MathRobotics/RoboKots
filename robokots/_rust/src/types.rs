@@ -1,7 +1,7 @@
 use pyo3::prelude::*;
 
 use crate::pinocchio_like::PinocchioLikeWorkspace;
-use crate::workspace::{CmtmWorkspace, DynamicsCmtmWorkspace};
+use crate::workspace::{AbaWorkspace, CmtmWorkspace, DynamicsCmtmWorkspace};
 
 #[derive(Clone)]
 #[pyclass(name = "RustCompiledRobot")]
@@ -33,6 +33,23 @@ pub struct RustFastData {
     pub(crate) has_kinematics: bool,
     pub(crate) has_dynamics: bool,
     pub(crate) has_joint_jacobians: bool,
+}
+
+/// Reusable storage for the order-zero articulated-body algorithm.
+///
+/// This deliberately owns a scalar [`AbaWorkspace`] rather than any CMTM
+/// buffers.  A future CMTM ABA data object will have series-valued articulated
+/// quantities and can share topology/spatial primitives without making the
+/// scalar hot path pay for those buffers.
+#[pyclass(name = "RustAbaData")]
+pub struct RustAbaData {
+    pub(crate) robot: RustCompiledRobot,
+    pub(crate) workspace: AbaWorkspace,
+    pub(crate) factor_q: Vec<f64>,
+    pub(crate) bias_q: Vec<f64>,
+    pub(crate) bias_v: Vec<f64>,
+    pub(crate) bias_gravity: [f64; 3],
+    pub(crate) prepared: bool,
 }
 
 #[pyclass(name = "RustOutwardData")]

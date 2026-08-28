@@ -12,12 +12,13 @@ mod spatial;
 mod types;
 mod workspace;
 
-use types::{RustBatchOutwardData, RustCompiledRobot, RustFastData, RustOutwardData};
+use types::{RustAbaData, RustBatchOutwardData, RustCompiledRobot, RustFastData, RustOutwardData};
 
 #[pymodule]
 fn _rust_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<RustCompiledRobot>()?;
     m.add_class::<RustFastData>()?;
+    m.add_class::<RustAbaData>()?;
     m.add_class::<RustOutwardData>()?;
     m.add_class::<RustBatchOutwardData>()?;
     if m.name()? != "robokots._rust_core" {

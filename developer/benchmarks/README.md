@@ -62,6 +62,19 @@ The minimal fast comparison strips RoboKots semantics down to q/v/a array-only
 kernels for FK, inverse dynamics, and joint Jacobian timing. It is intended to
 measure the lower bound for a compiled fast path, not to replace public APIs.
 
+## Forward Dynamics (ABA) Comparison
+
+```bash
+uv run --extra developer python -m developer.benchmarks.forward_dynamics_compare
+```
+
+This directly compares fixed-base ABA with Pinocchio at 16 and 64 DoF. It
+reports one-shot and reusable-workspace RoboKots calls separately; reusable
+storage is the fair counterpart to Pinocchio's persistent `Data` object. The
+`InwardCache` result additionally reuses an ABA mass factorization for many
+efforts at the same `q/v/gravity`. The batch result compares RoboKots' native
+batch API with a Python loop over Pinocchio's scalar ABA API.
+
 ## Fixed Rust Comparison
 
 ```bash
