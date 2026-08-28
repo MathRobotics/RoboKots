@@ -66,6 +66,30 @@ The comparison measures runtime categories on generated models with the same
 topology; it is not a strict numerical equivalence test for RoboKots CMTM
 outputs.
 
+## API Implementation Boundaries
+
+`robokots.kots.Kots` remains the public facade. Its implementation is being
+split incrementally without adding another user-visible state container.
+
+- `robokots.api.inward`: array-oriented RNEA/ABA and `InwardCache` creation.
+- `robokots.api.outward`: kinematics/dynamics orchestration and backend
+  validation.
+- `robokots.api.state`: semantic state construction, `StateCache`, batch state,
+  and lazy `state_dict` materialization.
+- `robokots.api.rust_backend`: Rust kernel dispatch and Rust outward workspace
+  lifetime/cache management.
+- `robokots.api.derivatives`: public Jacobian/JVP/VJP APIs, numerical
+  fallback, batch-shape handling, and target derivative helpers.
+- `robokots.api.fast_derivatives`: specialized joint-motion/joint-torque
+  NumPy paths.
+- `robokots.api.rust_derivatives`: Rust RNEA, CMTM, link-local derivative
+  kernels and kinetic-energy derivative operations.
+- `Kots`: the stable public facade plus model, motion, semantic state cache,
+  targets, and visualization helpers.
+
+`StateCache` holds semantic outward/CMTM state. Rust and inward workspaces are
+algorithm-specific numerical storage and must not be inserted into that cache.
+
 Run the fixed Rust comparison used for optimization work:
 
 ```bash
