@@ -1631,6 +1631,87 @@ impl RustCompiledRobot {
         Ok(out.into_pyarray(py).reshape([batch, input_len, rhs_cols])?)
     }
 
+    /// Fused VJP of joint torque series and total kinetic energy.
+    ///
+    /// Both cotangent families share the final RHS axis and therefore share
+    /// the same dynamics primal and final kinematics reverse recurrence.
+    #[pyo3(signature = (motion, torque_cotangent, energy_cotangent, dynamics_order, gravity = None))]
+    fn dynamics_joint_torque_series_energy_transpose_matmul_rhs<'py>(
+        &self,
+        py: Python<'py>,
+        motion: PyReadonlyArray1<'py, f64>,
+        torque_cotangent: PyReadonlyArray3<'py, f64>,
+        energy_cotangent: PyReadonlyArray2<'py, f64>,
+        dynamics_order: usize,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
+    ) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        let input_len = self.dof * (dynamics_order + 2);
+        let motion = motion.as_slice()?;
+        self.check_cmtm_motion(motion, dynamics_order + 2)?;
+        let torque_shape = torque_cotangent.shape();
+        let energy_shape = energy_cotangent.shape();
+        if torque_shape.len() != 3 || torque_shape[..2] != [self.joint_num, dynamics_order]
+            || energy_shape.len() != 2 || energy_shape[0] != 1
+            || torque_shape[2] != energy_shape[1]
+        {
+            return Err(PyValueError::new_err(
+                "torque_cotangent and energy_cotangent must have shapes (joint_num, dynamics_order, rhs_cols) and (1, rhs_cols)",
+            ));
+        }
+        let rhs_cols = torque_shape[2];
+        let mut primal = DynamicsCmtmWorkspace::new(self, dynamics_order);
+        let mut out = vec![0.0; input_len * rhs_cols];
+        self.dynamics_joint_torque_series_energy_reverse_into(
+            motion, torque_cotangent.as_slice()?, energy_cotangent.as_slice()?,
+            dynamics_order, gravity_vec3(gravity)?, rhs_cols, &mut primal, &mut out,
+        );
+        Ok(out.into_pyarray(py).reshape([input_len, rhs_cols])?)
+    }
+
+    #[pyo3(signature = (motions, torque_cotangents, energy_cotangents, dynamics_order, gravity = None))]
+    fn dynamics_joint_torque_series_energy_transpose_matmul_rhs_batch<'py>(
+        &self,
+        py: Python<'py>,
+        motions: PyReadonlyArray2<'py, f64>,
+        torque_cotangents: PyReadonlyArray4<'py, f64>,
+        energy_cotangents: PyReadonlyArray3<'py, f64>,
+        dynamics_order: usize,
+        gravity: Option<PyReadonlyArray1<'py, f64>>,
+    ) -> PyResult<Bound<'py, PyArray3<f64>>> {
+        let input_len = self.dof * (dynamics_order + 2);
+        let motion_shape = motions.shape();
+        let torque_shape = torque_cotangents.shape();
+        let energy_shape = energy_cotangents.shape();
+        if motion_shape.len() != 2 || motion_shape[1] != input_len
+            || torque_shape.len() != 4 || torque_shape[..3] != [motion_shape[0], self.joint_num, dynamics_order]
+            || energy_shape.len() != 3 || energy_shape[..2] != [motion_shape[0], 1]
+            || torque_shape[3] != energy_shape[2]
+        {
+            return Err(PyValueError::new_err(
+                "motions, torque_cotangents, and energy_cotangents have incompatible shapes",
+            ));
+        }
+        let batch = motion_shape[0];
+        let rhs_cols = torque_shape[3];
+        let motions = motions.as_slice()?;
+        let torque_cotangents = torque_cotangents.as_slice()?;
+        let energy_cotangents = energy_cotangents.as_slice()?;
+        let torque_len = self.joint_num * dynamics_order * rhs_cols;
+        let gravity = gravity_vec3(gravity)?;
+        let mut primal = DynamicsCmtmWorkspace::new(self, dynamics_order);
+        let mut out = vec![0.0; batch * input_len * rhs_cols];
+        for sample in 0..batch {
+            self.dynamics_joint_torque_series_energy_reverse_into(
+                &motions[sample * input_len..(sample + 1) * input_len],
+                &torque_cotangents[sample * torque_len..(sample + 1) * torque_len],
+                &energy_cotangents[sample * rhs_cols..(sample + 1) * rhs_cols],
+                dynamics_order, gravity, rhs_cols, &mut primal,
+                &mut out[sample * input_len * rhs_cols..(sample + 1) * input_len * rhs_cols],
+            );
+        }
+        Ok(out.into_pyarray(py).reshape([batch, input_len, rhs_cols])?)
+    }
+
     /// VJP of link CMTM kinematics (homogeneous transforms and twist series).
     /// The two cotangent inputs share their final RHS axis.
     fn cmtm_kinematics_transpose_matmul_rhs<'py>(
@@ -1744,7 +1825,7 @@ impl RustCompiledRobot {
             &vec![0.0; self.joint_num * (dynamics_order + 1) * 6 * rhs_cols],
             &vec![0.0; self.joint_num * dynamics_order * 6 * rhs_cols],
             &vec![0.0; self.joint_num * dynamics_order * rhs_cols], dynamics_order,
-            gravity_vec3(gravity)?, rhs_cols, &mut primal, &mut out,
+            gravity_vec3(gravity)?, rhs_cols, None, &mut primal, &mut out,
         );
         Ok(out.into_pyarray(py).reshape([input_len, rhs_cols])?)
     }
@@ -1787,7 +1868,7 @@ impl RustCompiledRobot {
             motion, link_momentum_cotangent.as_slice()?, link_force_cotangent.as_slice()?,
             joint_momentum_cotangent.as_slice()?, joint_force_cotangent.as_slice()?,
             joint_torque_cotangent.as_slice()?, dynamics_order, gravity_vec3(gravity)?,
-            rhs_cols, &mut primal, &mut out,
+            rhs_cols, None, &mut primal, &mut out,
         );
         Ok(out.into_pyarray(py).reshape([input_len, rhs_cols])?)
     }
@@ -1846,7 +1927,7 @@ impl RustCompiledRobot {
                 &jm[sample * jm_len..(sample + 1) * jm_len],
                 &jf[sample * jf_len..(sample + 1) * jf_len],
                 &jt[sample * jt_len..(sample + 1) * jt_len], dynamics_order, gravity,
-                rhs_cols, &mut primal, out_sample,
+                rhs_cols, None, &mut primal, out_sample,
             );
         }
         Ok(out.into_pyarray(py).reshape([batch, input_len, rhs_cols])?)
@@ -2382,7 +2463,7 @@ impl RustCompiledRobot {
             &vec![0.0; self.joint_num * momentum_order * 6 * rhs_cols],
             &vec![0.0; self.joint_num * dynamics_order * 6 * rhs_cols],
             &vec![0.0; self.joint_num * dynamics_order * rhs_cols], dynamics_order,
-            gravity, rhs_cols, &mut primal, &mut dynamics_out,
+            gravity, rhs_cols, None, &mut primal, &mut dynamics_out,
         );
         let mut kinematics_out = vec![0.0; input_len * rhs_cols];
         let mut kinematics = CmtmWorkspace::new(self, kin_order);

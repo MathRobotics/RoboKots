@@ -650,6 +650,7 @@ class DerivativesMixin:
     batch_shape = self.batch_shape_ if self.batch_shape_ else self.motions_.batch_shape()
     state_type_list = []
     rhs_parts = []
+    energy_rhs_parts = []
     rhs_is_matrix = None
     rhs_cols = None
 
@@ -670,19 +671,96 @@ class DerivativesMixin:
         raise ValueError("all state_rhs_pairs RHS values must all be vectors or all be matrices")
       elif pair_is_matrix and pair_rhs.shape[-1] != rhs_cols:
         raise ValueError("all matrix RHS values must have the same number of columns")
-      state_type_list.extend(pair_states)
-      rhs_parts.append(pair_rhs)
+      row = 0
+      for st in pair_states:
+        width = self._jacobian_output_dim([st])
+        part = pair_rhs[..., row:row + width, :] if pair_is_matrix else pair_rhs[..., row:row + width]
+        if self._is_total_body_kinetic_energy(st):
+          energy_rhs_parts.append(part)
+        else:
+          state_type_list.append(st)
+          rhs_parts.append(part)
+        row += width
+
+    max_order = StateType.max_time_order([
+      *state_type_list,
+      *([StateType("total_body", "total_body", "kinetic_energy")] if energy_rhs_parts else []),
+    ])
+    if numerical:
+      # Kinetic energy has no numerical implementation.  Preserve the public
+      # single-VJP contract instead of silently routing it through outward.
+      if energy_rhs_parts:
+        raise NotImplementedError("numerical Jacobian is not implemented for total_body kinetic_energy")
+      fused_rhs = np.concatenate(rhs_parts, axis=-2 if rhs_is_matrix else -1)
+      return self._jacobian_transpose_mul_numerical(state_type_list, max_order, fused_rhs, rhs_is_matrix)
+
+    energy_rhs = None
+    if energy_rhs_parts:
+      energy_rhs = np.sum(np.stack(energy_rhs_parts, axis=0), axis=0)
+
+    if not state_type_list:
+      energy_vjp = self.kinetic_energy_jacobian_transpose_mul(energy_rhs)
+      return self._embed_motion_order_rhs(np.asarray(energy_vjp), 2, max_order, rhs_is_matrix)
 
     fused_rhs = np.concatenate(rhs_parts, axis=-2 if rhs_is_matrix else -1)
-    max_order = StateType.max_time_order(state_type_list)
-    if numerical:
-      return self._jacobian_transpose_mul_numerical(
-        state_type_list, max_order, fused_rhs, rhs_is_matrix,
-      )
     state = self.outward_state_ if self.outward_state_ is not None else self.state_dict_
-    return self._jacobian_transpose_mul_from_state(
+    if energy_rhs is not None:
+      fast = self._rust_cmtm_torque_energy_jacobian_transpose_apply(
+        state_type_list, fused_rhs, energy_rhs, max_order, batch_shape, rhs_is_matrix,
+      )
+      if fast is not None:
+        return fast
+
+    dynamics_vjp = self._jacobian_transpose_mul_from_state(
       state, state_type_list, max_order, fused_rhs, batch_shape, rhs_is_matrix,
     )
+    if energy_rhs is None:
+      return dynamics_vjp
+    energy_vjp = self.kinetic_energy_jacobian_transpose_mul(energy_rhs)
+    return dynamics_vjp + self._embed_motion_order_rhs(
+      np.asarray(energy_vjp), 2, max_order, rhs_is_matrix,
+    )
+
+  def squared_power_torque_vjp_terms(self, torque_state, power_rhs, torque_value=None):
+    """Return the torque request and direct velocity VJP for ``(tau.T qdot)^2``.
+
+    ``torque_request`` can be appended directly to
+    :meth:`jacobian_transpose_mul_many`; ``motion_vjp_order2`` is the direct
+    derivative through ``qdot`` and must be added by the caller after padding
+    it to its optimization motion order.  Keeping that direct selector out of
+    the dynamics request preserves the single Rust CMTM reverse pass for all
+    torque-series losses.
+    """
+    states = self._state_type_list(torque_state)
+    if len(states) != self.robot_.dof or any(st.data_type != "torque" for st in states):
+      raise ValueError("squared_power_torque_vjp_terms requires a total_joint torque StateType")
+    batch_shape = self.batch_shape_ if self.batch_shape_ else self.motions_.batch_shape()
+    power_rhs, rhs_is_matrix = batch_api.broadcast_feature_rhs(
+      power_rhs, batch_shape, 1, name="power_rhs",
+    )
+    tau = np.asarray(self.state_info(torque_state) if torque_value is None else torque_value, dtype=float)
+    if tau.shape != batch_shape + (self.robot_.dof,):
+      raise ValueError(f"torque_value must have shape {batch_shape + (self.robot_.dof,)}, got {tau.shape}")
+    motion = np.asarray(self.motion(2), dtype=float).reshape(batch_shape + (self.robot_.dof, 2))
+    velocity = motion[..., :, 1]
+    power = np.sum(tau * velocity, axis=-1)
+    if rhs_is_matrix:
+      scale = 2.0 * power[..., None] * power_rhs[..., 0, :]
+      torque_rhs = velocity[..., :, None] * scale[..., None, :]
+      velocity_rhs = tau[..., :, None] * scale[..., None, :]
+      motion_vjp = np.zeros(batch_shape + (self.robot_.dof * 2, scale.shape[-1]), dtype=float)
+      motion_vjp.reshape(batch_shape + (self.robot_.dof, 2, scale.shape[-1]))[..., :, 1, :] = velocity_rhs
+    else:
+      scale = 2.0 * power * power_rhs[..., 0]
+      torque_rhs = velocity * scale[..., None]
+      velocity_rhs = tau * scale[..., None]
+      motion_vjp = np.zeros(batch_shape + (self.robot_.dof * 2,), dtype=float)
+      motion_vjp.reshape(batch_shape + (self.robot_.dof, 2))[..., :, 1] = velocity_rhs
+    return {
+      "torque_request": (torque_state, torque_rhs),
+      "motion_vjp_order2": motion_vjp,
+      "power": power,
+    }
 
   def jacobian_tensor(self, state_type, numerical : bool = False) -> JacobianTensor:
     state_type_list = self._state_type_list(state_type)

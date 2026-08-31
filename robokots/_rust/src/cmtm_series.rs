@@ -217,6 +217,7 @@ impl RustCompiledRobot {
         dynamics_order: usize,
         gravity: [f64; 3],
         rhs_cols: usize,
+        kinetic_energy_cotangent: Option<&[f64]>,
         primal: &mut DynamicsCmtmWorkspace,
         out: &mut [f64],
     ) {
@@ -378,6 +379,22 @@ impl RustCompiledRobot {
             let mut joint_mat_flat = vec![0.0; self.joint_num * 16];
             for link in 0..self.link_num { for r in 0..4 { for c in 0..4 { link_mat_flat[link * 16 + r * 4 + c] = link_mat_bar[link][r][c]; }}}
             for joint in 0..self.joint_num { for r in 0..4 { for c in 0..4 { joint_mat_flat[joint * 16 + r * 4 + c] = joint_mat_bar[joint][r][c]; }}}
+            if let Some(energy_cotangent) = kinetic_energy_cotangent {
+                let lambda = energy_cotangent[rhs];
+                if lambda != 0.0 {
+                    for link in 0..self.link_num {
+                        let velocity = vec6_from_flat(
+                            cmtm_vecs_slice(&primal.cmtm.link_vecs, link, kin_order), 0,
+                        );
+                        let iv = mat6_vec6(self.link_inertia[link], velocity);
+                        let itv = mat6_transpose_vec6(self.link_inertia[link], velocity);
+                        let lv_start = link * vec_len;
+                        for c in 0..6 {
+                            link_vec_bar[lv_start + c] += 0.5 * (iv[c] + itv[c]) * lambda;
+                        }
+                    }
+                }
+            }
             let mut motion_bar = vec![0.0; input_len];
             self.kinematics_cmtm_outward_reverse_into(
                 motion, kin_order, &link_mat_flat, &link_vec_bar, &joint_mat_flat, &joint_vec_bar,
@@ -401,7 +418,28 @@ impl RustCompiledRobot {
         self.dynamics_cmtm_reverse_into(
             motion, &vec![0.0; momentum_len], &vec![0.0; link_force_len],
             &vec![0.0; joint_momentum_len], &vec![0.0; joint_force_len],
-            torque_cotangent, dynamics_order, gravity, rhs_cols, primal, out,
+            torque_cotangent, dynamics_order, gravity, rhs_cols, None, primal, out,
+        );
+    }
+
+    /// Fuse torque-series and kinetic-energy cotangents into one dynamics
+    /// reverse pass.  Kinetic energy seeds the velocity slot of the same
+    /// final kinematics reverse used by the dynamics recurrence.
+    pub(crate) fn dynamics_joint_torque_series_energy_reverse_into(
+        &self,
+        motion: &[f64], torque_cotangent: &[f64], energy_cotangent: &[f64],
+        dynamics_order: usize, gravity: [f64; 3], rhs_cols: usize,
+        primal: &mut DynamicsCmtmWorkspace, out: &mut [f64],
+    ) {
+        let momentum_len = self.link_num * (dynamics_order + 1) * 6 * rhs_cols;
+        let link_force_len = self.link_num * dynamics_order * 6 * rhs_cols;
+        let joint_momentum_len = self.joint_num * (dynamics_order + 1) * 6 * rhs_cols;
+        let joint_force_len = self.joint_num * dynamics_order * 6 * rhs_cols;
+        self.dynamics_cmtm_reverse_into(
+            motion, &vec![0.0; momentum_len], &vec![0.0; link_force_len],
+            &vec![0.0; joint_momentum_len], &vec![0.0; joint_force_len],
+            torque_cotangent, dynamics_order, gravity, rhs_cols,
+            Some(energy_cotangent), primal, out,
         );
     }
 

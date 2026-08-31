@@ -98,3 +98,16 @@ overhead. The mixed selected case is intentionally downsampled in `quick`
 because `torque_diff1/torque_diff2` still exercise the general outward
 transpose/Jacobian paths; use `full` when you need the 64-DOF mixed selected
 numbers. Results are written to CSV with a matching JSON metadata file.
+
+## Fused Trajectory VJP
+
+```bash
+uv run python -m developer.benchmarks.fused_vjp_trajectory
+```
+
+This uses the direct-collocation workload of 509 steps and 69 DoF by default.
+It checks that the sum of four separate VJPs (`torque`, `torque_diff1`,
+`torque_diff2`, and total kinetic energy) matches one
+`jacobian_transpose_mul_many` result, then reports both timings.  State
+construction is outside the timed region.  Use `--rhs-cols 8` to model a
+multi-column parameter VJP.

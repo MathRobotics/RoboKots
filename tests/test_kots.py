@@ -2641,6 +2641,109 @@ def test_jacobian_transpose_mul_many_fuses_torque_state_refs(monkeypatch, batche
     np.testing.assert_allclose(actual, expected, atol=2e-10, rtol=2e-10)
 
 
+def test_jacobian_transpose_mul_many_fuses_power_torque_cotangent():
+    """A power loss contributes cotangents to both torque and joint velocity.
+
+    For ``P = tau(q, qdot, qddot) @ qdot``, the output cotangents are
+    ``qdot * lambda`` for torque and ``tau * lambda`` for joint velocity.
+    This is the layout supplied by parameter-VJP users that group the two
+    state references separately.
+    """
+    pytest.importorskip("robokots._rust")
+    rng = np.random.default_rng(8539)
+    order = 4
+    kots = _make_kots(order=order)
+    kots.import_motions(rng.standard_normal(kots.dof() * order))
+    kots.dynamics(backend="rust", gravity=(0.2, -0.3, -9.81), materialize_dict=False)
+    torque = StateType("total_joint", "total_joint", "torque")
+    velocity = StateType("total_joint", "total_joint", "veloc")
+    tau_value = np.asarray(kots.state_info(torque))
+    velocity_value = np.asarray(kots.state_info(velocity))
+    power_rhs = rng.standard_normal((1, 3))
+    torque_rhs = velocity_value[..., :, None] * power_rhs
+    velocity_rhs = tau_value[..., :, None] * power_rhs
+    expected = kots.jacobian_transpose_mul(torque, torque_rhs)
+    expected += kots._embed_motion_order_rhs(
+        kots.jacobian_transpose_mul(velocity, velocity_rhs), 2, 3, rhs_is_matrix=True,
+    )
+    actual = kots.jacobian_transpose_mul_many([
+        (torque, torque_rhs),
+        (velocity, velocity_rhs),
+    ])
+    np.testing.assert_allclose(actual, expected, atol=2e-10, rtol=2e-10)
+
+
+def test_squared_power_torque_vjp_terms_feed_fused_request():
+    pytest.importorskip("robokots._rust")
+    rng = np.random.default_rng(85390)
+    kots = _make_kots(order=3)
+    kots.import_motions(rng.standard_normal(kots.dof() * 3))
+    kots.dynamics(backend="rust", gravity=(0.2, -0.3, -9.81), materialize_dict=False)
+    torque = StateType("total_joint", "total_joint", "torque")
+    power_rhs = rng.standard_normal((1, 2))
+    terms = kots.squared_power_torque_vjp_terms(torque, power_rhs)
+    tau = np.asarray(kots.state_info(torque))
+    velocity = kots.motion(2).reshape(kots.dof(), 2)[:, 1]
+    scale = 2.0 * np.sum(tau * velocity) * power_rhs[0]
+    expected_torque_rhs = velocity[:, None] * scale[None, :]
+    expected_motion = np.zeros((kots.dof() * 2, 2))
+    expected_motion.reshape(kots.dof(), 2, 2)[:, 1, :] = tau[:, None] * scale[None, :]
+    np.testing.assert_allclose(terms["torque_request"][1], expected_torque_rhs)
+    np.testing.assert_allclose(terms["motion_vjp_order2"], expected_motion)
+    actual = kots.jacobian_transpose_mul_many([terms["torque_request"]])
+    actual += kots._embed_motion_order_rhs(terms["motion_vjp_order2"], 2, 3, rhs_is_matrix=True)
+    expected = kots.jacobian_transpose_mul(torque, expected_torque_rhs)
+    expected += kots._embed_motion_order_rhs(expected_motion, 2, 3, rhs_is_matrix=True)
+    np.testing.assert_allclose(actual, expected, atol=2e-10, rtol=2e-10)
+
+
+@pytest.mark.parametrize("batched", [False, True])
+def test_jacobian_transpose_mul_many_fuses_torque_series_and_kinetic_energy(monkeypatch, batched):
+    """Torque series and energy must share the final CMTM reverse sweep."""
+    pytest.importorskip("robokots._rust")
+    rng = np.random.default_rng(85391 + int(batched))
+    order = 5
+    kots = _make_kots(order=order)
+    batch_shape = (3,) if batched else ()
+    kots.import_motions(rng.standard_normal(batch_shape + (kots.dof() * order,)))
+    kots.dynamics(backend="rust", gravity=(0.2, -0.3, -9.81), materialize_dict=False)
+    torque = StateType("total_joint", "total_joint", "torque")
+    torque_d1 = StateType("total_joint", "total_joint", "torque_diff1")
+    torque_d2 = StateType("total_joint", "total_joint", "torque_diff2")
+    energy = StateType("total_body", "total_body", "kinetic_energy")
+    cols = 2
+    torque_rhs = rng.standard_normal(batch_shape + (kots.dof(), cols))
+    torque_d1_rhs = rng.standard_normal(batch_shape + (kots.dof(), cols))
+    torque_d2_rhs = rng.standard_normal(batch_shape + (kots.dof(), cols))
+    energy_rhs = rng.standard_normal(batch_shape + (1, cols))
+
+    expected = sum((
+        kots._embed_motion_order_rhs(
+            kots.jacobian_transpose_mul(state, rhs),
+            StateType.max_time_order([state]), order, rhs_is_matrix=True,
+        )
+        for state, rhs in (
+            (torque, torque_rhs), (torque_d1, torque_d1_rhs),
+            (torque_d2, torque_d2_rhs), (energy, energy_rhs),
+        )
+    ))
+    calls = 0
+    original = kots._rust_cmtm_torque_energy_jacobian_transpose_apply
+
+    def counted(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(kots, "_rust_cmtm_torque_energy_jacobian_transpose_apply", counted)
+    actual = kots.jacobian_transpose_mul_many([
+        (torque, torque_rhs), (torque_d1, torque_d1_rhs),
+        (torque_d2, torque_d2_rhs), (energy, energy_rhs),
+    ])
+    assert calls == 1
+    np.testing.assert_allclose(actual, expected, atol=2e-10, rtol=2e-10)
+
+
 @pytest.mark.parametrize("batched", [False, True])
 def test_rust_kinetic_energy_jvp_vjp_and_batch_match_finite_difference(batched):
     pytest.importorskip("robokots._rust")

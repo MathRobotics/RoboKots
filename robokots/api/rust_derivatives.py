@@ -656,6 +656,65 @@ class RustDerivativesMixin:
       return out
     return out[..., 0]
 
+  def _rust_cmtm_torque_energy_jacobian_transpose_apply(
+      self, torque_state_type_list, torque_rhs, energy_rhs, max_order : int,
+      batch_shape : tuple, rhs_is_matrix : bool,
+  ):
+    """Fuse local torque-series and kinetic-energy cotangents in Rust.
+
+    The backend seeds energy at the velocity slot of the same final
+    kinematics reverse recurrence used by the CMTM torque reverse.  Thus a
+    trajectory sample has one primal dynamics pass and one reverse tree walk,
+    rather than a torque VJP plus a separate energy kinematics VJP.
+    """
+    if not hasattr(self.outward_state_, "raw_data"):
+      return None
+    spec = self._rust_cmtm_torque_row_parts(torque_state_type_list, max_order)
+    if spec is None:
+      return None
+    dynamics_order, part_specs = spec
+    motion = np.asarray(self.motion(max_order), dtype=float)
+    motion_batch_shape = motion.shape[:-1] if motion.ndim > 1 else ()
+    if motion.shape[-1] != self.robot_.dof * max_order or tuple(batch_shape) != tuple(motion_batch_shape):
+      return None
+    try:
+      torque_matrix = torque_rhs.reshape(batch_shape + torque_rhs.shape[-2:]) if rhs_is_matrix and batch_shape else torque_rhs if rhs_is_matrix else (torque_rhs.reshape(batch_shape + (torque_rhs.shape[-1],)) if batch_shape else torque_rhs)[..., None]
+      energy_matrix = energy_rhs.reshape(batch_shape + energy_rhs.shape[-2:]) if rhs_is_matrix and batch_shape else energy_rhs if rhs_is_matrix else (energy_rhs.reshape(batch_shape + (energy_rhs.shape[-1],)) if batch_shape else energy_rhs)[..., None]
+      rhs_cols = torque_matrix.shape[-1]
+      if energy_matrix.shape[-2:] != (1, rhs_cols):
+        return None
+      packed = np.zeros(
+        torque_matrix.shape[:-2] + (len(self.robot_.joints), dynamics_order, rhs_cols),
+        dtype=torque_matrix.dtype,
+      )
+      row_start = 0
+      for rows, size in part_specs:
+        for local_row, (joint_id, time_order) in enumerate(rows):
+          packed[..., joint_id, time_order, :] += torque_matrix[..., row_start + local_row, :]
+        row_start += size
+      robot = self._rust_compiled_robot()
+      if batch_shape:
+        flat_motion = np.ascontiguousarray(motion.reshape((-1, motion.shape[-1])))
+        flat_packed = np.ascontiguousarray(packed.reshape((-1,) + packed.shape[-3:]))
+        flat_energy = np.ascontiguousarray(energy_matrix.reshape((-1,) + energy_matrix.shape[-2:]))
+        batch_kernel = getattr(robot, "dynamics_joint_torque_series_energy_transpose_matmul_rhs_batch", None)
+        if batch_kernel is None:
+          return None
+        out = np.asarray(batch_kernel(
+          flat_motion, flat_packed, flat_energy, dynamics_order, gravity=self.gravity_,
+        )).reshape(batch_shape + (motion.shape[-1], rhs_cols))
+      else:
+        kernel = getattr(robot, "dynamics_joint_torque_series_energy_transpose_matmul_rhs", None)
+        if kernel is None:
+          return None
+        out = np.asarray(kernel(
+          np.ascontiguousarray(motion), np.ascontiguousarray(packed),
+          np.ascontiguousarray(energy_matrix), dynamics_order, gravity=self.gravity_,
+        ))
+    except Exception:
+      return None
+    return out if rhs_is_matrix else out[..., 0]
+
   def _rust_torque_jacobian_transpose_apply(self, state_type_list, max_order : int, rhs, batch_shape : tuple, rhs_is_matrix : bool):
     spec = self._rust_torque_row_parts(state_type_list, max_order)
     if spec is None or not hasattr(self.outward_state_, "raw_data"):
