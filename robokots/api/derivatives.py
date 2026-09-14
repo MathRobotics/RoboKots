@@ -10,6 +10,38 @@ from ..core.state_tensor import JacobianTensor
 
 
 class DerivativesMixin:
+  def jacobian_autodiff(self, state_type, list_output: bool = False):
+    """Differentiate rigid-body dynamics with JAX forward-mode AD.
+
+    Supports link/joint momentum, force, torque and their time derivatives,
+    local/world spatial outputs, and the same batch/motion axes as jacobian().
+    The model must contain only fixed, revolute and prismatic joints. Gravity
+    follows the last dynamics() call. No cached analytic derivatives are used.
+    """
+    import jax
+    import jax.numpy as jnp
+    from ..outward.diff.dynamics_jax import dynamics_state_vector_jax
+
+    states = self._state_type_list(state_type)
+    if not states:
+      raise ValueError("jacobian_autodiff requires at least one dynamics state.")
+    order = StateType.max_time_order(states)
+    motion = jnp.asarray(self.motion(order))
+    def value(x):
+      return dynamics_state_vector_jax(self.robot_, x, states, order, self.gravity_)
+    derivative = jax.jacfwd(value)
+    if motion.ndim == 1:
+      jacobian = np.asarray(derivative(motion))
+    else:
+      flat = motion.reshape((-1, motion.shape[-1]))
+      jacobian = np.asarray(jax.vmap(derivative)(flat))
+      jacobian = jacobian.reshape(motion.shape[:-1] + jacobian.shape[-2:])
+    if not list_output:
+      return jacobian
+    sizes = [self._jacobian_output_dim([state]) for state in states]
+    offsets = np.cumsum([0] + sizes)
+    return [jacobian[..., offsets[i]:offsets[i + 1], :] for i in range(len(states))]
+
   def _jacobian_numerical(self, state_type_list, max_order : int, list_output : bool = False):
     if not self.motions_.is_batched():
       jacobs = [

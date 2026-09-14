@@ -2555,6 +2555,18 @@ def outward_jacobian(robot : RobotStruct, state : dict, state_type_list : list[S
     if all(st.owner_type == "joint" for st in state_type_list):
         return _outward_joint_only_jacobian(robot, state, state_type_list, max_time_order, dim=dim, list_output=list_output)
 
+    # Mixed owners need the same moving-frame product rule as the selected
+    # link/joint paths. The generic assembly below contains local force rows.
+    if any(st.data_type in keys_force and st.frame_name == "world" for st in state_type_list):
+        parts = {}
+        for owner, builder in (("link", _outward_link_only_jacobian), ("joint", _outward_joint_only_jacobian)):
+            indices = [i for i, st in enumerate(state_type_list) if st.owner_type == owner]
+            if indices:
+                values = builder(robot, state, [state_type_list[i] for i in indices], max_time_order, dim=dim, list_output=True)
+                parts.update(zip(indices, values))
+        jacob_list = [parts[i] for i in range(len(state_type_list))]
+        return jacob_list if list_output else np.concatenate(jacob_list, axis=-2)
+
     dof = dim_to_dof(dim)
     force_order = max_time_order - 2
     is_batched = _is_batched_kinematics_state(

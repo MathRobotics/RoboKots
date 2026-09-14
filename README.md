@@ -139,6 +139,54 @@ comparison and validation. `jacobian_mul()` applies the gravity CMTM variation
 directly for vector and matrix right-hand sides, without assembling the dense
 gravity Jacobian.
 
+## JAX Automatic Differentiation of Dynamics
+
+`jacobian_autodiff()` computes dynamics Jacobians independently with JAX
+forward-mode automatic differentiation:
+
+```python
+import jax
+from robokots.kots import Kots, StateType
+
+jax.config.update("jax_enable_x64", True)  # recommended for derivative comparisons
+kots = Kots.from_json_file("examples/model/sample_robot.json", order=5)
+# Import your motion vector (q and its time derivatives) before evaluation.
+kots.dynamics(gravity=[0, 0, -9.81])
+state = StateType("total_joint", "total_joint", "torque_diff2")
+jac_ad = kots.jacobian_autodiff(state)
+jac_analytic = kots.jacobian(state)
+```
+
+Supported outputs are link/joint `momentum`, `force`, joint `torque`, and their
+`*_diffN` time derivatives. Momentum derivative N needs motion order N+2;
+force/torque derivative N needs order N+3. Spatial outputs accept local or
+world frames. The API preserves batch axes and accepts `list_output=True`,
+using the same row and motion-column ordering as `jacobian()`. Gravity follows
+the last `dynamics()` call and defaults to zero.
+
+The JAX implementation supports rigid links with fixed, revolute and prismatic
+joints, including branched trees. Flexible links and spherical/floating joints
+raise `NotImplementedError`. This is inverse dynamics, not forward dynamics.
+`jacobian()` and `dynamics()` retain their existing backend selection;
+`jacobian_autodiff()` explicitly selects this independent JAX calculation.
+
+For JIT, reverse-mode AD, or differentiable optimization code, use the pure
+array function directly (the `Kots` wrapper returns NumPy arrays):
+
+```python
+import jax.numpy as jnp
+from robokots.outward.diff.dynamics_jax import dynamics_state_vector_jax
+
+states = [StateType("joint", "joint1", "torque")]
+value = lambda x: dynamics_state_vector_jax(
+    kots.robot_, x, states, order=3, gravity=[0, 0, -9.81]
+)
+jac = jax.jit(jax.jacfwd(value))(jnp.asarray(kots.motion(3)))
+```
+
+Run `python -m developer.benchmarks.jacobian_compare` to compare the analytic,
+finite-difference and automatic derivatives for kinematics and dynamics.
+
 ## Model JSON
 
 RoboKots model JSON is documented in `docs/model_json.md`. Decoded model data
