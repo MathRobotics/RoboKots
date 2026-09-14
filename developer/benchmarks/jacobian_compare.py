@@ -19,6 +19,7 @@ CONFIG = {
     "order": 5,
     "seed": 0,
     "target_link": None,
+    "gravity": [0.3, -0.4, -9.81],
 }
 
 COMPARE_SPECS = (
@@ -107,6 +108,26 @@ def main() -> None:
         _print_comparison(data_type, analytic, numerical, autodiff)
         print(f"  motion_order={required_order}")
         print()
+
+    kots.dynamics(gravity=CONFIG["gravity"])
+    target_joint = next(joint.name for joint in kots.robot_.joints if joint.dof)
+    print(f"dynamics gravity: {CONFIG['gravity']}")
+    for owner, name, families in (
+        ("link", target_link, ("momentum", "force")),
+        ("joint", target_joint, ("momentum", "force", "torque")),
+    ):
+        for family in families:
+            # Include every derivative available at the configured motion order.
+            base_order = 2 if family == "momentum" else 3
+            for derivative_order in range(order - base_order + 1):
+                data_type = family if derivative_order == 0 else f"{family}_diff{derivative_order}"
+                state = StateType(owner, name, data_type)
+                _print_comparison(
+                    f"{owner}/{name}/{data_type}",
+                    kots.jacobian(state),
+                    kots.jacobian(state, numerical=True),
+                    kots.jacobian_autodiff(state),
+                )
 
 
 if __name__ == "__main__":

@@ -37,11 +37,28 @@ execution on generated high-DOF models.
 uv run python -m developer.benchmarks.jacobian_compare
 uv run python -m developer.benchmarks.jacobian_dof_sweep
 uv run python -m developer.benchmarks.jacobian_transpose_matvec_compare
+uv run python -u -m developer.benchmarks.dynamics_autodiff_compare
 ```
 
 These compare analytic, numerical, and JAX autodiff Jacobians, including a DOF
 sweep utility for scaling checks. The transpose matvec comparison measures the
 direct `jacobian_transpose_mul` API against explicit `jacobian(...).T @ vec`.
+`jacobian_compare` also checks link/joint momentum, force and joint torque,
+including all time derivatives available at its configured motion order and
+nonzero gravity. These use the public `jacobian_autodiff()` method. The DOF
+sweep currently measures the velocity, acceleration and jerk cases only.
+
+`dynamics_autodiff_compare` measures dense dynamics Jacobians with NumPy/Rust
+analytic derivatives, the existing numerical-difference API, eager JAX and
+JIT-compiled JAX. It separates cached analytic timings, state-inclusive timings,
+and first-call JIT cost, synchronizes JAX results, and writes a Markdown report
+and raw JSON to `developer/benchmarks/results/dynamics_autodiff.*`. Models cover
+the sample arm, a branched tree, and generated 8/16-DOF arms. Use `--repeats`
+to change analytic repetitions and `--output` to change the output prefix.
+
+The [recorded comparison](results/dynamics_autodiff.md) includes the measurement
+environment; [raw measurements](results/dynamics_autodiff.json) are stored alongside
+it. These values are a measurement snapshot, not performance requirements.
 
 ## Pinocchio Comparison
 

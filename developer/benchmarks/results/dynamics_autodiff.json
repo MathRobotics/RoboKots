@@ -1,0 +1,993 @@
+{
+  "metadata": {
+    "utc": "2026-09-13T08:03:25.521299+00:00",
+    "platform": "macOS-15.7.4-arm64-arm-64bit-Mach-O",
+    "cpu": "arm",
+    "python": "3.13.1",
+    "jax": "0.10.1",
+    "numpy": "2.4.6",
+    "devices": "[CpuDevice(id=0)]",
+    "repeats": 20
+  },
+  "results": [
+    {
+      "model": "sample4",
+      "dof": 4,
+      "output": "momentum",
+      "owner": "link",
+      "motion_order": 2,
+      "jacobian_shape": [
+        6,
+        8
+      ],
+      "timing": {
+        "numpy_full": {
+          "median_ms": 2.2327500000000002,
+          "min_ms": 1.996416,
+          "p90_ms": 3.5599494000000016,
+          "repeats": 20
+        },
+        "numpy_cached": {
+          "median_ms": 0.18412499999999998,
+          "min_ms": 0.179542,
+          "p90_ms": 0.1915455,
+          "repeats": 20
+        },
+        "rust_full": {
+          "median_ms": 0.9174585,
+          "min_ms": 0.902417,
+          "p90_ms": 1.0163333000000003,
+          "repeats": 20
+        },
+        "rust_cached": {
+          "median_ms": 0.130625,
+          "min_ms": 0.127917,
+          "p90_ms": 0.14084620000000006,
+          "repeats": 20
+        },
+        "numerical": {
+          "median_ms": 17.121125,
+          "min_ms": 16.9,
+          "p90_ms": 17.9180578,
+          "repeats": 3
+        },
+        "jax_eager": {
+          "median_ms": 46.846458,
+          "min_ms": 45.951,
+          "p90_ms": 47.298857999999996,
+          "repeats": 3
+        },
+        "jax_jit_first": {
+          "median_ms": 200.60725,
+          "min_ms": 200.60725,
+          "p90_ms": 200.60725,
+          "repeats": 1
+        },
+        "jax_jit": {
+          "median_ms": 0.06735450000000001,
+          "min_ms": 0.063166,
+          "p90_ms": 0.09562500000000007,
+          "repeats": 100
+        }
+      },
+      "error_vs_jax_jit": {
+        "numpy": {
+          "max_abs": 2.6645352591003757e-15,
+          "relative_frobenius": 1.9676100835364927e-16
+        },
+        "rust": {
+          "max_abs": 6.661338147750939e-15,
+          "relative_frobenius": 2.9902925947641935e-16
+        },
+        "numerical": {
+          "max_abs": 2.975500379420737e-08,
+          "relative_frobenius": 1.643784561485368e-09
+        },
+        "jax_eager": {
+          "max_abs": 2.220446049250313e-16,
+          "relative_frobenius": 9.63658356908778e-18
+        }
+      },
+      "additional_input_errors": [
+        {
+          "max_abs": 5.329070518200751e-15,
+          "relative_frobenius": 3.572901381614001e-16
+        },
+        {
+          "max_abs": 1.0658141036401503e-14,
+          "relative_frobenius": 5.192657008683665e-16
+        }
+      ]
+    },
+    {
+      "model": "sample4",
+      "dof": 4,
+      "output": "force",
+      "owner": "link",
+      "motion_order": 3,
+      "jacobian_shape": [
+        6,
+        12
+      ],
+      "timing": {
+        "numpy_full": {
+          "median_ms": 11.4579375,
+          "min_ms": 11.25775,
+          "p90_ms": 11.6283958,
+          "repeats": 20
+        },
+        "numpy_cached": {
+          "median_ms": 3.489,
+          "min_ms": 3.416208,
+          "p90_ms": 3.5824875,
+          "repeats": 20
+        },
+        "rust_full": {
+          "median_ms": 6.762396,
+          "min_ms": 6.66125,
+          "p90_ms": 6.8966288,
+          "repeats": 20
+        },
+        "rust_cached": {
+          "median_ms": 2.0461454999999997,
+          "min_ms": 2.009417,
+          "p90_ms": 2.1462455,
+          "repeats": 20
+        },
+        "numerical": {
+          "median_ms": 75.623625,
+          "min_ms": 75.267,
+          "p90_ms": 76.19959220000001,
+          "repeats": 3
+        },
+        "jax_eager": {
+          "median_ms": 198.269333,
+          "min_ms": 195.95925,
+          "p90_ms": 198.797133,
+          "repeats": 3
+        },
+        "jax_jit_first": {
+          "median_ms": 550.27825,
+          "min_ms": 550.27825,
+          "p90_ms": 550.27825,
+          "repeats": 1
+        },
+        "jax_jit": {
+          "median_ms": 0.12322849999999999,
+          "min_ms": 0.110291,
+          "p90_ms": 0.15144610000000003,
+          "repeats": 100
+        }
+      },
+      "error_vs_jax_jit": {
+        "numpy": {
+          "max_abs": 4.9960036108132044e-15,
+          "relative_frobenius": 3.666312549729578e-16
+        },
+        "rust": {
+          "max_abs": 1.5987211554602254e-14,
+          "relative_frobenius": 7.572147439816634e-16
+        },
+        "numerical": {
+          "max_abs": 6.861280965608785e-08,
+          "relative_frobenius": 5.584636754686206e-09
+        },
+        "jax_eager": {
+          "max_abs": 0.0,
+          "relative_frobenius": 0.0
+        }
+      },
+      "additional_input_errors": [
+        {
+          "max_abs": 1.0658141036401503e-14,
+          "relative_frobenius": 6.044335287055328e-16
+        },
+        {
+          "max_abs": 3.552713678800501e-15,
+          "relative_frobenius": 3.480228002180745e-16
+        }
+      ]
+    },
+    {
+      "model": "sample4",
+      "dof": 4,
+      "output": "torque",
+      "owner": "total_joint",
+      "motion_order": 3,
+      "jacobian_shape": [
+        4,
+        12
+      ],
+      "timing": {
+        "numpy_full": {
+          "median_ms": 16.443146,
+          "min_ms": 16.127833,
+          "p90_ms": 16.7046125,
+          "repeats": 20
+        },
+        "numpy_cached": {
+          "median_ms": 5.8439375,
+          "min_ms": 5.707708,
+          "p90_ms": 5.9457215,
+          "repeats": 20
+        },
+        "rust_full": {
+          "median_ms": 0.0393335,
+          "min_ms": 0.038125,
+          "p90_ms": 0.044267,
+          "repeats": 20
+        },
+        "rust_cached": {
+          "median_ms": 0.020542,
+          "min_ms": 0.019959,
+          "p90_ms": 0.0213706,
+          "repeats": 20
+        },
+        "numerical": {
+          "median_ms": 302.964,
+          "min_ms": 301.464792,
+          "p90_ms": 304.0083,
+          "repeats": 3
+        },
+        "jax_eager": {
+          "median_ms": 194.6675,
+          "min_ms": 194.505125,
+          "p90_ms": 196.0866,
+          "repeats": 3
+        },
+        "jax_jit_first": {
+          "median_ms": 737.038917,
+          "min_ms": 737.038917,
+          "p90_ms": 737.038917,
+          "repeats": 1
+        },
+        "jax_jit": {
+          "median_ms": 0.12427099999999999,
+          "min_ms": 0.113375,
+          "p90_ms": 0.16455870000000003,
+          "repeats": 100
+        }
+      },
+      "error_vs_jax_jit": {
+        "numpy": {
+          "max_abs": 1.4210854715202004e-14,
+          "relative_frobenius": 1.7304931005376284e-16
+        },
+        "rust": {
+          "max_abs": 2.842170943040401e-14,
+          "relative_frobenius": 1.8825413253997067e-16
+        },
+        "numerical": {
+          "max_abs": 2.0784108389904077e-06,
+          "relative_frobenius": 1.9001031228081818e-08
+        },
+        "jax_eager": {
+          "max_abs": 0.0,
+          "relative_frobenius": 0.0
+        }
+      },
+      "additional_input_errors": [
+        {
+          "max_abs": 7.105427357601002e-14,
+          "relative_frobenius": 7.468479366062746e-16
+        },
+        {
+          "max_abs": 2.1316282072803006e-14,
+          "relative_frobenius": 1.727854729563581e-16
+        }
+      ]
+    },
+    {
+      "model": "sample4",
+      "dof": 4,
+      "output": "torque_diff1",
+      "owner": "total_joint",
+      "motion_order": 4,
+      "jacobian_shape": [
+        4,
+        16
+      ],
+      "timing": {
+        "numpy_full": {
+          "median_ms": 25.519625,
+          "min_ms": 24.449833,
+          "p90_ms": 34.259587800000006,
+          "repeats": 20
+        },
+        "numpy_cached": {
+          "median_ms": 7.6004995,
+          "min_ms": 7.452417,
+          "p90_ms": 7.7733083,
+          "repeats": 20
+        },
+        "rust_full": {
+          "median_ms": 0.441229,
+          "min_ms": 0.436417,
+          "p90_ms": 0.4469417,
+          "repeats": 20
+        },
+        "rust_cached": {
+          "median_ms": 0.424354,
+          "min_ms": 0.415833,
+          "p90_ms": 0.4395286,
+          "repeats": 20
+        },
+        "numerical": {
+          "median_ms": 594.3375,
+          "min_ms": 577.900417,
+          "p90_ms": 599.9762336,
+          "repeats": 3
+        },
+        "jax_eager": {
+          "median_ms": 535.213542,
+          "min_ms": 516.818333,
+          "p90_ms": 539.3602756,
+          "repeats": 3
+        },
+        "jax_jit_first": {
+          "median_ms": 1465.360417,
+          "min_ms": 1465.360417,
+          "p90_ms": 1465.360417,
+          "repeats": 1
+        },
+        "jax_jit": {
+          "median_ms": 0.234458,
+          "min_ms": 0.197417,
+          "p90_ms": 0.28782980000000014,
+          "repeats": 100
+        }
+      },
+      "error_vs_jax_jit": {
+        "numpy": {
+          "max_abs": 4.618527782440651e-14,
+          "relative_frobenius": 6.160398105122655e-16
+        },
+        "rust": {
+          "max_abs": 5.684341886080802e-14,
+          "relative_frobenius": 5.05562943915895e-16
+        },
+        "numerical": {
+          "max_abs": 2.3657076488881046e-06,
+          "relative_frobenius": 1.9587732635472387e-08
+        },
+        "jax_eager": {
+          "max_abs": 7.105427357601002e-15,
+          "relative_frobenius": 4.0123647392547816e-17
+        }
+      },
+      "additional_input_errors": [
+        {
+          "max_abs": 1.341149413747189e-13,
+          "relative_frobenius": 1.281615488923531e-15
+        },
+        {
+          "max_abs": 2.1582735598713043e-13,
+          "relative_frobenius": 2.3661055859274718e-15
+        }
+      ]
+    },
+    {
+      "model": "sample4",
+      "dof": 4,
+      "output": "torque_diff2",
+      "owner": "total_joint",
+      "motion_order": 5,
+      "jacobian_shape": [
+        4,
+        20
+      ],
+      "timing": {
+        "numpy_full": {
+          "median_ms": 33.047021,
+          "min_ms": 32.481792,
+          "p90_ms": 35.230417,
+          "repeats": 20
+        },
+        "numpy_cached": {
+          "median_ms": 9.3400415,
+          "min_ms": 9.207625,
+          "p90_ms": 9.5338663,
+          "repeats": 20
+        },
+        "rust_full": {
+          "median_ms": 0.6394584999999999,
+          "min_ms": 0.621,
+          "p90_ms": 0.7651959,
+          "repeats": 20
+        },
+        "rust_cached": {
+          "median_ms": 0.6222084999999999,
+          "min_ms": 0.613792,
+          "p90_ms": 0.629942,
+          "repeats": 20
+        },
+        "numerical": {
+          "median_ms": 977.404792,
+          "min_ms": 960.927959,
+          "p90_ms": 996.5510256,
+          "repeats": 3
+        },
+        "jax_eager": {
+          "median_ms": 903.180084,
+          "min_ms": 900.947208,
+          "p90_ms": 922.8290168,
+          "repeats": 3
+        },
+        "jax_jit_first": {
+          "median_ms": 2412.002166,
+          "min_ms": 2412.002166,
+          "p90_ms": 2412.002166,
+          "repeats": 1
+        },
+        "jax_jit": {
+          "median_ms": 0.2936875,
+          "min_ms": 0.261375,
+          "p90_ms": 0.34245420000000004,
+          "repeats": 100
+        }
+      },
+      "error_vs_jax_jit": {
+        "numpy": {
+          "max_abs": 1.6342482922482304e-13,
+          "relative_frobenius": 1.9036771670115507e-15
+        },
+        "rust": {
+          "max_abs": 7.105427357601002e-14,
+          "relative_frobenius": 7.490285042545869e-16
+        },
+        "numerical": {
+          "max_abs": 3.2297808001402473e-06,
+          "relative_frobenius": 2.8986100610247687e-08
+        },
+        "jax_eager": {
+          "max_abs": 2.1316282072803006e-14,
+          "relative_frobenius": 1.4639299334329219e-16
+        }
+      },
+      "additional_input_errors": [
+        {
+          "max_abs": 3.481659405224491e-13,
+          "relative_frobenius": 3.811126583865095e-15
+        },
+        {
+          "max_abs": 3.588240815588506e-13,
+          "relative_frobenius": 3.4912175462115985e-15
+        }
+      ]
+    },
+    {
+      "model": "branched3",
+      "dof": 3,
+      "output": "torque",
+      "owner": "total_joint",
+      "motion_order": 3,
+      "jacobian_shape": [
+        3,
+        9
+      ],
+      "timing": {
+        "numpy_full": {
+          "median_ms": 14.3883335,
+          "min_ms": 14.112167,
+          "p90_ms": 15.2863,
+          "repeats": 20
+        },
+        "numpy_cached": {
+          "median_ms": 5.449374499999999,
+          "min_ms": 5.366625,
+          "p90_ms": 5.5421036,
+          "repeats": 20
+        },
+        "rust_full": {
+          "median_ms": 0.0347705,
+          "min_ms": 0.033583,
+          "p90_ms": 0.0367419,
+          "repeats": 20
+        },
+        "rust_cached": {
+          "median_ms": 0.016833,
+          "min_ms": 0.016416,
+          "p90_ms": 0.017358000000000002,
+          "repeats": 20
+        },
+        "numerical": {
+          "median_ms": 162.519917,
+          "min_ms": 162.001542,
+          "p90_ms": 164.6123498,
+          "repeats": 3
+        },
+        "jax_eager": {
+          "median_ms": 196.125916,
+          "min_ms": 195.596667,
+          "p90_ms": 201.8126496,
+          "repeats": 3
+        },
+        "jax_jit_first": {
+          "median_ms": 582.502625,
+          "min_ms": 582.502625,
+          "p90_ms": 582.502625,
+          "repeats": 1
+        },
+        "jax_jit": {
+          "median_ms": 0.119208,
+          "min_ms": 0.108458,
+          "p90_ms": 0.14435420000000004,
+          "repeats": 100
+        }
+      },
+      "error_vs_jax_jit": {
+        "numpy": {
+          "max_abs": 1.3322676295501878e-15,
+          "relative_frobenius": 7.192487102690633e-16
+        },
+        "rust": {
+          "max_abs": 1.5543122344752192e-15,
+          "relative_frobenius": 7.852473828228354e-16
+        },
+        "numerical": {
+          "max_abs": 7.413016289703478e-08,
+          "relative_frobenius": 4.291072956211135e-08
+        },
+        "jax_eager": {
+          "max_abs": 5.551115123125783e-17,
+          "relative_frobenius": 2.7957522370461913e-17
+        }
+      },
+      "additional_input_errors": [
+        {
+          "max_abs": 6.661338147750939e-16,
+          "relative_frobenius": 6.424238978985e-16
+        },
+        {
+          "max_abs": 1.1102230246251565e-15,
+          "relative_frobenius": 1.5376275109621144e-15
+        }
+      ]
+    },
+    {
+      "model": "branched3",
+      "dof": 3,
+      "output": "torque_diff2",
+      "owner": "total_joint",
+      "motion_order": 5,
+      "jacobian_shape": [
+        3,
+        15
+      ],
+      "timing": {
+        "numpy_full": {
+          "median_ms": 29.022875,
+          "min_ms": 28.10825,
+          "p90_ms": 29.6516206,
+          "repeats": 20
+        },
+        "numpy_cached": {
+          "median_ms": 9.160229000000001,
+          "min_ms": 8.90175,
+          "p90_ms": 10.715529200000004,
+          "repeats": 20
+        },
+        "rust_full": {
+          "median_ms": 0.4765205,
+          "min_ms": 0.466667,
+          "p90_ms": 0.5075286,
+          "repeats": 20
+        },
+        "rust_cached": {
+          "median_ms": 0.45175,
+          "min_ms": 0.448333,
+          "p90_ms": 0.4584661,
+          "repeats": 20
+        },
+        "numerical": {
+          "median_ms": 539.53,
+          "min_ms": 535.179959,
+          "p90_ms": 813.0327,
+          "repeats": 3
+        },
+        "jax_eager": {
+          "median_ms": 885.966917,
+          "min_ms": 871.106583,
+          "p90_ms": 910.511217,
+          "repeats": 3
+        },
+        "jax_jit_first": {
+          "median_ms": 2258.939833,
+          "min_ms": 2258.939833,
+          "p90_ms": 2258.939833,
+          "repeats": 1
+        },
+        "jax_jit": {
+          "median_ms": 0.26772949999999995,
+          "min_ms": 0.22225,
+          "p90_ms": 0.3691253,
+          "repeats": 100
+        }
+      },
+      "error_vs_jax_jit": {
+        "numpy": {
+          "max_abs": 2.8796409701214998e-15,
+          "relative_frobenius": 6.792709116246545e-16
+        },
+        "rust": {
+          "max_abs": 1.7763568394002505e-15,
+          "relative_frobenius": 5.591513229145089e-16
+        },
+        "numerical": {
+          "max_abs": 9.888848662154004e-08,
+          "relative_frobenius": 2.246665155992963e-08
+        },
+        "jax_eager": {
+          "max_abs": 0.0,
+          "relative_frobenius": 0.0
+        }
+      },
+      "additional_input_errors": [
+        {
+          "max_abs": 1.7763568394002505e-15,
+          "relative_frobenius": 7.988228363649162e-16
+        },
+        {
+          "max_abs": 2.3314683517128287e-15,
+          "relative_frobenius": 1.7926271770675175e-15
+        }
+      ]
+    },
+    {
+      "model": "serial8",
+      "dof": 8,
+      "output": "torque",
+      "owner": "total_joint",
+      "motion_order": 3,
+      "jacobian_shape": [
+        8,
+        24
+      ],
+      "timing": {
+        "numpy_full": {
+          "median_ms": 36.320083499999996,
+          "min_ms": 35.017125,
+          "p90_ms": 40.70990830000001,
+          "repeats": 20
+        },
+        "numpy_cached": {
+          "median_ms": 11.0922915,
+          "min_ms": 10.748458,
+          "p90_ms": 12.3510461,
+          "repeats": 20
+        },
+        "rust_full": {
+          "median_ms": 0.061208,
+          "min_ms": 0.059833,
+          "p90_ms": 0.10637880000000002,
+          "repeats": 20
+        },
+        "rust_cached": {
+          "median_ms": 0.042916499999999996,
+          "min_ms": 0.041,
+          "p90_ms": 0.06735830000000001,
+          "repeats": 20
+        },
+        "numerical": {
+          "median_ms": 2153.431083,
+          "min_ms": 2147.666291,
+          "p90_ms": 2154.2255502000003,
+          "repeats": 3
+        },
+        "jax_eager": {
+          "median_ms": 359.365042,
+          "min_ms": 354.401583,
+          "p90_ms": 376.1591748,
+          "repeats": 3
+        },
+        "jax_jit_first": {
+          "median_ms": 1140.741917,
+          "min_ms": 1140.741917,
+          "p90_ms": 1140.741917,
+          "repeats": 1
+        },
+        "jax_jit": {
+          "median_ms": 0.22506199999999998,
+          "min_ms": 0.194,
+          "p90_ms": 0.2576791,
+          "repeats": 100
+        }
+      },
+      "error_vs_jax_jit": {
+        "numpy": {
+          "max_abs": 1.1368683772161603e-13,
+          "relative_frobenius": 8.246465378923721e-16
+        },
+        "rust": {
+          "max_abs": 5.684341886080802e-14,
+          "relative_frobenius": 4.0019448046797214e-16
+        },
+        "numerical": {
+          "max_abs": 2.420034780215019e-05,
+          "relative_frobenius": 1.3041570356295414e-07
+        },
+        "jax_eager": {
+          "max_abs": 0.0,
+          "relative_frobenius": 0.0
+        }
+      },
+      "additional_input_errors": [
+        {
+          "max_abs": 1.1368683772161603e-13,
+          "relative_frobenius": 6.283055728795606e-16
+        },
+        {
+          "max_abs": 1.1368683772161603e-13,
+          "relative_frobenius": 6.288586139285473e-16
+        }
+      ]
+    },
+    {
+      "model": "serial8",
+      "dof": 8,
+      "output": "torque_diff2",
+      "owner": "total_joint",
+      "motion_order": 5,
+      "jacobian_shape": [
+        8,
+        40
+      ],
+      "timing": {
+        "numpy_full": {
+          "median_ms": 76.43085400000001,
+          "min_ms": 75.113042,
+          "p90_ms": 77.4705586,
+          "repeats": 20
+        },
+        "numpy_cached": {
+          "median_ms": 18.897104,
+          "min_ms": 18.541958,
+          "p90_ms": 19.7372714,
+          "repeats": 20
+        },
+        "rust_full": {
+          "median_ms": 2.088292,
+          "min_ms": 2.057,
+          "p90_ms": 2.2991083,
+          "repeats": 20
+        },
+        "rust_cached": {
+          "median_ms": 2.4721045000000004,
+          "min_ms": 2.128625,
+          "p90_ms": 3.0697919000000007,
+          "repeats": 20
+        },
+        "numerical": {
+          "median_ms": 7153.093875,
+          "min_ms": 7109.439334,
+          "p90_ms": 7186.6713422,
+          "repeats": 3
+        },
+        "jax_eager": {
+          "median_ms": 1590.254375,
+          "min_ms": 1563.951875,
+          "p90_ms": 1609.1931086,
+          "repeats": 3
+        },
+        "jax_jit_first": {
+          "median_ms": 4909.512833,
+          "min_ms": 4909.512833,
+          "p90_ms": 4909.512833,
+          "repeats": 1
+        },
+        "jax_jit": {
+          "median_ms": 0.6627289999999999,
+          "min_ms": 0.60125,
+          "p90_ms": 0.8726003000000001,
+          "repeats": 100
+        }
+      },
+      "error_vs_jax_jit": {
+        "numpy": {
+          "max_abs": 3.694822225952521e-13,
+          "relative_frobenius": 1.8374837761016728e-15
+        },
+        "rust": {
+          "max_abs": 3.410605131648481e-13,
+          "relative_frobenius": 1.0702492755777904e-15
+        },
+        "numerical": {
+          "max_abs": 9.886327347885526e-06,
+          "relative_frobenius": 5.371124045349972e-08
+        },
+        "jax_eager": {
+          "max_abs": 7.283063041541027e-14,
+          "relative_frobenius": 2.841593756502982e-16
+        }
+      },
+      "additional_input_errors": [
+        {
+          "max_abs": 5.275779813018744e-13,
+          "relative_frobenius": 1.7070074873993206e-15
+        },
+        {
+          "max_abs": 4.121147867408581e-13,
+          "relative_frobenius": 1.7173230817479378e-15
+        }
+      ]
+    },
+    {
+      "model": "serial16",
+      "dof": 16,
+      "output": "torque",
+      "owner": "total_joint",
+      "motion_order": 3,
+      "jacobian_shape": [
+        16,
+        48
+      ],
+      "timing": {
+        "numpy_full": {
+          "median_ms": 94.7708545,
+          "min_ms": 93.345458,
+          "p90_ms": 98.920525,
+          "repeats": 20
+        },
+        "numpy_cached": {
+          "median_ms": 25.7982085,
+          "min_ms": 25.5415,
+          "p90_ms": 26.6086372,
+          "repeats": 20
+        },
+        "rust_full": {
+          "median_ms": 0.11997949999999999,
+          "min_ms": 0.11925,
+          "p90_ms": 0.12350030000000001,
+          "repeats": 20
+        },
+        "rust_cached": {
+          "median_ms": 0.0992085,
+          "min_ms": 0.09825,
+          "p90_ms": 0.1004667,
+          "repeats": 20
+        },
+        "numerical": {
+          "median_ms": 16654.805042,
+          "min_ms": 16654.805042,
+          "p90_ms": 16654.805042,
+          "repeats": 1
+        },
+        "jax_eager": {
+          "median_ms": 664.938625,
+          "min_ms": 663.680083,
+          "p90_ms": 674.8501578,
+          "repeats": 3
+        },
+        "jax_jit_first": {
+          "median_ms": 2336.836833,
+          "min_ms": 2336.836833,
+          "p90_ms": 2336.836833,
+          "repeats": 1
+        },
+        "jax_jit": {
+          "median_ms": 0.449021,
+          "min_ms": 0.396917,
+          "p90_ms": 0.5018583000000001,
+          "repeats": 100
+        }
+      },
+      "error_vs_jax_jit": {
+        "numpy": {
+          "max_abs": 6.536993168992922e-13,
+          "relative_frobenius": 8.221410344300565e-16
+        },
+        "rust": {
+          "max_abs": 5.115907697472721e-13,
+          "relative_frobenius": 5.375276212046532e-16
+        },
+        "numerical": {
+          "max_abs": 0.00017389066737122372,
+          "relative_frobenius": 1.1455621393849169e-07
+        },
+        "jax_eager": {
+          "max_abs": 6.394884621840902e-14,
+          "relative_frobenius": 3.249991031686712e-17
+        }
+      },
+      "additional_input_errors": [
+        {
+          "max_abs": 1.0089706847793423e-12,
+          "relative_frobenius": 1.1714376039624623e-15
+        },
+        {
+          "max_abs": 1.0231815394945443e-12,
+          "relative_frobenius": 1.0624027449600874e-15
+        }
+      ]
+    },
+    {
+      "model": "serial16",
+      "dof": 16,
+      "output": "torque_diff2",
+      "owner": "total_joint",
+      "motion_order": 5,
+      "jacobian_shape": [
+        16,
+        80
+      ],
+      "timing": {
+        "numpy_full": {
+          "median_ms": 210.56062500000002,
+          "min_ms": 205.584792,
+          "p90_ms": 224.07755030000007,
+          "repeats": 20
+        },
+        "numpy_cached": {
+          "median_ms": 49.0106875,
+          "min_ms": 47.811625,
+          "p90_ms": 51.6367712,
+          "repeats": 20
+        },
+        "rust_full": {
+          "median_ms": 8.3397705,
+          "min_ms": 7.968,
+          "p90_ms": 9.114862800000001,
+          "repeats": 20
+        },
+        "rust_cached": {
+          "median_ms": 8.209917,
+          "min_ms": 7.486834,
+          "p90_ms": 9.075587200000001,
+          "repeats": 20
+        },
+        "numerical": {
+          "median_ms": 56521.73475,
+          "min_ms": 56521.73475,
+          "p90_ms": 56521.73475,
+          "repeats": 1
+        },
+        "jax_eager": {
+          "median_ms": 3005.054084,
+          "min_ms": 2946.624958,
+          "p90_ms": 3582.1925504,
+          "repeats": 3
+        },
+        "jax_jit_first": {
+          "median_ms": 11281.086333,
+          "min_ms": 11281.086333,
+          "p90_ms": 11281.086333,
+          "repeats": 1
+        },
+        "jax_jit": {
+          "median_ms": 2.1810419999999997,
+          "min_ms": 1.749083,
+          "p90_ms": 2.8880834,
+          "repeats": 100
+        }
+      },
+      "error_vs_jax_jit": {
+        "numpy": {
+          "max_abs": 9.947598300641403e-12,
+          "relative_frobenius": 3.398083504075346e-15
+        },
+        "rust": {
+          "max_abs": 4.547473508864641e-12,
+          "relative_frobenius": 1.8575212574997054e-15
+        },
+        "numerical": {
+          "max_abs": 0.0004438040862169146,
+          "relative_frobenius": 1.1672098003692611e-07
+        },
+        "jax_eager": {
+          "max_abs": 9.094947017729282e-13,
+          "relative_frobenius": 3.025834682561073e-16
+        }
+      },
+      "additional_input_errors": [
+        {
+          "max_abs": 1.0913936421275139e-11,
+          "relative_frobenius": 4.4730059570558816e-15
+        },
+        {
+          "max_abs": 1.5234036254696548e-11,
+          "relative_frobenius": 3.79811021423985e-15
+        }
+      ]
+    }
+  ]
+}
