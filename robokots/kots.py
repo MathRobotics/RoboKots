@@ -18,11 +18,11 @@ from .core import batch as batch_api
 from . import outward as outward_api
 from .robot_io import load_json_file
 from .urdf_io import load_urdf_file
-from .api import DerivativesMixin, FastDerivativesMixin, InwardDynamicsMixin, OutwardDynamicsMixin, RustBackendMixin, RustDerivativesMixin, StateManagementMixin
+from .api import DerivativesMixin, FastDerivativesMixin, InwardDynamicsMixin, OutwardDynamicsMixin, RustBackendMixin, RustDerivativesMixin, StateManagementMixin, WholeBodyMixin
 
 default_order = 3 
 default_dim = 3
-class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBackendMixin, InwardDynamicsMixin, OutwardDynamicsMixin, StateManagementMixin):
+class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBackendMixin, InwardDynamicsMixin, OutwardDynamicsMixin, StateManagementMixin, WholeBodyMixin):
   robot_ : RobotStruct
   motions_ : RobotMotions
   state_dict_ : dict

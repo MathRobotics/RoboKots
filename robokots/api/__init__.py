@@ -11,6 +11,7 @@ from .outward import OutwardDynamicsMixin
 from .rust_backend import RustBackendMixin
 from .rust_derivatives import RustDerivativesMixin
 from .state import StateManagementMixin
+from .whole_body import WholeBodyMixin
 
 __all__ = [
     "DerivativesMixin",
@@ -20,4 +21,5 @@ __all__ = [
     "RustBackendMixin",
     "RustDerivativesMixin",
     "StateManagementMixin",
+    "WholeBodyMixin",
 ]
