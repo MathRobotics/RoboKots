@@ -13,6 +13,19 @@ Measures kinematics, dynamics, Jacobian, numerical Jacobian, Jacobian
 vector/matrix products, Jacobian-transpose vector/matrix products, and cached
 state update runtime on the sample model.
 
+## State Dictionary Separation
+
+```bash
+.venv/bin/python -m developer.benchmarks.state_dictionary_compare
+```
+
+Compares commit `6ec3bfb` with the current working tree in sequential, isolated
+Python workers using the same Rust extension and dependencies. Separates default
+state calculation, explicit dictionary-free calculation, dictionary export, and
+state-precomputed dense Jacobians. Medians, first-call timings, raw samples,
+environment, and output differences are saved in
+[the report](results/state_dictionary.md) and [raw JSON](results/state_dictionary.json).
+
 ## Batch API Benchmark
 
 ```bash

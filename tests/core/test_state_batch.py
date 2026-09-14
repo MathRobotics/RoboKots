@@ -4,23 +4,23 @@ from robokots.core.state_batch import StateBatch
 
 
 def _get_value(_robot, state, state_type):
-    return state[state_type]
+    return getattr(state, state_type)
 
 
 class _StateObject:
     def __init__(self, state):
-        self._state = state
+        self.__dict__.update(state)
 
     def to_state_dict(self, _robot):
-        return self._state
+        raise AssertionError("Batch reads must not export dictionaries")
 
 
-def test_state_batch_from_state_dicts_restores_state_info_shape():
+def test_state_batch_from_state_objects_restores_state_info_shape():
     states = [
-        {"vel": np.array([1, 2]), "acc": np.array([3, 4])},
-        {"vel": np.array([5, 6]), "acc": np.array([7, 8])},
+        _StateObject({"vel": np.array([1, 2]), "acc": np.array([3, 4])}),
+        _StateObject({"vel": np.array([5, 6]), "acc": np.array([7, 8])}),
     ]
-    batch = StateBatch.from_states(states, (2,), robot=None)
+    batch = StateBatch.from_states(states, (2,))
 
     np.testing.assert_allclose(batch.state_info(None, "vel", _get_value), np.array([[1, 2], [5, 6]]))
     np.testing.assert_allclose(
@@ -34,11 +34,11 @@ def test_state_batch_from_outward_like_states_keeps_outward_states():
         _StateObject({"vel": np.array([1, 2])}),
         _StateObject({"vel": np.array([3, 4])}),
     ]
-    batch = StateBatch.from_states(states, (2,), robot=None)
+    batch = StateBatch.from_states(states, (2,))
 
     assert batch.outward_states == states
-    np.testing.assert_allclose(batch.state_dicts[0]["vel"], np.array([1, 2]))
-    np.testing.assert_allclose(batch.state_dicts[1]["vel"], np.array([3, 4]))
+    np.testing.assert_allclose(batch.outward_states[0].vel, np.array([1, 2]))
+    np.testing.assert_allclose(batch.outward_states[1].vel, np.array([3, 4]))
     parts = batch.state_info_list(None, ["vel"], _get_value, list_output=True)
     assert len(parts) == 1
     np.testing.assert_allclose(parts[0], np.array([[1, 2], [3, 4]]))

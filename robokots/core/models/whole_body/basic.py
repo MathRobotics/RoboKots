@@ -2,7 +2,7 @@ import numpy as np
 from mathrobo import Factorial, CMVector
 from robokots.core import RobotStruct
 from robokots.core.state_spec import dim_to_dof
-from robokots.core.state_dict_utils import state_dict_to_cmtm, state_dict_to_cmtm_wrench
+from robokots.core.state_access import state_cmtm, state_cmtm_wrench
 
 def total_factorial_mat(num : int, order : int, submat_dim : int = 6) -> np.ndarray:
     '''
@@ -58,7 +58,7 @@ def total_link_cmtm_var_x_arb_vec(r : RobotStruct, state : dict, total_cm_vec : 
     total_cm_vecs = total_cm_vec.reshape(r.link_num, n_)
     for i, link in enumerate(r.links):
         arb_v = CMVector.set_cmvecs(total_cm_vecs[i].reshape(order, -1))
-        m = state_dict_to_cmtm(state, link.name, "link", order).mat_var_x_arb_vec_jacob(arb_v, frame='bframe')
+        m = state_cmtm(state, link.name, "link", order).mat_var_x_arb_vec_jacob(arb_v, frame='bframe')
         mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = m
     return mat
 
@@ -69,7 +69,7 @@ def total_joint_cmtm_var_x_arb_vec(r : RobotStruct, state : dict, total_cm_vec :
     for i, joint in enumerate(r.joints):
         arb_v = CMVector.set_cmvecs(total_cm_vecs[i].reshape(order, -1))
         c_link = r.links[joint.child_link_id]
-        m = state_dict_to_cmtm(state, c_link.name, "link", order).mat_var_x_arb_vec_jacob(arb_v, frame='bframe')
+        m = state_cmtm(state, c_link.name, "link", order).mat_var_x_arb_vec_jacob(arb_v, frame='bframe')
         mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = m
     return mat
 
@@ -79,7 +79,7 @@ def total_link_cmtm_wrench_var_x_arb_vec(r : RobotStruct, state : dict, total_cm
     total_cm_vecs = total_cm_vec.reshape(r.link_num, n_)
     for i, link in enumerate(r.links):
         arb_v = CMVector.set_cmvecs(total_cm_vecs[i].reshape(order, -1))
-        m = state_dict_to_cmtm_wrench(state, link.name, "link", order).mat_var_x_arb_vec_jacob(arb_v, frame='bframe')
+        m = state_cmtm_wrench(state, link.name, "link", order).mat_var_x_arb_vec_jacob(arb_v, frame='bframe')
         mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = m
     return mat
 
@@ -90,7 +90,7 @@ def total_link_cmtm_wrench_var_x_arb_vec_matvec(r : RobotStruct, state : dict, t
     for i, link in enumerate(r.links):
         start = i * n_
         arb_v = CMVector.set_cmvecs(total_cm_vecs[i].reshape(order, -1))
-        m = state_dict_to_cmtm_wrench(state, link.name, "link", order).mat_var_x_arb_vec_jacob(arb_v, frame='bframe')
+        m = state_cmtm_wrench(state, link.name, "link", order).mat_var_x_arb_vec_jacob(arb_v, frame='bframe')
         result[start:start+n_] = m @ vec[start:start+n_]
     return result
 
@@ -101,7 +101,7 @@ def total_joint_cmtm_wrench_var_x_arb_vec(r : RobotStruct, state : dict, total_c
     for i, joint in enumerate(r.joints):
         arb_v = CMVector.set_cmvecs(total_cm_vecs[i].reshape(order, -1))
         c_link = r.links[joint.child_link_id]
-        m = state_dict_to_cmtm_wrench(state, c_link.name, "link", order).mat_var_x_arb_vec_jacob(arb_v, frame='bframe')
+        m = state_cmtm_wrench(state, c_link.name, "link", order).mat_var_x_arb_vec_jacob(arb_v, frame='bframe')
         mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = m
     return mat
 
@@ -112,7 +112,7 @@ def total_joint_cmtm_wrench_inv_var_x_arb_vec(r : RobotStruct, state : dict, tot
     for i, joint in enumerate(r.joints):
         arb_v = CMVector.set_cmvecs(total_cm_vecs[i].reshape(order, -1))
         c_link = r.links[joint.child_link_id]
-        cmtm_wrench = state_dict_to_cmtm_wrench(state, c_link.name, "link", order)
+        cmtm_wrench = state_cmtm_wrench(state, c_link.name, "link", order)
         m = cmtm_wrench.mat_inv_var_x_arb_vec_jacob(arb_v, frame='bframe')
         mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = m
     return mat
@@ -125,7 +125,7 @@ def total_joint_cmtm_wrench_inv_var_x_arb_vec_matvec(r : RobotStruct, state : di
         start = i * n_
         arb_v = CMVector.set_cmvecs(total_cm_vecs[i].reshape(order, -1))
         c_link = r.links[joint.child_link_id]
-        cmtm_wrench = state_dict_to_cmtm_wrench(state, c_link.name, "link", order)
+        cmtm_wrench = state_cmtm_wrench(state, c_link.name, "link", order)
         m = cmtm_wrench.mat_inv_var_x_arb_vec_jacob(arb_v, frame='bframe')
         result[start:start+n_] = m @ vec[start:start+n_]
     return result

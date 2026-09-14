@@ -1,15 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
 
 import numpy as np
 from mathrobo import CMTM, CMVector, SE3, SE3wrench
 
-from .state_dict_utils import cmtm_to_state_list, vecs_to_state_dict
 
-if TYPE_CHECKING:
-    from .robot import RobotStruct
 
 
 def _truncate_cmtm_order(cmtm: CMTM, order: int) -> CMTM:
@@ -93,45 +89,16 @@ class OutwardState:
         }
         return source_by_type[(owner_type, data_type)][owner_name]
 
-    def to_state_dict(self, robot: RobotStruct) -> dict:
-        state_dict = {}
+    def quantity_series(self, owner_type: str, owner_name: str, data_type: str) -> np.ndarray:
+        """Read stored derivatives with shape (..., order, dimension).
 
-        for link in robot.links:
-            cmtm = self.link_cmtm.get(link.name)
-            if cmtm is not None:
-                state_dict.update(cmtm_to_state_list(cmtm, "link", link.name))
-
-        for joint in robot.joints:
-            cmtm = self.joint_cmtm.get(joint.name)
-            if cmtm is not None:
-                state_dict.update(cmtm_to_state_list(cmtm, "joint", joint.name))
-
-        for link in robot.links:
-            momentum = self.link_momentum.get(link.name)
-            if momentum is not None:
-                state_dict.update(vecs_to_state_dict(momentum.vecs(), "link", link.name, "momentum", momentum._n))
-
-            force = self.link_force.get(link.name)
-            if force is not None:
-                state_dict.update(vecs_to_state_dict(force.vecs(), "link", link.name, "force", force._n))
-
-        for joint in robot.joints:
-            momentum = self.joint_momentum.get(joint.name)
-            if momentum is not None:
-                state_dict.update(vecs_to_state_dict(momentum.vecs(), "joint", joint.name, "momentum", momentum._n))
-
-            force = self.joint_force.get(joint.name)
-            if force is not None:
-                state_dict.update(vecs_to_state_dict(force.vecs(), "joint", joint.name, "force", force._n))
-
-            torque = self.joint_torque.get(joint.name)
-            if torque is not None:
-                torque_arr = np.asarray(torque)
-                torque_order = torque_arr.shape[-2] if joint.dof > 0 and torque_arr.ndim >= 2 else torque_arr.size // joint.dof if joint.dof > 0 else 0
-                if torque_order > 0:
-                    state_dict.update(vecs_to_state_dict(torque_arr, "joint", joint.name, "torque", torque_order))
-
-        return state_dict
+        Missing quantities raise KeyError. The returned array is not a snapshot.
+        """
+        if data_type == "torque":
+            if owner_type != "joint":
+                raise KeyError((owner_type, owner_name, data_type))
+            return self.joint_torque[owner_name]
+        return self.cmvec(owner_type, owner_name, data_type).vecs()
 
 
 @dataclass
@@ -280,39 +247,17 @@ class ArrayOutwardState:
             self._cache[cache_key] = CMVector(array[..., idx, :, :])
         return self._cache[cache_key]
 
-    def to_state_dict(self, robot: RobotStruct) -> dict:
-        state_dict = {}
+    def quantity_series(self, owner_type: str, owner_name: str, data_type: str) -> np.ndarray:
+        """Read stored derivatives with shape (..., order, dimension).
 
-        for link in robot.links:
-            state_dict.update(cmtm_to_state_list(self.cmtm("link", link.name), "link", link.name))
-
-        for joint in robot.joints:
-            state_dict.update(cmtm_to_state_list(self.cmtm("joint", joint.name), "joint", joint.name))
-
-        for link in robot.links:
-            if self.link_momentum_array is not None:
-                momentum = self.cmvec("link", link.name, "momentum")
-                state_dict.update(vecs_to_state_dict(momentum.vecs(), "link", link.name, "momentum", momentum._n))
-            if self.link_force_array is not None:
-                force = self.cmvec("link", link.name, "force")
-                state_dict.update(vecs_to_state_dict(force.vecs(), "link", link.name, "force", force._n))
-
-        for joint in robot.joints:
-            if self.joint_momentum_array is not None:
-                momentum = self.cmvec("joint", joint.name, "momentum")
-                state_dict.update(vecs_to_state_dict(momentum.vecs(), "joint", joint.name, "momentum", momentum._n))
-            if self.joint_force_array is not None:
-                force = self.cmvec("joint", joint.name, "force")
-                state_dict.update(vecs_to_state_dict(force.vecs(), "joint", joint.name, "force", force._n))
-
-            torque = self.joint_torque.get(joint.name)
-            if torque is not None:
-                torque_arr = np.asarray(torque)
-                torque_order = torque_arr.shape[-2] if joint.dof > 0 and torque_arr.ndim >= 2 else 0
-                if torque_order > 0:
-                    state_dict.update(vecs_to_state_dict(torque_arr, "joint", joint.name, "torque", torque_order))
-
-        return state_dict
+        Missing quantities raise KeyError. The returned array is not a snapshot.
+        """
+        if data_type == "torque":
+            if owner_type != "joint" or self.joint_torque_array is None:
+                raise KeyError((owner_type, owner_name, data_type))
+            idx = self._index(owner_type, owner_name)
+            return self.joint_torque_array[..., idx, :, :self.joint_dofs[idx]]
+        return self.cmvec(owner_type, owner_name, data_type).vecs()
 
     def _cmtm_arrays(self, owner_type: str, owner_name: str) -> tuple[np.ndarray, np.ndarray]:
         idx = self._index(owner_type, owner_name)

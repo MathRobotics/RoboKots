@@ -110,6 +110,4 @@ class RustBackendMixin:
     self.batch_shape_ = tuple(batch_shape)
     self.state_batch_ = None
     self.outward_state_ = data
-    self.state_dict_ = data.to_state_dict(self.robot_) if materialize_dict else {}
-    self.state_dict_source_ = data if materialize_dict else None
-    return data
+    return self.to_state_dict() if materialize_dict else data

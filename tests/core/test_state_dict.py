@@ -2,8 +2,8 @@ import numpy as np
 
 from mathrobo import SE3, CMTM
 from robokots.core.state_spec import StateType, state_dict_key
-from robokots.core.state_dict_utils import *
-from robokots.core.state_jsonl import make_jsonl_row
+from robokots.state_io.dictionary import *
+from robokots.state_io.jsonl import make_jsonl_row
 
 def test_extract_state_keys():
     state = {
@@ -120,7 +120,7 @@ def test_state_dict_to_cmtm():
     assert np.allclose(cmtm.elem_vecs(2), [1.3, 1.4, 1.5, 1.6, 1.7, 1.8])
 
 
-def test_state_dict_to_cmtm_reuses_cached_object():
+def test_state_dict_to_cmtm_reflects_snapshot_edits():
     state = {
         "arm_link_pos": [1.0, 2.0, 3.0],
         "arm_link_rot": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
@@ -129,12 +129,14 @@ def test_state_dict_to_cmtm_reuses_cached_object():
     }
 
     cmtm0 = state_dict_to_cmtm(state, "arm")
+    state["arm_link_pos"][0] = 9.0
     cmtm1 = state_dict_to_cmtm(state, "arm")
 
-    assert cmtm0 is cmtm1
+    assert cmtm0.elem_mat()[0, 3] == 1.0
+    assert cmtm1.elem_mat()[0, 3] == 9.0
 
 
-def test_state_dict_to_rel_cmtm_reuses_cached_object():
+def test_state_dict_to_rel_cmtm_reflects_snapshot_edits():
     state = {
         "base_link_pos": [0.0, 0.0, 0.0],
         "base_link_rot": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
@@ -147,9 +149,11 @@ def test_state_dict_to_rel_cmtm_reuses_cached_object():
     }
 
     rel0 = state_dict_to_rel_cmtm(state, "base", "arm")
+    state["arm_link_pos"][0] = 9.0
     rel1 = state_dict_to_rel_cmtm(state, "base", "arm")
 
-    assert rel0 is rel1
+    assert rel0.elem_mat()[0, 3] == 1.0
+    assert rel1.elem_mat()[0, 3] == 9.0
 
 def test_extract_dict_link_info():
     state = {

@@ -37,7 +37,7 @@ def total_coord_to_link_momentum_grad_matvec(r : RobotStruct, state : dict, vec 
 
 def total_coord_to_world_link_momentum_grad_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 3) -> np.ndarray:
     # dof = dim_to_dof(dim)
-    # total_local_link_momentum = extract_dict_total_link_cmvec(state, r.link_names, "momentum", order-1)
+    # total_local_link_momentum = total_link_cmvec(state, r.link_names, "momentum", order-1)
     # j1 = total_world_link_cmtm_wrench(r, state, order-1, dim) @ total_factorial_mat_inv(r.link_num, order-1, dof) @ total_coord_to_link_momentum_grad_mat(r, state, order, dim)
     # j2 = total_link_cmtm_wrench_var_x_arb_vec(r, state, total_local_link_momentum, order-1, dim) \
     #     @ total_coord_to_link_tan_vel_grad_mat(r, state, order-1, dim) @ total_coord_arrange(r, out_order=order-1, in_order=order)

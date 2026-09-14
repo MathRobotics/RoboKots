@@ -68,23 +68,23 @@ def test_outward_kinematics_jacobian_matmul_rhs_matches_jacobian_product():
 
     actual = outward_total_gradient.outward_jacobian_matmul_rhs(
         kots.robot_,
-        kots.state_dict_,
+        kots.outward_state_,
         states,
         rhs,
     )
-    expected = outward_total_gradient.outward_jacobian(kots.robot_, kots.state_dict_, states) @ rhs
+    expected = outward_total_gradient.outward_jacobian(kots.robot_, kots.outward_state_, states) @ rhs
     np.testing.assert_allclose(actual, expected, atol=1e-10, rtol=1e-10)
 
     actual_parts = outward_total_gradient.outward_jacobian_matmul_rhs(
         kots.robot_,
-        kots.state_dict_,
+        kots.outward_state_,
         states,
         rhs,
         list_output=True,
     )
     expected_parts = [
         jacob @ rhs
-        for jacob in outward_total_gradient.outward_jacobian(kots.robot_, kots.state_dict_, states, list_output=True)
+        for jacob in outward_total_gradient.outward_jacobian(kots.robot_, kots.outward_state_, states, list_output=True)
     ]
     for actual_part, expected_part in zip(actual_parts, expected_parts):
         np.testing.assert_allclose(actual_part, expected_part, atol=1e-10, rtol=1e-10)
@@ -102,17 +102,17 @@ def test_outward_dynamics_jacobian_matmul_rhs_matches_jacobian_product(monkeypat
         StateType("joint", "joint3", "torque"),
     ]
     rhs = rng.standard_normal((kots.dof() * StateType.max_time_order(states), 3))
-    expected = outward_total_gradient.outward_jacobian(kots.robot_, kots.state_dict_, states) @ rhs
+    expected = outward_total_gradient.outward_jacobian(kots.robot_, kots.outward_state_, states) @ rhs
     expected_parts = [
         jacob @ rhs
-        for jacob in outward_total_gradient.outward_jacobian(kots.robot_, kots.state_dict_, states, list_output=True)
+        for jacob in outward_total_gradient.outward_jacobian(kots.robot_, kots.outward_state_, states, list_output=True)
     ]
 
     monkeypatch.setattr(outward_total_gradient, "outward_jacobian", _unexpected_builder("outward_jacobian"))
 
     actual = outward_total_gradient.outward_jacobian_matmul_rhs(
         kots.robot_,
-        kots.state_dict_,
+        kots.outward_state_,
         states,
         rhs,
     )
@@ -120,7 +120,7 @@ def test_outward_dynamics_jacobian_matmul_rhs_matches_jacobian_product(monkeypat
 
     actual_parts = outward_total_gradient.outward_jacobian_matmul_rhs(
         kots.robot_,
-        kots.state_dict_,
+        kots.outward_state_,
         states,
         rhs,
         list_output=True,
@@ -312,9 +312,9 @@ def test_outward_jacobian_link_momentum_matches_full_builder():
     kots.dynamics()
 
     state = StateType("link", "arm3", "momentum")
-    actual = outward_total_gradient.outward_jacobian(kots.robot_, kots.state_dict_, [state])
+    actual = outward_total_gradient.outward_jacobian(kots.robot_, kots.outward_state_, [state])
     full = outward_total_gradient.total_coord_to_link_momentum_grad_mat(
-        kots.robot_, kots.state_dict_, order=state.time_order
+        kots.robot_, kots.outward_state_, order=state.time_order
     )
     link = kots.robot_.link(state.owner_name)
     expected = full[link.id * 6 : (link.id + 1) * 6, :]
@@ -329,9 +329,9 @@ def test_outward_jacobian_world_link_momentum_matches_full_builder():
     kots.dynamics()
 
     state = StateType("link", "arm3", "momentum", "world")
-    actual = outward_total_gradient.outward_jacobian(kots.robot_, kots.state_dict_, [state])
+    actual = outward_total_gradient.outward_jacobian(kots.robot_, kots.outward_state_, [state])
     full = outward_total_gradient.total_coord_to_world_link_momentum_grad_mat(
-        kots.robot_, kots.state_dict_, order=state.time_order
+        kots.robot_, kots.outward_state_, order=state.time_order
     )
     link = kots.robot_.link(state.owner_name)
     expected = full[link.id * 6 : (link.id + 1) * 6, :]
@@ -346,9 +346,9 @@ def test_outward_jacobian_link_force_matches_full_builder():
     kots.dynamics()
 
     state = StateType("link", "arm3", "force")
-    actual = outward_total_gradient.outward_jacobian(kots.robot_, kots.state_dict_, [state])
+    actual = outward_total_gradient.outward_jacobian(kots.robot_, kots.outward_state_, [state])
     full = outward_total_gradient.total_coord_to_link_force_grad_mat(
-        kots.robot_, kots.state_dict_, force_order=state.time_order - 2
+        kots.robot_, kots.outward_state_, force_order=state.time_order - 2
     )
     link = kots.robot_.link(state.owner_name)
     expected = full[link.id * 6 : (link.id + 1) * 6, :]
@@ -363,9 +363,9 @@ def test_outward_jacobian_joint_momentum_matches_full_builder():
     kots.dynamics()
 
     state = StateType("joint", "joint3", "momentum")
-    actual = outward_total_gradient.outward_jacobian(kots.robot_, kots.state_dict_, [state])
+    actual = outward_total_gradient.outward_jacobian(kots.robot_, kots.outward_state_, [state])
     full = outward_total_gradient.total_coord_to_joint_momentum_grad_mat(
-        kots.robot_, kots.state_dict_, order=state.time_order
+        kots.robot_, kots.outward_state_, order=state.time_order
     )
     joint = kots.robot_.joint(state.owner_name)
     expected = full[joint.id * 6 : (joint.id + 1) * 6, :]
@@ -380,9 +380,9 @@ def test_outward_jacobian_world_joint_momentum_matches_full_builder():
     kots.dynamics()
 
     state = StateType("joint", "joint3", "momentum", "world")
-    actual = outward_total_gradient.outward_jacobian(kots.robot_, kots.state_dict_, [state])
+    actual = outward_total_gradient.outward_jacobian(kots.robot_, kots.outward_state_, [state])
     full = outward_total_gradient.total_coord_to_world_joint_momentum_grad_mat(
-        kots.robot_, kots.state_dict_, order=state.time_order
+        kots.robot_, kots.outward_state_, order=state.time_order
     )
     joint = kots.robot_.joint(state.owner_name)
     expected = full[joint.id * 6 : (joint.id + 1) * 6, :]
@@ -397,9 +397,9 @@ def test_outward_jacobian_joint_force_matches_full_builder():
     kots.dynamics()
 
     state = StateType("joint", "joint3", "force")
-    actual = outward_total_gradient.outward_jacobian(kots.robot_, kots.state_dict_, [state])
+    actual = outward_total_gradient.outward_jacobian(kots.robot_, kots.outward_state_, [state])
     full = outward_total_gradient.total_coord_to_joint_force_grad_mat(
-        kots.robot_, kots.state_dict_, force_order=state.time_order - 2
+        kots.robot_, kots.outward_state_, force_order=state.time_order - 2
     )
     joint = kots.robot_.joint(state.owner_name)
     expected = full[joint.id * 6 : (joint.id + 1) * 6, :]
@@ -414,9 +414,9 @@ def test_outward_jacobian_joint_torque_matches_full_builder():
     kots.dynamics()
 
     state = StateType("joint", "joint3", "torque")
-    actual = outward_total_gradient.outward_jacobian(kots.robot_, kots.state_dict_, [state])
+    actual = outward_total_gradient.outward_jacobian(kots.robot_, kots.outward_state_, [state])
     full = outward_total_gradient.total_coord_to_joint_torque_grad_mat(
-        kots.robot_, kots.state_dict_, torque_order=state.time_order - 2
+        kots.robot_, kots.outward_state_, torque_order=state.time_order - 2
     )
     joint = kots.robot_.joint(state.owner_name)
     start = joint.dof_index * (state.time_order - 2)

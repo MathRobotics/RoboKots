@@ -51,10 +51,10 @@ class MockRobot:
         self.dof = 2
 
 
-def test_legacy_build_dynamics_state_uses_standard_keys():
+def test_build_dynamics_state_returns_computational_state():
     kots = Kots.from_json_file(str(MODEL_PATH), order=3)
     state = build_dynamics_state(kots.robot_, np.zeros(kots.dof() * 3))
 
-    assert "arm3_link_force" in state
-    assert "joint3_joint_force" in state
-    assert "joint3_joint_torque" in state
+    assert "arm3" in state.link_force
+    assert "joint3" in state.joint_force
+    assert "joint3" in state.joint_torque

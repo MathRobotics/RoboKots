@@ -11,25 +11,19 @@ from ..core import batch_shape as batch_shapes
 
 
 class StateManagementMixin:
-  def _set_batch_states(self, states, batch_shape: tuple, materialize_dict: bool = True):
+  def _set_batch_states(self, states, batch_shape: tuple, materialize_dict: bool = False):
     self.batch_shape_ = batch_shape
     if not batch_shape:
       return self._set_current_state(states, materialize_dict=materialize_dict)
-    if hasattr(states, "to_state_dict"):
+    if hasattr(states, "cmtm"):
       self.state_batch_ = self.outward_state_ = states
-      self.state_dict_ = states.to_state_dict(self.robot_) if materialize_dict else {}
-      self.state_dict_source_ = states if materialize_dict else None
-      return self.state_dict_ if materialize_dict else states
-    self.state_batch_ = StateBatch.from_states(states, batch_shape, self.robot_, materialize_dict=materialize_dict)
+      return self.to_state_dict() if materialize_dict else states
+    self.state_batch_ = StateBatch.from_states(states, batch_shape)
     self.outward_state_ = self.state_batch_.outward_states
-    self.state_dict_ = self.state_batch_.state_dicts if materialize_dict or self.outward_state_ is None else {}
-    self.state_dict_source_ = self.state_batch_ if self.state_dict_ else None
-    return self.state_dict_ if materialize_dict or self.outward_state_ is None else self.outward_state_
+    return self.to_state_dict() if materialize_dict else self.outward_state_
 
   def _invalidate_current_state(self):
     self.state_cache_ = self.state_cache_config_ = self.state_batch_ = self.outward_state_ = None
-    self.state_dict_ = {}
-    self.state_dict_source_ = None
     self.batch_shape_ = ()
 
   def _ensure_not_batched(self, api_name: str):
@@ -50,7 +44,9 @@ class StateManagementMixin:
     return self._ensure_state_table().df()
 
   def _state_for_direct_read(self):
-    return self.outward_state_ if self.outward_state_ is not None else self.state_dict_
+    if self.outward_state_ is None:
+      raise ValueError("No computed state. Call update_state(), kinematics(), or dynamics() first.")
+    return self.outward_state_
 
   def state_info(self, state_type):
     if self._is_total_body_kinetic_energy(state_type):
@@ -107,7 +103,7 @@ class StateManagementMixin:
       return resolved, lambda x: outward_api.build_kinematics_outward_state_rust(
         self.robot_, x, order, compiled_robot=self._rust_compiled_robot())
     if self._use_jax_kinematics_backend(resolved):
-      return resolved, lambda x: outward_api.build_kinematics_state(self.robot_, x, order, backend=resolved)
+      return resolved, lambda x: outward_api.build_kinematics_outward_state(self.robot_, x, order, backend=resolved)
     return resolved, lambda x: outward_api.build_kinematics_outward_state(self.robot_, x, order)
 
   def _build_state_result(self, order: int, is_dynamics: bool = False, backend: str = None, gravity=None):
@@ -129,18 +125,11 @@ class StateManagementMixin:
         pass
     return batch_shapes.map_flat_batch(motion, build_state)
 
-  def _set_current_state(self, state_obj, materialize_dict: bool = True):
+  def _set_current_state(self, state_obj, materialize_dict: bool = False):
     self.batch_shape_ = ()
     self.state_batch_ = None
-    if hasattr(state_obj, "to_state_dict"):
-      self.outward_state_ = state_obj
-      self.state_dict_ = state_obj.to_state_dict(self.robot_) if materialize_dict else {}
-      self.state_dict_source_ = state_obj if materialize_dict else None
-    else:
-      self.outward_state_ = None
-      self.state_dict_ = state_obj
-      self.state_dict_source_ = state_obj
-    return self.state_dict_ if materialize_dict or not hasattr(state_obj, "to_state_dict") else state_obj
+    self.outward_state_ = state_obj
+    return self.to_state_dict() if materialize_dict else state_obj
 
   def update_state(self, order: int = None, is_dynamics: bool = False, backend: str = None):
     if order is None:
@@ -171,20 +160,15 @@ class StateManagementMixin:
       self.robot_, MotionPack(motion, revision), self.state_cache_, is_dynamics, order, gravity=self.gravity_)
     return self._set_current_state(state, materialize_dict=False)
 
-  def to_state_dict(self) -> dict:
-    if isinstance(self.state_batch_, StateBatch):
-      if self.state_dict_source_ is not self.state_batch_:
-        if not self.state_batch_.state_dicts and self.state_batch_.outward_states is not None:
-          self.state_batch_ = StateBatch.from_states(self.state_batch_.outward_states, self.state_batch_.batch_shape, self.robot_, materialize_dict=True)
-        self.state_dict_ = self.state_batch_.state_dicts
-        self.state_dict_source_ = self.state_batch_
-      return self.state_dict_
-    if self.outward_state_ is not None and hasattr(self.outward_state_, "to_state_dict") and self.state_dict_source_ is not self.outward_state_:
-      self.state_dict_ = self.outward_state_.to_state_dict(self.robot_)
-      self.state_dict_source_ = self.outward_state_
-    return self.state_dict_
+  def to_state_dict(self) -> dict | list[dict]:
+    """Export the current state on demand; no dictionary is retained for computation."""
+    from ..state_io.dictionary import export_state_dict
 
-  def update_state_dict(self, order: int = None, is_dynamics: bool = False, backend: str = None) -> dict:
+    if isinstance(self.state_batch_, StateBatch):
+      return [export_state_dict(self.robot_, state) for state in self.state_batch_.outward_states]
+    return export_state_dict(self.robot_, self._state_for_direct_read())
+
+  def update_state_dict(self, order: int = None, is_dynamics: bool = False, backend: str = None) -> dict | list[dict]:
     self.update_state(order=order, is_dynamics=is_dynamics, backend=backend)
     return self.to_state_dict()
 

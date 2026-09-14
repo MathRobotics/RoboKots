@@ -25,10 +25,8 @@ default_dim = 3
 class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBackendMixin, InwardDynamicsMixin, OutwardDynamicsMixin, StateManagementMixin, WholeBodyMixin):
   robot_ : RobotStruct
   motions_ : RobotMotions
-  state_dict_ : dict
   state_ : Optional[Any]
   outward_state_ : Optional[Any]
-  state_dict_source_ : Optional[Any]
   target_ : TargetList
   order_ : int
   dim_ : int
@@ -78,8 +76,6 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
     self.outward_state_ = None
     self._state_l_aliases = l_aliases
     self._state_j_aliases = j_aliases
-    self.state_dict_ = {}
-    self.state_dict_source_ = None
     self.state_cache_ = None
     self.state_cache_config_ = None
     self.target_ = None
@@ -102,8 +98,6 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
     self.motions_ = RobotMotions(self.robot_.dof, m_aliases, owner_layout=self.robot_.motion_owners())
     self.state_ = None
     self.outward_state_ = None
-    self.state_dict_ = {}
-    self.state_dict_source_ = None
     self._state_l_aliases = l_aliases
     self._state_j_aliases = j_aliases
     self.state_cache_ = None
@@ -144,7 +138,7 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
     self.robot_.print()
 
   def print_state_dict(self):
-    from .core.state_dict_utils import print_state_dict
+    from .state_io.dictionary import print_state_dict
 
     print_state_dict(self.to_state_dict())
 
@@ -258,8 +252,6 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
     self._ensure_not_batched("state_df")
     return self._ensure_state_table().df()
 
-  def _state_for_direct_read(self):
-    return self.outward_state_ if self.outward_state_ is not None else self.state_dict_
 
     
   def set_target_from_file(self, target_file : str):
@@ -396,7 +388,7 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
 
   def show_robot(self, save = False, ax = None, color : RobotColor = None):
     self._ensure_not_batched("show_robot")
-    from .core.state_dict_utils import state_dict_to_links_pos
+    from .core.state_access import state_link_positions
 
     conectivity = np.zeros((self.robot_.joint_num, 2), dtype='int64')
     for i in range(self.robot_.joint_num):
@@ -404,7 +396,7 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
       conectivity[i, 0] = joint.child_link_id
       conectivity[i, 1] = joint.parent_link_id
 
-    show_robot(conectivity, state_dict_to_links_pos(self.to_state_dict(), self.robot_.link_names), save, ax, color)
+    show_robot(conectivity, state_link_positions(self._state_for_direct_read(), self.robot_.link_names), save, ax, color)
 
   def show_robot_traj(self, traj = None, save = False, ax = None, color : RobotColor = None):
     conectivity = np.zeros((self.robot_.joint_num, 2), dtype='int64')
@@ -422,13 +414,13 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
 
   def show_link_points(self):
     self._ensure_not_batched("show_link_points")
-    from .core.state_dict_utils import state_dict_to_links_pos
+    from .core.state_access import state_link_positions
 
-    show_link_points(state_dict_to_links_pos(self.to_state_dict(), self.robot_.link_names))
+    show_link_points(state_link_positions(self._state_for_direct_read(), self.robot_.link_names))
 
   def show_target_link_points(self, plt = None, dimension=3):
     self._ensure_not_batched("show_target_link_points")
-    from .core.state_dict_utils import state_dict_to_links_pos
+    from .core.state_access import state_link_positions
 
     if not self.target_:
       raise ValueError("target_ is not set")
@@ -437,7 +429,7 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
     for t in self.target_._targets:
       if t._state_type.owner_type == "link":
         owner_link_names.append(t._state_type.owner_name)
-    show_link_points(state_dict_to_links_pos(self.to_state_dict(), owner_link_names), plt, dimension)
+    show_link_points(state_link_positions(self._state_for_direct_read(), owner_link_names), plt, dimension)
 
   def target_link_pos_traj(self):
     self._ensure_not_batched("target_link_pos_traj")

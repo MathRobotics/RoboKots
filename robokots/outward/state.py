@@ -10,23 +10,21 @@ from mathrobo import CMVector, CMTM, Factorial, SE3, SE3wrench
 from ..core.robot import RobotStruct
 from ..core.motion import RobotMotions
 from ..core.outward_state import OutwardState
-from ..core.state_dict_utils import (
-    state_dict_to_cmtm,
-    state_dict_to_cmtm_wrench,
-    state_dict_to_cmvec,
-    state_dict_to_frame,
+from ..core.state_access import (
+    state_cmtm,
+    state_cmtm_wrench,
+    state_cmvec,
+    state_frame,
 )
-from ..core.state_spec import data_type_dof, StateType, state_dict_key
+from ..core.state_spec import data_type_dof, StateType
 
 from ..core.models.kinematics.base import convert_joint_to_data, convert_link_to_data
-from ..core.models.kinematics.kinematics import joint_local_cmtm, joint_rel_frame
+from ..core.models.kinematics.kinematics import joint_local_cmtm
 from ..core.models.kinematics.kinematics_soft_link import soft_link_local_cmtm, calc_link_local_point_frame
 
 from ..core.models.dynamics.base import spatial_inertia
 from ..core.models.dynamics.dynamics import (
-    joint_dynamics,
     joint_project_wrench,
-    link_dynamics,
     link_force_cmvec,
     link_momentum_cmvec,
 )
@@ -135,12 +133,12 @@ def get_dof(robot : RobotStruct, state_type : StateType, dim : int = 3) -> int:
     else:
         return data_type_dof(state_type.data_type, dim = dim)
 
-def get_value(robot : RobotStruct, state_dict : dict, state_type : StateType):
-    if hasattr(state_dict, "state_value"):
+def get_value(robot : RobotStruct, state : OutwardState, state_type : StateType):
+    if hasattr(state, "state_value"):
         try:
-            return state_dict.state_value(state_type)
+            return state.state_value(state_type)
         except NotImplementedError:
-            if not isinstance(state_dict, dict) and not hasattr(state_dict, "cmtm"):
+            if not hasattr(state, "cmtm"):
                 raise
 
     if state_type.owner_type == "link":
@@ -151,88 +149,82 @@ def get_value(robot : RobotStruct, state_dict : dict, state_type : StateType):
 
     if state_type.frame_name == "world":
         if state_type.is_dynamics:
-            cmtm_wrench = state_dict_to_cmtm_wrench(state_dict, link_name, "link", state_type.key_order)
+            cmtm_wrench = state_cmtm_wrench(state, link_name, "link", state_type.key_order)
         else:
-            cmtm = state_dict_to_cmtm(state_dict, link_name, "link", state_type.key_order)
+            cmtm = state_cmtm(state, link_name, "link", state_type.key_order)
 
     if state_type.data_type == "frame":
-        return state_dict_to_frame(state_dict, state_type.owner_name)
+        return state_frame(state, state_type.owner_name, state_type.owner_type)
     elif state_type.data_type == "cmtm":
-        return state_dict_to_cmtm(state_dict, state_type.owner_name, state_type.owner_type)
-    elif state_type.data_type == "pos" and hasattr(state_dict, "cmtm"):
-        mat = state_dict_to_cmtm(state_dict, state_type.owner_name, state_type.owner_type, 1).elem_mat()
+        return state_cmtm(state, state_type.owner_name, state_type.owner_type)
+    elif state_type.data_type == "pos" and hasattr(state, "cmtm"):
+        mat = state_cmtm(state, state_type.owner_name, state_type.owner_type, 1).elem_mat()
         return np.asarray(mat)[..., :3, 3]
-    elif state_type.data_type == "rot" and hasattr(state_dict, "cmtm"):
-        mat = state_dict_to_cmtm(state_dict, state_type.owner_name, state_type.owner_type, 1).elem_mat()
+    elif state_type.data_type == "rot" and hasattr(state, "cmtm"):
+        mat = state_cmtm(state, state_type.owner_name, state_type.owner_type, 1).elem_mat()
         return np.asarray(mat)[..., :3, :3].reshape(np.asarray(mat).shape[:-2] + (9,))
-    elif not state_type.is_dynamics and hasattr(state_dict, "cmtm"):
-        cmtm = state_dict_to_cmtm(state_dict, state_type.owner_name, state_type.owner_type, state_type.time_order)
+    elif not state_type.is_dynamics and hasattr(state, "cmtm"):
+        cmtm = state_cmtm(state, state_type.owner_name, state_type.owner_type, state_type.time_order)
         return np.asarray(cmtm.elem_vecs(state_type.key_order - 2))
     elif "momentum" in state_type.data_type:
         if state_type.frame_name == 'world':
-            local_momentum = state_dict_to_cmvec(state_dict, state_type.owner_name, \
+            local_momentum = state_cmvec(state, state_type.owner_name, \
                                                  state_type.owner_type,
                                                  "momentum", \
                                                  state_type.key_order).cm_vec()
             world_momentum_vec = _cmtm_matvec(cmtm_wrench, local_momentum)
             world_momentum = CMVector.set_cmvecs(world_momentum_vec.reshape(world_momentum_vec.shape[:-1] + (-1,6))).vecs()
             return world_momentum[..., -1, :]
-        elif hasattr(state_dict, "cmvec"):
-            return state_dict_to_cmvec(
-                state_dict,
+        elif hasattr(state, "cmvec"):
+            return state_cmvec(
+                state,
                 state_type.owner_name,
                 state_type.owner_type,
                 "momentum",
                 state_type.key_order,
             ).vecs()[..., -1, :]
-        else:
-            return np.array(state_dict[state_type.alliance])
     elif "force" in state_type.data_type:
         if state_type.frame_name == 'world':
-            local_force = state_dict_to_cmvec(state_dict, state_type.owner_name, \
+            local_force = state_cmvec(state, state_type.owner_name, \
                                                 state_type.owner_type,
                                                 "force", \
                                                 state_type.key_order).cm_vec()
             world_force_vec = _cmtm_matvec(cmtm_wrench, local_force)
             world_force = CMVector.set_cmvecs(world_force_vec.reshape(world_force_vec.shape[:-1] + (-1,6))).vecs()
             return world_force[..., -1, :]
-        elif hasattr(state_dict, "cmvec"):
-            return state_dict_to_cmvec(
-                state_dict,
+        elif hasattr(state, "cmvec"):
+            return state_cmvec(
+                state,
                 state_type.owner_name,
                 state_type.owner_type,
                 "force",
                 state_type.key_order,
             ).vecs()[..., -1, :]
-        else:
-            return np.array(state_dict[state_type.alliance])
     elif "torque" in state_type.data_type:
-        if hasattr(state_dict, "joint_torque"):
-            return np.asarray(state_dict.joint_torque[state_type.owner_name])[..., state_type.key_order - 1, :]
-        return np.array(state_dict[state_type.alliance])
-    else:
-        return np.array(state_dict[state_type.alliance])
+        if hasattr(state, "joint_torque"):
+            return np.asarray(state.joint_torque[state_type.owner_name])[..., state_type.key_order - 1, :]
+    raise NotImplementedError(f"Unsupported state quantity: {state_type.data_type}")
 
-def get_cmvec(robot : RobotStruct, state_dict : dict, state_type : StateType, order : int) -> CMVector:
-    vec = state_dict_to_cmvec(state_dict, state_type.owner_name, state_type.owner_type, state_type.data_type, state_type.key_order)
+def get_cmvec(robot : RobotStruct, state : OutwardState, state_type : StateType, order : int) -> CMVector:
+    vec = state_cmvec(state, state_type.owner_name, state_type.owner_type, state_type.data_type, state_type.key_order)
     if state_type.frame_name == "world":
         if state_type.owner_type == "link":
             link_name = state_type.owner_name
         elif state_type.owner_type == "joint":
             joint = robot.joint_list([state_type.owner_name])
             link_name = robot.links[joint[0].child_link_id].name
-        cmtm_wrench = state_dict_to_cmtm_wrench(state_dict, link_name, "link", order)
+        cmtm_wrench = state_cmtm_wrench(state, link_name, "link", order)
         vec = _cmtm_matvec(CMTM.change_elemclass(cmtm_wrench, SE3wrench), vec.cm_vec())
     return vec
 
-def get_total_cmvec(robot : RobotStruct, state_dict : dict, owner_type : str, data_type : str, frame_name : None, order : int) -> CMVector:
+def get_total_cmvec(robot : RobotStruct, state : OutwardState, owner_type : str, data_type : str, frame_name : None, order : int) -> CMVector:
     if owner_type == "link":
         name_list = robot.link_names
     elif owner_type == "joint":
         name_list = robot.joint_names
 
     for i, name in enumerate(name_list):
-        vec = get_cmvec(robot, state_dict, StateType(owner_type, name, data_type, frame_name), order)
+        vec = get_cmvec(robot, state, StateType(owner_type, name, data_type, frame_name), order)
         if i == 0:
             total_vec = np.zeros((len(name_list), vec._len))
         total_vec[i] = vec.cm_vec()
@@ -283,18 +275,20 @@ def build_kinematics_state(robot : RobotStruct, motions, order = 3, backend = No
   Returns:
     dict: state data
   '''
-  if _should_use_jax_kinematics(robot, backend):
-    from .diff.outward_jax import build_kinematics_state_jax
+  from ..state_io.dictionary import export_state_dict
 
-    return build_kinematics_state_jax(robot, motions, order)
+  return export_state_dict(
+    robot, build_kinematics_outward_state(robot, motions, order, backend=backend)
+  )
 
-  return build_kinematics_outward_state(robot, motions, order).to_state_dict(robot)
 
-
-def build_kinematics_outward_state(robot : RobotStruct, motions, order = 3) -> OutwardState:
+def build_kinematics_outward_state(robot : RobotStruct, motions, order = 3, backend=None) -> OutwardState:
   '''
   Forward kinematics computation in the internal CMTM-backed state format.
   '''
+  if _should_use_jax_kinematics(robot, backend):
+    from .diff.outward_jax import build_kinematics_state_jax
+    return build_kinematics_state_jax(robot, motions, order)
   return _build_kinematics_state_with_cmtm(robot, motions, order)
 
 
@@ -363,7 +357,7 @@ def _build_batch_kinematics_state_with_cmtm(robot: RobotStruct, motions: np.ndar
   return OutwardState(order=order, link_cmtm=link_cmtm_dict, joint_cmtm=joint_cmtm_dict)
 
 
-def calc_link_total_point_frame(robot : RobotStruct, motions : RobotMotions, state : dict, point : float) -> SE3:
+def calc_link_total_point_frame(robot : RobotStruct, motions : RobotMotions, state : OutwardState, point : float) -> SE3:
   base = 0.0
   p_link = robot.links[0]
   for l in robot.links:
@@ -371,43 +365,13 @@ def calc_link_total_point_frame(robot : RobotStruct, motions : RobotMotions, sta
           base += l.length
           p_link = l
           continue
-      p_link_frame = state_dict_to_frame(state, p_link.name)
+      p_link_frame = state_frame(state, p_link.name)
       coord = motions.link_motions(l.dof, l.dof_index, 1)[0]
       return calc_link_local_point_frame(l, coord, p_link_frame, point - base)
 
-# specific 3d space (magic number 6)
-def build_dynamics_state(robot : RobotStruct, joint_motions) -> dict:  
-  state_dict = build_kinematics_state(robot, joint_motions, 3)
-
-  world_name = robot.links[robot.joints[0].parent_link_id].name
-  state_dict.update([(state_dict_key("link", world_name, "force") , [0.,0.,0.,0.,0.,0.])])
-
-  for joint in reversed(robot.joints):
-    child = robot.links[joint.child_link_id]
-    joint_data = convert_joint_to_data(joint)
-    
-    joint_coord = joint_motions[joint.dof_index:joint.dof_index+joint.dof]
-
-    inertia = spatial_inertia(child.mass, child.inertia, child.cog)
-
-    link_veloc = np.array(state_dict[state_dict_key("link", child.name, "vel")])
-    link_accel = np.array(state_dict[state_dict_key("link", child.name, "acc")])
-    
-    link_force = link_dynamics(inertia, link_veloc, link_accel)  
-    state_dict.update([(state_dict_key("link", child.name, "force") , link_force.tolist())])
-    
-    joint_frame = joint_rel_frame(joint_data, joint_coord)
-
-    p_joint_force = np.zeros(6)
-    for id in child.child_joint_ids:
-      p_joint_force += state_dict[state_dict_key("joint", robot.joints[id].name, "force")]
-
-    joint_torque, joint_force = joint_dynamics(joint.select_mat, joint_frame, p_joint_force, link_force)
-    
-    state_dict.update([(state_dict_key("joint", joint.name, "force") , joint_force.tolist())])
-    state_dict.update([(state_dict_key("joint", joint.name, "torque") , joint_torque.tolist())])
-    
-  return state_dict
+def build_dynamics_state(robot: RobotStruct, joint_motions) -> OutwardState:
+  """Compute rigid-body dynamics using the shared state-object builder."""
+  return build_dynamics_outward_state(robot, joint_motions, dynamics_order=1)
 
 def build_dynamics_outward_state(
   robot : RobotStruct,
@@ -531,6 +495,8 @@ def build_dynamics_cmtm_state(
   dynamics_order = 1,
   gravity=(0.0, 0.0, 0.0),
 ) -> dict:
-  return build_dynamics_outward_state(
+  from ..state_io.dictionary import export_state_dict
+
+  return export_state_dict(robot, build_dynamics_outward_state(
     robot, motions, dynamics_order, gravity=gravity
-  ).to_state_dict(robot)
+  ))

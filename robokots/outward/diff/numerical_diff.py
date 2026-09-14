@@ -1,11 +1,10 @@
 import numpy as np
-from mathrobo import numerical_difference, build_integrator
+from mathrobo import numerical_difference, build_integrator, SO3
 
 from robokots.core import RobotStruct
 from robokots.core.state_spec import StateType, data_type_dof, data_type_to_sub_func
-from robokots.core.state_dict_utils import extract_dict_link_info
 
-from robokots.outward.state import build_kinematics_state
+from robokots.outward.state import build_kinematics_outward_state, get_value
 from robokots.outward.values import compute_outward_value
 
 
@@ -54,8 +53,8 @@ def link_diff_kinematics_numerical(robot : RobotStruct, motions, link_name_list 
 
   if sub_func is None:
     def kinematics_func(x):
-      state = build_kinematics_state(robot, x, order)
-      values = [np.asarray(extract_dict_link_info(state, data_type, link_name)).reshape(-1) for link_name in link_name_list]
+      state = build_kinematics_outward_state(robot, x, order)
+      values = [np.asarray(get_value(robot, state, StateType("link", name, data_type))).reshape(-1) for name in link_name_list]
       return np.concatenate(values)
 
     diff = numerical_difference(
@@ -68,8 +67,11 @@ def link_diff_kinematics_numerical(robot : RobotStruct, motions, link_name_list 
     )
   else:
     def kinematics_func(x):
-      state = build_kinematics_state(robot, x, order)
-      return [extract_dict_link_info(state, data_type, link_name) for link_name in link_name_list]
+      state = build_kinematics_outward_state(robot, x, order)
+      return [state.cmtm("link", name, order) if data_type == "cmtm"
+              else SO3(np.asarray(state.cmtm("link", name, 1).elem_mat())[:3, :3]) if data_type == "rot"
+              else get_value(robot, state, StateType("link", name, data_type))
+              for name in link_name_list]
 
     diff = numerical_difference(
       motions,

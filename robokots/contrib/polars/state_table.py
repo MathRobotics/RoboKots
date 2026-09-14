@@ -13,7 +13,7 @@ except ImportError as e:  # pragma: no cover
 
 from mathrobo import SE3, CMTM
 from robokots.core.state_spec import state_storage_key
-from robokots.core.state_dict_utils import (
+from robokots.state_io.dictionary import (
   extract_dict_link_info,
   extract_dict_joint_info,
   is_state_payload_key,

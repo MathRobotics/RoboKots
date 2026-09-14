@@ -6,7 +6,6 @@ from mathrobo import SE3
 from ...core import batch_shape as batch_shapes
 from ...core.robot import RobotStruct
 from ...core.state_spec import keys_force, keys_kinematics, keys_momentum, keys_torque
-from ...core.state_dict_utils import cmtm_to_state_list, vecs_to_state_dict
 from .model import _rust_compiled_robot
 
 def _skew(v: np.ndarray) -> np.ndarray:
@@ -619,46 +618,22 @@ class RustOutwardState:
     if self._minimal_dynamics:
       raise ValueError("compute_dynamics_minimal only stores kinematics and joint torque; use compute_dynamics for full dynamics values")
 
-  def to_state_dict(self, robot: RobotStruct | None = None) -> dict:
-    if robot is None:
-      robot = self.robot
-    state_dict = {}
-
-    for link in robot.links:
-      state_dict.update(cmtm_to_state_list(self.cmtm("link", link.name, self.order), "link", link.name))
-
-    for joint in robot.joints:
-      state_dict.update(cmtm_to_state_list(self.cmtm("joint", joint.name, self.order), "joint", joint.name))
-
-    momentum_order = self.order - 1
-    if self._has_dynamics and momentum_order > 0:
-      for link in robot.links:
-        momentum = self.cmvec("link", link.name, "momentum")
-        state_dict.update(vecs_to_state_dict(momentum.vecs(), "link", link.name, "momentum", momentum_order))
-      for joint in robot.joints:
-        momentum = self.cmvec("joint", joint.name, "momentum")
-        state_dict.update(vecs_to_state_dict(momentum.vecs(), "joint", joint.name, "momentum", momentum_order))
-
-    force_order = self.order - 2
-    if self._has_dynamics and force_order > 0:
-      for link in robot.links:
-        force = self.cmvec("link", link.name, "force")
-        state_dict.update(vecs_to_state_dict(force.vecs(), "link", link.name, "force", force_order))
-      for joint in robot.joints:
-        force = self.cmvec("joint", joint.name, "force")
-        state_dict.update(vecs_to_state_dict(force.vecs(), "joint", joint.name, "force", force_order))
-
-      for joint in robot.joints:
-        dof = self.joint_dofs[self._joint_id(joint.name)]
-        if dof <= 0:
-          continue
-        torque = np.stack(
-          [self.joint_torque(joint.name, key_order) for key_order in range(1, force_order + 1)],
-          axis=-2,
-        )
-        state_dict.update(vecs_to_state_dict(torque, "joint", joint.name, "torque", force_order))
-
-    return state_dict
+  def quantity_series(self, owner_type: str, owner_name: str, data_type: str) -> np.ndarray:
+    """Read available derivatives as (..., order, dimension), or raise KeyError."""
+    if not self._has_dynamics:
+      raise KeyError((owner_type, owner_name, data_type))
+    if data_type == "torque":
+      order = self.order - 2
+      if owner_type != "joint" or order <= 0:
+        raise KeyError((owner_type, owner_name, data_type))
+      return np.stack(
+        [self.joint_torque(owner_name, key_order) for key_order in range(1, order + 1)],
+        axis=-2,
+      )
+    order = self.order - (1 if data_type == "momentum" else 2)
+    if self._minimal_dynamics or order <= 0:
+      raise KeyError((owner_type, owner_name, data_type))
+    return self.cmvec(owner_type, owner_name, data_type).vecs()
 
   def link_mat(self, link) -> np.ndarray:
     return np.asarray(self.raw_data.link_mat(self._link_id(link)))

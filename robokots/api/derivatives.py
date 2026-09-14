@@ -583,7 +583,7 @@ class DerivativesMixin:
     if numerical:
       return self._jacobian_numerical(state_type_list, max_order, list_output)
 
-    state = self.outward_state_ if self.outward_state_ is not None else self.state_dict_
+    state = self._state_for_direct_read()
     return self._jacobian_from_state(state, state_type_list, max_order, list_output)
 
   def jacobian_mul(self, state_type, rhs : np.ndarray, numerical : bool = False, list_output : bool = False):
@@ -620,7 +620,7 @@ class DerivativesMixin:
     if numerical:
       return self._jacobian_mul_numerical(state_type_list, max_order, rhs, rhs_is_matrix, list_output)
 
-    state = self.outward_state_ if self.outward_state_ is not None else self.state_dict_
+    state = self._state_for_direct_read()
     return self._jacobian_mul_from_state(state, state_type_list, max_order, rhs, batch_shape, rhs_is_matrix, list_output)
 
   def jacobian_transpose_mul(self, state_type, rhs : np.ndarray, numerical : bool = False):
@@ -658,7 +658,7 @@ class DerivativesMixin:
     if numerical:
       return self._jacobian_transpose_mul_numerical(state_type_list, max_order, rhs, rhs_is_matrix)
 
-    state = self.outward_state_ if self.outward_state_ is not None else self.state_dict_
+    state = self._state_for_direct_read()
     return self._jacobian_transpose_mul_from_state(state, state_type_list, max_order, rhs, batch_shape, rhs_is_matrix)
 
   def jacobian_transpose_mul_many(self, state_rhs_pairs, numerical : bool = False):
@@ -735,7 +735,7 @@ class DerivativesMixin:
       return self._embed_motion_order_rhs(np.asarray(energy_vjp), 2, max_order, rhs_is_matrix)
 
     fused_rhs = np.concatenate(rhs_parts, axis=-2 if rhs_is_matrix else -1)
-    state = self.outward_state_ if self.outward_state_ is not None else self.state_dict_
+    state = self._state_for_direct_read()
     if energy_rhs is not None:
       fast = self._rust_cmtm_torque_energy_jacobian_transpose_apply(
         state_type_list, fused_rhs, energy_rhs, max_order, batch_shape, rhs_is_matrix,

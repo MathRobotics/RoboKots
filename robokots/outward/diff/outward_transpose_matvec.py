@@ -4,12 +4,12 @@ from mathrobo import CMVector, Factorial
 from robokots.core import RobotStruct
 from robokots.core.state_spec import StateType, dim_to_dof, data_type_dof, data_type_offset
 from robokots.core.state_spec import keys_kinematics, keys_momentum, keys_force, keys_torque
-from robokots.core.state_dict_utils import (
-    extract_dict_total_link_cmvec,
-    state_dict_to_cmtm,
-    state_dict_to_cmtm_wrench,
-    state_dict_to_cmvec,
-    state_dict_to_rel_cmtm,
+from robokots.core.state_access import (
+    total_link_cmvec,
+    state_cmtm,
+    state_cmtm_wrench,
+    state_cmvec,
+    state_rel_cmtm,
 )
 from robokots.core.models.kinematics.kinematics_matrix import joint_select_diag_mat
 from robokots.core.models.dynamics.base import spatial_inertia
@@ -82,7 +82,7 @@ def _transpose_total_coord_to_joint_tan_vel_grad_matvec(
     for i, joint in enumerate(robot.joints):
         if joint.dof == 0:
             continue
-        joint_cmtm = state_dict_to_cmtm(state, joint.name, "joint", order)
+        joint_cmtm = state_cmtm(state, joint.name, "joint", order)
         block = joint_cmtm.tangent_mat() @ joint_select_diag_mat(joint.select_mat, order)
         out_start = joint.dof_index * order
         result[..., out_start:out_start + joint.dof*order] += (block.T @ vec[..., i*n_:(i+1)*n_, None])[..., 0]
@@ -106,7 +106,7 @@ def _transpose_total_joint_tan_vel_to_link_tan_vel_grad_matvec(
         adj_link = vec[..., i*n_:(i+1)*n_]
         for j in joint_route:
             joint = robot.joints[j]
-            rel_cmtm = state_dict_to_rel_cmtm(state, link.name, robot.links[joint.child_link_id].name, "link", order)
+            rel_cmtm = state_rel_cmtm(state, link.name, robot.links[joint.child_link_id].name, "link", order)
             result[..., j*n_:(j+1)*n_] += _transpose_apply(rel_cmtm.mat_adj(), adj_link)
     return result
 
@@ -125,11 +125,11 @@ def _transpose_total_joint_tan_vel_to_link_vel_grad_matvec(
         link_route = []
         joint_route = []
         robot.route_target_link(link, link_route, joint_route)
-        tangent_mat_inv = state_dict_to_cmtm(state, link.name, "link", order).tangent_mat_inv()
+        tangent_mat_inv = state_cmtm(state, link.name, "link", order).tangent_mat_inv()
         adj_link = vec[..., i*n_:(i+1)*n_]
         for j in joint_route:
             joint = robot.joints[j]
-            rel_cmtm = state_dict_to_rel_cmtm(state, link.name, robot.links[joint.child_link_id].name, "link", order)
+            rel_cmtm = state_rel_cmtm(state, link.name, robot.links[joint.child_link_id].name, "link", order)
             block = tangent_mat_inv @ rel_cmtm.mat_adj()
             result[..., j*n_:(j+1)*n_] += _transpose_apply(block, adj_link)
     return result
@@ -151,11 +151,11 @@ def _transpose_total_joint_tan_vel_to_link_sp_vel_grad_matvec(
         link_route = []
         joint_route = []
         robot.route_target_link(link, link_route, joint_route)
-        tangent_mat_inv_sp = state_dict_to_cmtm(state, link.name, "link", order).tangent_mat_inv()[dof:]
+        tangent_mat_inv_sp = state_cmtm(state, link.name, "link", order).tangent_mat_inv()[dof:]
         adj_link = vec[..., i*n_l:(i+1)*n_l]
         for j in joint_route:
             joint = robot.joints[j]
-            rel_cmtm = state_dict_to_rel_cmtm(state, link.name, robot.links[joint.child_link_id].name, "link", order)
+            rel_cmtm = state_rel_cmtm(state, link.name, robot.links[joint.child_link_id].name, "link", order)
             block = tangent_mat_inv_sp @ rel_cmtm.mat_adj()
             result[..., j*n_j:(j+1)*n_j] += _transpose_apply(block, adj_link)
     return result
@@ -214,10 +214,10 @@ def _transpose_selected_coord_to_link_vel_grad_matvec(
         link_route = []
         joint_route = []
         robot.route_target_link(link, link_route, joint_route)
-        tangent_mat_inv = state_dict_to_cmtm(state, link.name, "link", order).tangent_mat_inv()
+        tangent_mat_inv = state_cmtm(state, link.name, "link", order).tangent_mat_inv()
         for j in joint_route:
             joint = robot.joints[j]
-            rel_cmtm = state_dict_to_rel_cmtm(state, link.name, robot.links[joint.child_link_id].name, "link", order)
+            rel_cmtm = state_rel_cmtm(state, link.name, robot.links[joint.child_link_id].name, "link", order)
             block = tangent_mat_inv @ rel_cmtm.mat_adj()
             adj_joint_tan[..., j*n_:(j+1)*n_] += (block.T @ adj_link[..., None])[..., 0]
     return _transpose_total_coord_to_joint_tan_vel_grad_matvec(
@@ -303,7 +303,7 @@ def _transpose_total_world_link_cmtm_wrench_matvec(
     result = np.zeros(vec.shape[:-1] + (robot.link_num * n_,), dtype=vec.dtype)
     for i, link in enumerate(robot.links):
         start = i * n_
-        cmtm_wrench = state_dict_to_cmtm_wrench(state, link.name, "link", order)
+        cmtm_wrench = state_cmtm_wrench(state, link.name, "link", order)
         result[..., start:start+n_] = _transpose_apply(cmtm_wrench.mat_adj(), vec[..., start:start+n_])
     return result
 
@@ -320,7 +320,7 @@ def _transpose_total_world_joint_cmtm_wrench_inv_matvec(
     result = np.zeros(vec.shape[:-1] + (robot.joint_num * n_,), dtype=vec.dtype)
     for i, joint in enumerate(robot.joints):
         start = i * n_
-        cmtm_wrench = state_dict_to_cmtm_wrench(state, robot.links[joint.child_link_id].name, "link", order)
+        cmtm_wrench = state_cmtm_wrench(state, robot.links[joint.child_link_id].name, "link", order)
         result[..., start:start+n_] = _transpose_apply(cmtm_wrench.mat_inv_adj(), vec[..., start:start+n_])
     return result
 
@@ -391,7 +391,7 @@ def _transpose_total_coord_to_gravity_force_grad_matvec(
     world_link_force = np.zeros_like(local_link_force)
     for i, link in enumerate(robot.links):
         block = slice(i * block_size, (i + 1) * block_size)
-        cmtm = state_dict_to_cmtm_wrench(state, link.name, "link", force_order)
+        cmtm = state_cmtm_wrench(state, link.name, "link", force_order)
         world_link_force[..., block] = (
             cmtm.mat_adj() @ local_link_force[..., block, None]
         )[..., 0]
@@ -415,7 +415,7 @@ def _transpose_total_coord_to_gravity_force_grad_matvec(
     for i, joint in enumerate(robot.joints):
         block = slice(i * block_size, (i + 1) * block_size)
         child_link = robot.links[joint.child_link_id]
-        cmtm = state_dict_to_cmtm_wrench(
+        cmtm = state_cmtm_wrench(
             state, child_link.name, "link", force_order
         )
         adj_inv_world_joint[..., block] += _transpose_apply(
@@ -449,7 +449,7 @@ def _transpose_total_coord_to_gravity_force_grad_matvec(
     local_force_blocks = local_link_force.reshape(robot.link_num, block_size)
     for i, link in enumerate(robot.links):
         block = slice(i * block_size, (i + 1) * block_size)
-        cmtm = state_dict_to_cmtm_wrench(state, link.name, "link", force_order)
+        cmtm = state_cmtm_wrench(state, link.name, "link", force_order)
         adj_inv_local_link[..., block] += _transpose_apply(
             cmtm.mat_adj(), adj_link_sum[..., block]
         )
@@ -476,7 +476,7 @@ def _transpose_total_coord_to_gravity_force_grad_matvec(
         adj_varied = _transpose_apply(
             -inertia, adj_local_varied[..., block]
         )
-        cmtm = state_dict_to_cmtm(state, link.name, "link", force_order)
+        cmtm = state_cmtm(state, link.name, "link", force_order)
         adj_link_pose[..., block] += _cmtm_var_jacob_transpose_matvec(
             cmtm, world_gravity, adj_varied, inverse=True
         )
@@ -505,7 +505,7 @@ def _transpose_total_partial_momentum_to_force_grad_matvec(
     for i, link in enumerate(robot.links):
         in_start = i * n_
         out_start = i * m_
-        cmtm = state_dict_to_cmtm(state, link.name, "link", force_order + 1)
+        cmtm = state_cmtm(state, link.name, "link", force_order + 1)
         mat = partial_momentum_to_force_grad_mat(cmtm, force_order=force_order, dim=dim)
         result[..., out_start:out_start+m_] = _transpose_apply(mat, vec[..., in_start:in_start+n_])
     return result
@@ -526,7 +526,7 @@ def _transpose_joint_partial_momentum_to_force_grad_matvec(
         in_start = i * n_
         out_start = i * m_
         link = robot.links[joint.child_link_id]
-        cmtm = state_dict_to_cmtm(state, link.name, "link", force_order + 1)
+        cmtm = state_cmtm(state, link.name, "link", force_order + 1)
         mat = partial_momentum_to_force_grad_mat(cmtm, force_order=force_order, dim=dim)
         result[..., out_start:out_start+m_] = _transpose_apply(mat, vec[..., in_start:in_start+n_])
     return result
@@ -546,7 +546,7 @@ def _transpose_total_partial_link_sp_vel_to_link_force_grad_matvec(
     for i, link in enumerate(robot.links):
         in_start = i * n_
         out_start = i * m_
-        link_momentum = state_dict_to_cmvec(state, link.name, "link", "momentum", force_order)
+        link_momentum = state_cmvec(state, link.name, "link", "momentum", force_order)
         mat = partial_link_sp_vel_to_force_grad_mat(link_momentum, force_order=force_order, dim=dim)
         result[..., out_start:out_start+m_] = _transpose_apply(mat, vec[..., in_start:in_start+n_])
     return result
@@ -566,7 +566,7 @@ def _transpose_total_partial_link_sp_vel_to_joint_force_grad_matvec(
     for i, joint in enumerate(robot.joints):
         in_start = i * n_
         out_start = i * m_
-        joint_momentum = state_dict_to_cmvec(state, joint.name, "joint", "momentum", force_order)
+        joint_momentum = state_cmvec(state, joint.name, "joint", "momentum", force_order)
         mat = partial_link_sp_vel_to_force_grad_mat(joint_momentum, force_order=force_order, dim=dim)
         result[..., out_start:out_start+m_] = _transpose_apply(mat, vec[..., in_start:in_start+n_])
     return result
@@ -593,7 +593,7 @@ def _transpose_total_partial_link_tan_vel_to_world_link_momentum_grad_matvec(
     dim: int = 3,
 ) -> np.ndarray:
     dof = dim_to_dof(dim)
-    total_local_link_momentum = extract_dict_total_link_cmvec(state, robot.link_names, "momentum", order-1)
+    total_local_link_momentum = total_link_cmvec(state, robot.link_names, "momentum", order-1)
     adj_factor = _transpose_total_factorial_matvec(robot.link_num, vec, order-1, dof)
     n_ = dof * (order - 1)
     result = np.zeros(adj_factor.shape[:-1] + (robot.link_num * n_,), dtype=adj_factor.dtype)
@@ -601,7 +601,7 @@ def _transpose_total_partial_link_tan_vel_to_world_link_momentum_grad_matvec(
     for i, link in enumerate(robot.links):
         start = i * n_
         arb_v = CMVector.set_cmvecs(total_cm_vecs[i].reshape(order-1, -1))
-        cmtm_wrench = state_dict_to_cmtm_wrench(state, link.name, "link", order-1)
+        cmtm_wrench = state_cmtm_wrench(state, link.name, "link", order-1)
         result[..., start:start+n_] = _cmtm_var_jacob_transpose_matvec(
             cmtm_wrench,
             arb_v,
@@ -631,7 +631,7 @@ def _transpose_total_partial_link_tan_vel_to_joint_momentum_grad_matvec(
     dim: int = 3,
 ) -> np.ndarray:
     dof = dim_to_dof(dim)
-    total_local_link_momentum = extract_dict_total_link_cmvec(state, robot.link_names, "momentum", order-1)
+    total_local_link_momentum = total_link_cmvec(state, robot.link_names, "momentum", order-1)
     world_link_momentum = total_world_link_cmtm_wrench_matvec(robot, state, total_local_link_momentum, order-1, dim)
     total_world_joint_momentum = total_world_link_wrench_to_world_joint_wrench_matvec(robot, world_link_momentum, order-1, dim)
     adj_factor = _transpose_total_factorial_matvec(robot.joint_num, vec, order-1, dof)
@@ -642,7 +642,7 @@ def _transpose_total_partial_link_tan_vel_to_joint_momentum_grad_matvec(
         start = i * n_
         arb_v = CMVector.set_cmvecs(total_cm_vecs[i].reshape(order-1, -1))
         c_link = robot.links[joint.child_link_id]
-        cmtm_wrench = state_dict_to_cmtm_wrench(state, c_link.name, "link", order-1)
+        cmtm_wrench = state_cmtm_wrench(state, c_link.name, "link", order-1)
         result[..., start:start+n_] = _cmtm_var_jacob_transpose_matvec(
             cmtm_wrench,
             arb_v,

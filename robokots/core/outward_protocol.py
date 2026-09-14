@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
+import numpy as np
+
 from .state_spec import StateType
 
 
@@ -41,3 +43,7 @@ class OutwardDataView(Protocol):
     ) -> Any: ...
 
     def cmvec(self, owner_type: str, owner_name: str, data_type: str) -> Any: ...
+
+    def quantity_series(self, owner_type: str, owner_name: str, data_type: str) -> np.ndarray:
+        """Read (..., order, dimension) derivatives; missing values raise KeyError."""
+        ...

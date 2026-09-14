@@ -3,7 +3,7 @@ from mathrobo import CMVector, Factorial
 
 from robokots.core import RobotStruct
 from robokots.core.state_spec import dim_to_dof
-from robokots.core.state_dict_utils import state_dict_to_cmtm, state_dict_to_cmtm_wrench
+from robokots.core.state_access import state_cmtm, state_cmtm_wrench
 
 from ..cmtm_apply import apply_mat_inv_adj
 from ..dynamics.base import spatial_inertia
@@ -49,14 +49,14 @@ def total_link_gravity_force(
     gravity = state_gravity(state, gravity)
     world_gravity = _world_gravity_cmvector(gravity, force_order)
     block_size = 6 * force_order
-    first_cmtm = state_dict_to_cmtm(
+    first_cmtm = state_cmtm(
         state, robot.links[0].name, "link", force_order
     )
     batch_shape = np.asarray(first_cmtm.elem_mat()).shape[:-2]
     result = np.zeros(batch_shape + (robot.link_num * block_size,))
 
     for i, link in enumerate(robot.links):
-        link_cmtm = state_dict_to_cmtm(state, link.name, "link", force_order)
+        link_cmtm = state_cmtm(state, link.name, "link", force_order)
         local_gravity = apply_mat_inv_adj(link_cmtm, world_gravity.cm_vec())
         inertia = spatial_inertia(link.mass, link.inertia, link.cog)
         block = slice(i * block_size, (i + 1) * block_size)
@@ -208,7 +208,7 @@ def total_link_pose_to_gravity_force_grad_matmul_rhs(
 
     for i, link in enumerate(robot.links):
         block = slice(i * block_size, (i + 1) * block_size)
-        link_cmtm = state_dict_to_cmtm(state, link.name, "link", force_order)
+        link_cmtm = state_cmtm(state, link.name, "link", force_order)
         varied = _cmtm_var_matmul_rhs(
             link_cmtm,
             world_gravity,
@@ -235,7 +235,7 @@ def total_link_pose_to_gravity_force_grad_matmul_rhs(
 
     for i, link in enumerate(robot.links):
         block = slice(i * block_size, (i + 1) * block_size)
-        cmtm = state_dict_to_cmtm_wrench(
+        cmtm = state_cmtm_wrench(
             state, link.name, "link", force_order
         )
         world_link_force[..., block] = (
@@ -277,7 +277,7 @@ def total_link_pose_to_gravity_force_grad_matmul_rhs(
     for i, joint in enumerate(robot.joints):
         block = slice(i * block_size, (i + 1) * block_size)
         child_link = robot.links[joint.child_link_id]
-        cmtm = state_dict_to_cmtm_wrench(
+        cmtm = state_cmtm_wrench(
             state, child_link.name, "link", force_order
         )
         local_joint_rhs[..., block, :] = (

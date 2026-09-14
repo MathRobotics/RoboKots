@@ -10,23 +10,14 @@ from . import batch_shape as batch_shapes
 
 @dataclass(frozen=True)
 class StateBatch:
-  state_dicts: list
+  outward_states: list
   batch_shape: tuple[int, ...]
-  outward_states: list | None = None
 
   @classmethod
-  def from_states(cls, states: Sequence, batch_shape: tuple[int, ...], robot, materialize_dict: bool = True) -> "StateBatch":
+  def from_states(cls, states: Sequence, batch_shape: tuple[int, ...]) -> "StateBatch":
     if not batch_shape:
       raise ValueError("StateBatch requires a non-empty batch_shape")
-    outward_states = list(states) if states and hasattr(states[0], "to_state_dict") else None
-    if materialize_dict or outward_states is None:
-      state_dicts = [
-        st.to_state_dict(robot) if hasattr(st, "to_state_dict") else st
-        for st in states
-      ]
-    else:
-      state_dicts = []
-    return cls(state_dicts=state_dicts, batch_shape=batch_shape, outward_states=outward_states)
+    return cls(outward_states=list(states), batch_shape=batch_shape)
 
   def state_info(self, robot, state_type, get_value: Callable):
     states = self._states_for_read()
@@ -51,6 +42,4 @@ class StateBatch:
     return batch_shapes.stack_sample_results(values, self.batch_shape)
 
   def _states_for_read(self):
-    if self.outward_states is not None and self.outward_states and hasattr(self.outward_states[0], "cmtm"):
-      return self.outward_states
-    return self.state_dicts
+    return self.outward_states

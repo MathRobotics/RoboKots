@@ -12,7 +12,7 @@ from mathrobo import CMTM, SE3
 
 from ...core.motion import RobotMotions
 from ...core.robot import RobotStruct
-from ...core.state_dict_utils import cmtm_to_state_list
+from ...core.outward_state import OutwardState
 from ...core.models.kinematics.base import convert_joint_to_data
 from ...core.models.kinematics.kinematics_jax import joint_local_cmtm, joint_rel_cmtm
 
@@ -59,14 +59,12 @@ def _build_kinematics_state_with_cmtm_jax(robot: RobotStruct, motions, order: in
     _validate_rigid_links(robot)
     motion = _motion_vector(robot, motions, order)
 
-    state_dict = {}
     link_cmtm_dict = {}
     joint_cmtm_dict = {}
 
     world_name = robot.links[robot.joints[0].parent_link_id].name
     world_cmtm = CMTM.eye(SE3, order)
     link_cmtm_dict[world_name] = world_cmtm
-    state_dict.update(cmtm_to_state_list(world_cmtm, "link", world_name))
 
     for joint in robot.joints:
         parent = robot.links[joint.parent_link_id]
@@ -83,19 +81,16 @@ def _build_kinematics_state_with_cmtm_jax(robot: RobotStruct, motions, order: in
         link_cmtm_dict[child.name] = child_cmtm
         joint_cmtm_dict[joint.name] = joint_local
 
-        state_dict.update(cmtm_to_state_list(child_cmtm, "link", child.name))
-        state_dict.update(cmtm_to_state_list(joint_local, "joint", joint.name))
 
-    return state_dict, link_cmtm_dict, joint_cmtm_dict
+    return OutwardState(order=order, link_cmtm=link_cmtm_dict, joint_cmtm=joint_cmtm_dict)
 
 
-def build_kinematics_state_jax(robot: RobotStruct, motions, order: int = 3) -> dict:
-    state_dict, _, _ = _build_kinematics_state_with_cmtm_jax(robot, motions, order)
-    return state_dict
+def build_kinematics_state_jax(robot: RobotStruct, motions, order: int = 3) -> OutwardState:
+    return _build_kinematics_state_with_cmtm_jax(robot, motions, order)
 
 
 def kinematics_jax(robot: RobotStruct, motions, order: int = 1) -> KState:
-    _, link_cmtm_dict, _ = _build_kinematics_state_with_cmtm_jax(robot, motions, order)
+    link_cmtm_dict = _build_kinematics_state_with_cmtm_jax(robot, motions, order).link_cmtm
     world_name = robot.links[robot.joints[0].parent_link_id].name
     names = (world_name,) + tuple(robot.links[joint.child_link_id].name for joint in robot.joints)
     state = jnp.stack([jnp.asarray(link_cmtm_dict[name].elem_mat()) for name in names], axis=0)

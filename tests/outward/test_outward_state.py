@@ -2,6 +2,7 @@ from pathlib import Path
 
 import numpy as np
 
+from robokots.state_io.dictionary import export_state_dict
 from robokots.kots import Kots
 from robokots.kots import StateType
 from robokots.outward import (
@@ -30,7 +31,7 @@ def test_kinematics_outward_state_exports_existing_state_dict_format():
     outward_state = build_kinematics_outward_state(kots.robot_, motion, kots.order())
     expected = build_kinematics_state(kots.robot_, motion, kots.order())
 
-    _assert_state_dict_allclose(outward_state.to_state_dict(kots.robot_), expected)
+    _assert_state_dict_allclose(export_state_dict(kots.robot_, outward_state), expected)
 
 
 def test_dynamics_outward_state_exports_existing_state_dict_format():
@@ -40,7 +41,7 @@ def test_dynamics_outward_state_exports_existing_state_dict_format():
     outward_state = build_dynamics_outward_state(kots.robot_, motion, kots.order() - 2)
     expected = build_dynamics_cmtm_state(kots.robot_, motion, kots.order() - 2)
 
-    _assert_state_dict_allclose(outward_state.to_state_dict(kots.robot_), expected)
+    _assert_state_dict_allclose(export_state_dict(kots.robot_, outward_state), expected)
 
 
 def test_outward_state_reuses_relative_cmtm_cache():
@@ -58,16 +59,17 @@ def test_outward_jacobian_accepts_outward_state():
     kots = Kots.from_json_file(str(MODEL_PATH), order=5)
     motion = np.random.default_rng(3).standard_normal(kots.order() * kots.dof())
     outward_state = build_dynamics_outward_state(kots.robot_, motion, kots.order() - 2)
-    state_dict = outward_state.to_state_dict(kots.robot_)
+    kots.import_motions(motion)
+    kots.dynamics()
     states = [
         StateType("link", "arm3", "momentum", "world"),
         StateType("link", "arm3", "force"),
     ]
 
     actual = outward_jacobian(kots.robot_, outward_state, states)
-    expected = outward_jacobian(kots.robot_, state_dict, states)
+    expected = kots.jacobian(states, numerical=True)
 
-    np.testing.assert_allclose(actual, expected)
+    np.testing.assert_allclose(actual, expected, atol=1e-5, rtol=1e-5)
 
 
 def test_kots_jacobian_uses_outward_state_after_dynamics():
@@ -80,7 +82,7 @@ def test_kots_jacobian_uses_outward_state_after_dynamics():
 
     state = StateType("joint", "joint3", "torque")
     actual = kots.jacobian(state)
-    expected = outward_jacobian(kots.robot_, kots.state_dict_, [state])
+    expected = outward_jacobian(kots.robot_, kots.outward_state_, [state])
 
     np.testing.assert_allclose(actual, expected)
 
@@ -93,7 +95,7 @@ def test_update_state_dict_caches_kinematics_outward_state():
     state_dict = kots.update_state_dict()
 
     assert kots.outward_state_ is not None
-    _assert_state_dict_allclose(state_dict, kots.outward_state_.to_state_dict(kots.robot_))
+    _assert_state_dict_allclose(state_dict, export_state_dict(kots.robot_, kots.outward_state_))
 
     cached_outward_state = kots.outward_state_
     cached_state_dict = kots.update_state_dict()
@@ -110,14 +112,14 @@ def test_update_state_defers_state_dict_materialization():
     outward_state = kots.update_state()
 
     assert kots.outward_state_ is outward_state
-    assert kots.state_dict_ == {}
+    assert not hasattr(kots, "state_dict_")
 
     state = StateType("link", "arm3", "jerk")
     expected = outward_state.cmtm("link", "arm3", state.time_order).elem_vecs(state.key_order - 2)
     np.testing.assert_allclose(kots.state_info(state), expected)
 
     state_dict = kots.to_state_dict()
-    _assert_state_dict_allclose(state_dict, outward_state.to_state_dict(kots.robot_))
+    _assert_state_dict_allclose(state_dict, export_state_dict(kots.robot_, outward_state))
 
 
 def test_state_info_reads_outward_state_directly_when_available():
@@ -128,7 +130,7 @@ def test_state_info_reads_outward_state_directly_when_available():
 
     state = StateType("link", "arm3", "jerk")
     expected = kots.outward_state_.cmtm("link", "arm3", state.time_order).elem_vecs(state.key_order - 2)
-    kots.state_dict_[state.alliance] = np.full_like(expected, np.nan)
+    kots.to_state_dict()[state.alliance][...] = np.nan
 
     np.testing.assert_allclose(kots.state_info(state), expected)
 
@@ -141,10 +143,10 @@ def test_update_state_dict_caches_dynamics_outward_state():
     state_dict = kots.update_state_dict(is_dynamics=True)
 
     assert kots.outward_state_ is not None
-    _assert_state_dict_allclose(state_dict, kots.outward_state_.to_state_dict(kots.robot_))
+    _assert_state_dict_allclose(state_dict, export_state_dict(kots.robot_, kots.outward_state_))
 
     state = StateType("link", "arm3", "momentum", "world")
     actual = kots.jacobian(state)
-    expected = outward_jacobian(kots.robot_, kots.state_dict_, [state])
+    expected = outward_jacobian(kots.robot_, kots.outward_state_, [state])
 
     np.testing.assert_allclose(actual, expected)

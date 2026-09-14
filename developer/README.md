@@ -81,8 +81,9 @@ Use these implementation paths for new code:
 | --- | --- | --- |
 | `robokots.core.state_spec` | State selection, quantity definitions, orders and dimensions | `robokots.core.state` |
 | `robokots.core.outward_protocol` | Shared read-only backend protocol | `robokots.core.outward_data` |
-| `robokots.core.state_dict_utils` | State dictionary conversion and extraction | `robokots.core.state_dict` |
-| `robokots.core.state_jsonl` | JSON Lines serialization | `robokots.core.state_json` |
+| `robokots.core.state_access` | Direct computational state access | Dictionary helpers in computational code |
+| `robokots.state_io.dictionary` | Dictionary export and serialized-state extraction | `robokots.core.state_dict`, `robokots.core.state_dict_utils` |
+| `robokots.state_io.jsonl` | JSON Lines serialization | `robokots.core.state_json`, `robokots.core.state_jsonl` |
 
 The old modules have been removed. Update direct imports, dynamic import strings,
 and monkeypatch targets to the implementation paths above. Imports from
@@ -97,7 +98,33 @@ Pickles containing the removed module paths no longer load by default. Migrate
 trusted existing pickles using the compatibility release (commit `32fa548`):
 load them and save them again so class/function references use the new paths.
 Reading these new pickles with an older RoboKots release is not guaranteed.
-Public method signatures, array layouts and JSONL formats are unchanged.
+Array layouts and JSONL formats are unchanged.
+
+### Computational state and export
+
+Computation reads `OutwardState`, `ArrayOutwardState`, or Rust state views through
+`core.state_access` and backend methods. JAX kinematics also returns an
+`OutwardState`. Jacobians and numerical reference calculations do not reconstruct
+computational state from flat dictionaries. Low-level computational functions
+expect state objects; dictionary inputs are no longer supported.
+
+`kinematics()` and `dynamics()` default to `materialize_dict=False` and return
+their computed state. Explicit `materialize_dict=True` returns an exported
+snapshot. `to_state_dict()` exports the current state and `update_state_dict()`
+computes then exports it. `Kots.state_dict_` and `state_dict_source_` have been
+removed; callers should use `state_info()` for queries or `to_state_dict()` for
+output. Exports own their arrays and are never used as computational caches.
+State objects and Rust adapters do not implement `to_state_dict()`.
+`state_io.dictionary.export_state_dict(robot, state)` owns dictionary construction;
+it reads only `cmtm()` and `quantity_series()` from the state. The latter returns
+stored derivatives as `(..., order, dimension)` and raises `KeyError` for missing
+quantities. These read methods do not promise independent array copies.
+The dictionary-returning `build_kinematics_state()` and
+`build_dynamics_cmtm_state()` are explicit export wrappers.
+
+Polars and JSONL consume these snapshots at the output boundary. Dictionary
+restoration helpers live in `state_io.dictionary` and do not cache derived
+objects from mutable snapshots. State-object caches continue to serve computation.
 
 ### Facade and computation
 
@@ -108,7 +135,7 @@ split incrementally without adding another user-visible state container.
 - `robokots.api.outward`: kinematics/dynamics orchestration and backend
   validation.
 - `robokots.api.state`: semantic state construction, `StateCache`, batch state,
-  and lazy `state_dict` materialization.
+  and explicit state export.
 - `robokots.api.rust_backend`: Rust kernel dispatch and Rust outward workspace
   lifetime/cache management.
 - `robokots.api.derivatives`: public Jacobian/JVP/VJP APIs, numerical

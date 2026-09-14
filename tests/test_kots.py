@@ -297,7 +297,7 @@ def test_rust_backend_array_state_exposes_cmtm_and_cmvector():
     pytest.importorskip("robokots._rust")
     from mathrobo import CMTM, CMVector
     from robokots.core.outward_state import ArrayOutwardState
-    from robokots.core.state_dict_utils import state_dict_to_cmvec, state_dict_to_cmtm
+    from robokots.core.state_access import state_cmvec, state_cmtm
     from robokots.outward.rust import build_dynamics_outward_state_rust
 
     order = 5
@@ -312,13 +312,13 @@ def test_rust_backend_array_state_exposes_cmtm_and_cmvector():
     assert state._cache == {}
     assert isinstance(state.cmtm("link", TARGET_LINK, order), CMTM)
     assert isinstance(state.cmvec("joint", "joint3", "momentum"), CMVector)
-    assert state.cmtm("link", TARGET_LINK, order) is state_dict_to_cmtm(
+    assert state.cmtm("link", TARGET_LINK, order) is state_cmtm(
         state,
         TARGET_LINK,
         "link",
         order,
     )
-    assert state.cmvec("joint", "joint3", "momentum") is state_dict_to_cmvec(
+    assert state.cmvec("joint", "joint3", "momentum") is state_cmvec(
         state,
         "joint3",
         "joint",
@@ -340,7 +340,7 @@ def test_rust_kots_dynamics_can_defer_state_dict_materialization():
     kots.dynamics(order=order, backend="rust", materialize_dict=False)
 
     assert isinstance(kots.outward_state_, RustOutwardState)
-    assert kots.state_dict_ == {}
+    assert not hasattr(kots, "state_dict_")
     for state in [
         StateType("link", TARGET_LINK, "snap"),
         StateType("link", TARGET_LINK, "force_diff2"),
@@ -351,7 +351,7 @@ def test_rust_kots_dynamics_can_defer_state_dict_materialization():
 
     state_dict = kots.to_state_dict()
     assert state_dict
-    assert kots.state_dict_source_ is kots.outward_state_
+    assert not hasattr(kots, "state_dict_source_")
 
 
 def test_rust_kots_deferred_state_supports_dict_based_helpers():
@@ -364,11 +364,11 @@ def test_rust_kots_deferred_state_supports_dict_based_helpers():
 
     kots.kinematics(order=order, backend="rust", materialize_dict=False)
 
-    assert kots.state_dict_ == {}
+    assert not hasattr(kots, "state_dict_")
     point_frame = kots.kinematics_point(0.0)
     assert point_frame is not None
-    assert kots.state_dict_
-    assert kots.state_dict_source_ is kots.outward_state_
+    assert kots.to_state_dict()
+    assert not hasattr(kots, "state_dict_source_")
 
 
 def test_rust_private_fast_kots_helpers_match_compiled_robot():
@@ -1270,7 +1270,7 @@ def test_update_rust_data_cmtm_view_matches_array_state_without_materializing_ma
 
 def test_update_rust_data_cmvector_view_and_cmtm_var_jacob_match_array_state():
     pytest.importorskip("robokots._rust")
-    from robokots.core.state_dict_utils import state_dict_to_cmvec
+    from robokots.core.state_access import state_cmvec
 
     order = 5
     dynamics_order = order - 2
@@ -1292,7 +1292,7 @@ def test_update_rust_data_cmvector_view_and_cmtm_var_jacob_match_array_state():
     np.testing.assert_allclose(actual_vec.vecs(), expected_vec.vecs(), atol=0.0, rtol=0.0)
     np.testing.assert_allclose(actual_vec.cm_vec(), expected_vec.cm_vec(), atol=1e-15, rtol=1e-15)
 
-    truncated = state_dict_to_cmvec(
+    truncated = state_cmvec(
         actual.outward_state_,
         TARGET_LINK,
         "link",
@@ -1515,12 +1515,12 @@ def test_public_rust_backend_uses_cached_outward_state():
     kots.kinematics(order=order, backend="rust")
     data = kots.outward_state_
     assert isinstance(data, RustOutwardState)
-    assert kots.state_dict_
-    assert kots.state_dict_source_ is data
+    assert kots.to_state_dict()
+    assert not hasattr(kots, "state_dict_source_")
 
     kots.kinematics(order=order, backend="rust", materialize_dict=False)
     assert kots.outward_state_ is data
-    assert kots.state_dict_ == {}
+    assert not hasattr(kots, "state_dict_")
 
     kots.dynamics(order=order, backend="rust", materialize_dict=False)
     assert kots.outward_state_ is data
@@ -1547,7 +1547,7 @@ def test_rust_kots_batch_can_defer_state_dict_materialization():
 
     assert isinstance(kots.outward_state_, RustBatchOutwardState)
     assert kots.state_batch_ is None
-    assert kots.state_dict_ == {}
+    assert not hasattr(kots, "state_dict_")
     state = StateType("link", TARGET_LINK, "snap")
     np.testing.assert_allclose(
         kots.state_info(state),
@@ -1558,7 +1558,7 @@ def test_rust_kots_batch_can_defer_state_dict_materialization():
 
     state_dict = kots.to_state_dict()
     assert state_dict
-    assert kots.state_dict_source_ is kots.outward_state_
+    assert not hasattr(kots, "state_dict_source_")
 
 
 def test_rust_backend_batch_matches_numpy():
@@ -2241,14 +2241,14 @@ def test_numpy_cmtm_gravity_force_jacobians_match_full_numerical():
         )
 
     torque = StateType("total_joint", "total_joint", "torque")
-    explicit_from_dict = total_coord_to_joint_torque_grad_mat(
+    explicit_from_state = total_coord_to_joint_torque_grad_mat(
         kots.robot_,
-        kots.to_state_dict(),
+        kots.outward_state_,
         torque_order=1,
         gravity=kots.gravity_,
     )
     np.testing.assert_allclose(
-        explicit_from_dict,
+        explicit_from_state,
         kots.jacobian(torque, numerical=True),
         atol=5e-6,
         rtol=5e-7,
@@ -3579,7 +3579,7 @@ def test_import_motions_invalidates_previous_batched_state():
 
     assert kots.state_batch_ is None
     assert kots.outward_state_ is None
-    assert kots.state_dict_ == {}
+    assert not hasattr(kots, "state_dict_")
     assert kots.batch_shape_ == ()
 
     kots.kinematics()

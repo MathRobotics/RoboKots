@@ -54,7 +54,7 @@ def test_total_dynamics_matvec_matches_matrix_product():
     kots.dynamics()
 
     robot = kots.robot_
-    state = kots.state_dict_
+    state = kots.outward_state_
 
     link_momentum_vec = rng.standard_normal(robot.link_num * dim_dof * momentum_order)
     joint_momentum_vec = rng.standard_normal(robot.joint_num * dim_dof * momentum_order)
@@ -80,7 +80,7 @@ def test_total_dynamics_transpose_matvec_matches_matrix_product():
     kots.dynamics()
 
     robot = kots.robot_
-    state = kots.state_dict_
+    state = kots.outward_state_
 
     link_to_joint_mat = total_world_link_wrench_to_world_joint_wrench_mat(robot, momentum_order)
     joint_torque_mat = total_joint_wrench_to_joint_torque_mat(robot, force_order)

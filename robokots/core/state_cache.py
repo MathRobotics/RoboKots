@@ -36,16 +36,14 @@ class StateCache:
     build_state should ideally accept:
       build_state(x_all, time=time_grid, required=required_keys) -> state object
 
-    Backward compatible:
-      build_state(x_all) -> dict
-      build_state(x_all, time=time_grid) -> dict
+    Builders return computational state objects. Flat dictionaries belong to
+    the export layer and are not used for state lookup here.
     """
 
     build_state: Callable[..., Any]
 
-    # Latest cached state object. This may be a legacy flat dict or a richer
-    # internal state representation such as OutwardState.
-    state: Any = field(default_factory=dict)
+    # Latest computational state, absent until the first successful update.
+    state: Any = None
 
     _rev_last: int = -1
     _time_rev_last: int = -1
@@ -59,7 +57,7 @@ class StateCache:
         self._rev_last = -1
         self._time_rev_last = -1
         self._memo.clear()
-        self.state = {}
+        self.state = None
 
     def _required_sig(self, required: Optional[Iterable[StateKey]]) -> int:
         if required is None:
@@ -94,7 +92,7 @@ class StateCache:
             except TypeError:
                 st = self.build_state(x_all)
 
-        self.state = st  # Replace the state map atomically for safety.
+        self.state = st
         self._rev_last = rev
         self._time_rev_last = time_rev
         self._req_sig_last = req_sig
@@ -103,9 +101,7 @@ class StateCache:
     def get(self, key: StateKey) -> Any:
         if key in self._memo:
             return self._memo[key]
-        if key not in self.state:
-            raise KeyError(f"StateCache: missing key: {key}")
-        return self.state[key]
+        raise KeyError(f"StateCache: missing derived value: {key}")
 
     def set_memo(self, key: StateKey, value: Any) -> None:
         self._memo[key] = value

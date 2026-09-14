@@ -2,7 +2,7 @@ import numpy as np
 
 from robokots.core import RobotStruct
 from robokots.core.state_spec import dim_to_dof
-from robokots.core.state_dict_utils import state_dict_to_cmtm, state_dict_to_rel_cmtm
+from robokots.core.state_access import state_cmtm, state_rel_cmtm
 from robokots.core.models.cmtm_apply import apply_mat_adj, apply_tangent_mat
 from ..kinematics.kinematics_matrix import joint_select_diag_mat
 
@@ -28,7 +28,7 @@ def total_joint_tan_vel_to_link_tan_vel_grad_mat(r : RobotStruct, state : dict, 
         r.route_target_link(link, link_route, joint_route)
         for j in joint_route:
             joint = r.joints[j]
-            rel_cmtm = state_dict_to_rel_cmtm(state, link.name, r.links[joint.child_link_id].name, "link", order)
+            rel_cmtm = state_rel_cmtm(state, link.name, r.links[joint.child_link_id].name, "link", order)
             mat[i*n_:(i+1)*n_, j*n_:(j+1)*n_] = rel_cmtm.mat_adj()
     return mat
 
@@ -43,7 +43,7 @@ def total_joint_tan_vel_to_link_tan_vel_grad_matvec(r : RobotStruct, state : dic
         out_start = i * n_
         for j in joint_route:
             joint = r.joints[j]
-            rel_cmtm = state_dict_to_rel_cmtm(state, link.name, r.links[joint.child_link_id].name, "link", order)
+            rel_cmtm = state_rel_cmtm(state, link.name, r.links[joint.child_link_id].name, "link", order)
             result[out_start:out_start+n_] += apply_mat_adj(rel_cmtm, vec[j*n_:(j+1)*n_])
     return result
 
@@ -55,10 +55,10 @@ def total_joint_tan_vel_to_link_vel_grad_mat(r : RobotStruct, state : dict, orde
         link_route = []
         joint_route = []
         r.route_target_link(link, link_route, joint_route)
-        link_tan_inv = state_dict_to_cmtm(state, link.name, "link", order).tangent_mat_inv()
+        link_tan_inv = state_cmtm(state, link.name, "link", order).tangent_mat_inv()
         for j in joint_route:
             joint = r.joints[j]
-            rel_cmtm = state_dict_to_rel_cmtm(state, link.name, r.links[joint.child_link_id].name, "link", order)
+            rel_cmtm = state_rel_cmtm(state, link.name, r.links[joint.child_link_id].name, "link", order)
             mat[i*n_:(i+1)*n_, j*n_:(j+1)*n_] = link_tan_inv @ rel_cmtm.mat_adj()
     return mat
 
@@ -70,12 +70,12 @@ def total_joint_tan_vel_to_link_vel_grad_matvec(r : RobotStruct, state : dict, v
         link_route = []
         joint_route = []
         r.route_target_link(link, link_route, joint_route)
-        link_cmtm = state_dict_to_cmtm(state, link.name, "link", order)
+        link_cmtm = state_cmtm(state, link.name, "link", order)
         tangent_mat_inv = link_cmtm.tangent_mat_inv()
         out_start = i * n_
         for j in joint_route:
             joint = r.joints[j]
-            rel_cmtm = state_dict_to_rel_cmtm(state, link.name, r.links[joint.child_link_id].name, "link", order)
+            rel_cmtm = state_rel_cmtm(state, link.name, r.links[joint.child_link_id].name, "link", order)
             result[out_start:out_start+n_] += tangent_mat_inv @ apply_mat_adj(rel_cmtm, vec[j*n_:(j+1)*n_])
     return result
 
@@ -88,10 +88,10 @@ def total_joint_tan_vel_to_link_sp_vel_grad_mat(r : RobotStruct, state : dict, o
         link_route = []
         joint_route = []
         r.route_target_link(link, link_route, joint_route)
-        link_sp_tan_inv = state_dict_to_cmtm(state, link.name, "link", order).tangent_mat_inv()[dim_to_dof(dim):]
+        link_sp_tan_inv = state_cmtm(state, link.name, "link", order).tangent_mat_inv()[dim_to_dof(dim):]
         for j in joint_route:
             joint = r.joints[j]
-            rel_cmtm = state_dict_to_rel_cmtm(state, link.name, r.links[joint.child_link_id].name, "link", order)
+            rel_cmtm = state_rel_cmtm(state, link.name, r.links[joint.child_link_id].name, "link", order)
             mat[i*n_l:(i+1)*n_l, j*n_j:(j+1)*n_j] = link_sp_tan_inv @ rel_cmtm.mat_adj()
     return mat
 
@@ -105,12 +105,12 @@ def total_joint_tan_vel_to_link_sp_vel_grad_matvec(r : RobotStruct, state : dict
         link_route = []
         joint_route = []
         r.route_target_link(link, link_route, joint_route)
-        link_cmtm = state_dict_to_cmtm(state, link.name, "link", order)
+        link_cmtm = state_cmtm(state, link.name, "link", order)
         tangent_mat_inv_sp = link_cmtm.tangent_mat_inv()[dof:]
         out_start = i * n_l
         for j in joint_route:
             joint = r.joints[j]
-            rel_cmtm = state_dict_to_rel_cmtm(state, link.name, r.links[joint.child_link_id].name, "link", order)
+            rel_cmtm = state_rel_cmtm(state, link.name, r.links[joint.child_link_id].name, "link", order)
             result[out_start:out_start+n_l] += tangent_mat_inv_sp @ apply_mat_adj(rel_cmtm, vec[j*n_j:(j+1)*n_j])
     return result
 
@@ -121,7 +121,7 @@ def total_coord_to_joint_tan_vel_grad_mat(r : RobotStruct, state : dict, order :
     for i, joint in enumerate(r.joints):
         if joint.dof == 0:  # Joint with no degree of freedom
             continue
-        joint_cmtm = state_dict_to_cmtm(state, joint.name, "joint", order)
+        joint_cmtm = state_cmtm(state, joint.name, "joint", order)
         mat[i*n_:(i+1)*n_, joint.dof_index*order:(joint.dof_index+joint.dof)*order] = \
             joint_cmtm.tangent_mat() @ joint_select_diag_mat(joint.select_mat, order)
 
@@ -134,7 +134,7 @@ def total_coord_to_joint_tan_vel_grad_matvec(r : RobotStruct, state : dict, vec 
     for i, joint in enumerate(r.joints):
         if joint.dof == 0:
             continue
-        joint_cmtm = state_dict_to_cmtm(state, joint.name, "joint", order)
+        joint_cmtm = state_cmtm(state, joint.name, "joint", order)
         coord_start = joint.dof_index * order
         joint_vec = vec[coord_start:coord_start + joint.dof*order]
         selected = joint_select_diag_mat(joint.select_mat, order) @ joint_vec
@@ -149,7 +149,7 @@ def total_coord_to_joint_tan_vel_grad_matvec(r : RobotStruct, state : dict, vec 
 #     for i, joint in enumerate(r.joints):
 #         if joint.dof == 0:  # Joint with no degree of freedom
 #             continue
-#         joint_cmtm = state_dict_to_cmtm(state, joint.name, order)
+#         joint_cmtm = state_cmtm(state, joint.name, order)
 #         mat[i*n_:(i+1)*n_, joint.dof_index*order:(joint.dof_index+joint.dof)*order] = \
 #             joint_cmtm.tangent_mat()[dim_to_dof(dim):] @ joint_select_diag_mat(joint.select_mat, order)
 

@@ -6,7 +6,7 @@ from typing import Any, Iterable, Optional, Iterator
 import json
 import numpy as np
 
-from .state_dict_utils import is_state_payload_key
+from .dictionary import is_state_payload_key
 
 
 # ============================================================

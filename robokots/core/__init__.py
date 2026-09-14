@@ -21,17 +21,6 @@ _lazy_attributes: Dict[str, str] = {
     "MotionLayoutOwner": "robokots.core.motion",
     "MotionTensor": "robokots.core.motion",
     "RobotMotions": "robokots.core.motion",
-    # State dictionary helpers
-    "state_dict_to_cmtm": "robokots.core.state_dict_utils",
-    "state_dict_to_cmtm_wrench": "robokots.core.state_dict_utils",
-    "state_dict_to_cmvec": "robokots.core.state_dict_utils",
-    "state_dict_to_rel_cmtm_wrench": "robokots.core.state_dict_utils",
-    "extract_dict_link_info": "robokots.core.state_dict_utils",
-    "extract_dict_info": "robokots.core.state_dict_utils",
-    "vecs_to_state_dict": "robokots.core.state_dict_utils",
-    "cmtm_to_state_list": "robokots.core.state_dict_utils",
-    "state_dict_to_frame": "robokots.core.state_dict_utils",
-    "state_dict_to_vecs": "robokots.core.state_dict_utils",
     # State cache utility
     "StateCache": "robokots.core.state_cache",
     # Axis-aware tensor adapters
