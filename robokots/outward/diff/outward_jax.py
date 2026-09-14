@@ -12,7 +12,7 @@ from mathrobo import CMTM, SE3
 
 from ...core.motion import RobotMotions
 from ...core.robot import RobotStruct
-from ...core.state_dict import cmtm_to_state_list
+from ...core.state_dict_utils import cmtm_to_state_list
 from ...core.models.kinematics.base import convert_joint_to_data
 from ...core.models.kinematics.kinematics_jax import joint_local_cmtm, joint_rel_cmtm
 

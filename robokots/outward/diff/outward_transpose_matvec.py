@@ -2,9 +2,9 @@ import numpy as np
 from mathrobo import CMVector, Factorial
 
 from robokots.core import RobotStruct
-from robokots.core.state import StateType, dim_to_dof, data_type_dof, data_type_offset
-from robokots.core.state import keys_kinematics, keys_momentum, keys_force, keys_torque
-from robokots.core.state_dict import (
+from robokots.core.state_spec import StateType, dim_to_dof, data_type_dof, data_type_offset
+from robokots.core.state_spec import keys_kinematics, keys_momentum, keys_force, keys_torque
+from robokots.core.state_dict_utils import (
     extract_dict_total_link_cmvec,
     state_dict_to_cmtm,
     state_dict_to_cmtm_wrench,

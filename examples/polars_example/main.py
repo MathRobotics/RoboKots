@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 from robokots.kots import Kots
-from robokots.core.state_json import iter_jsonl_rows, write_jsonl
+from robokots.core.state_jsonl import iter_jsonl_rows, write_jsonl
 
 EXAMPLE_DIR = Path(__file__).resolve().parent
 

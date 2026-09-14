@@ -4,7 +4,7 @@
 
 import dataclasses
 from typing import List, Dict
-from .state import StateType, is_in_keys_dynamics, keys_joint_motion, keys_time_order
+from .state_spec import StateType, is_in_keys_dynamics, keys_joint_motion, keys_time_order
 
 @dataclasses.dataclass
 class RobotNames:

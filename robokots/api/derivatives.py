@@ -5,7 +5,7 @@ import numpy as np
 
 from .. import outward as outward_api
 from ..core import batch as batch_api
-from ..core.state import StateType, data_type_dof, dim_to_dof, keys_force, keys_kinematics, keys_momentum, keys_torque
+from ..core.state_spec import StateType, data_type_dof, dim_to_dof, keys_force, keys_kinematics, keys_momentum, keys_torque
 from ..core.state_tensor import JacobianTensor
 
 

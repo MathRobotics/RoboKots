@@ -3,7 +3,7 @@ import numpy as np
 
 from ..core.robot import RobotStruct
 from ..core.motion import RobotMotions
-from ..core.state import StateType
+from ..core.state_spec import StateType
 from ..core.state_cache import StateCache
 from .state import get_value
 from .state import build_kinematics_state, build_dynamics_cmtm_state

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
-from robokots.core.state import StateType
+from robokots.core.state_spec import StateType
 from robokots.core.robot import inertia_dict_to_vector
 from robokots.kots import Kots
 

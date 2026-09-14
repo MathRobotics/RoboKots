@@ -68,6 +68,25 @@ outputs.
 
 ## API Implementation Boundaries
 
+### Core state module names
+
+Use these implementation paths for new code:
+
+| Implementation module | Responsibility | Compatibility path |
+| --- | --- | --- |
+| `robokots.core.state_spec` | State selection, quantity definitions, orders and dimensions | `robokots.core.state` |
+| `robokots.core.outward_protocol` | Shared read-only backend protocol | `robokots.core.outward_data` |
+| `robokots.core.state_dict_utils` | State dictionary conversion and extraction | `robokots.core.state_dict` |
+| `robokots.core.state_jsonl` | JSON Lines serialization | `robokots.core.state_json` |
+
+The compatibility paths alias the same module objects, preserving class identity
+and shared caches. Existing imports and old pickle module references continue to
+resolve. Class/function `__module__` attributes and newly written pickle data use
+the new paths; reading new pickles with an older RoboKots release is not guaranteed.
+Public method signatures, array layouts and JSONL formats are unchanged.
+
+### Facade and computation
+
 `robokots.kots.Kots` remains the public facade. Its implementation is being
 split incrementally without adding another user-visible state container.
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from robokots.core.state import StateType
+from robokots.core.state_spec import StateType
 from robokots.kots import Kots
 
 

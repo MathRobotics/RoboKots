@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 
 from .. import outward as outward_api
-from ..core.state import StateType, keys_joint_motion, keys_torque
+from ..core.state_spec import StateType, keys_joint_motion, keys_torque
 
 
 class FastDerivativesMixin:

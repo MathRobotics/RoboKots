@@ -6,7 +6,7 @@ import numpy as np
 from typing import List, Any, Optional
 
 from .core.motion import RobotMotions
-from .core.state import StateType, data_type_dof, dim_to_dof, is_in_keys_dynamics, keys_force, keys_joint_motion, keys_kinematics, keys_momentum, keys_torque
+from .core.state_spec import StateType, data_type_dof, dim_to_dof, is_in_keys_dynamics, keys_force, keys_joint_motion, keys_kinematics, keys_momentum, keys_torque
 from .core.state_cache import StateCache
 from .core.state_batch import StateBatch
 from .core.state_tensor import JacobianTensor, StateTensor
@@ -144,7 +144,7 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
     self.robot_.print()
 
   def print_state_dict(self):
-    from .core.state_dict import print_state_dict
+    from .core.state_dict_utils import print_state_dict
 
     print_state_dict(self.to_state_dict())
 
@@ -396,7 +396,7 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
 
   def show_robot(self, save = False, ax = None, color : RobotColor = None):
     self._ensure_not_batched("show_robot")
-    from .core.state_dict import state_dict_to_links_pos
+    from .core.state_dict_utils import state_dict_to_links_pos
 
     conectivity = np.zeros((self.robot_.joint_num, 2), dtype='int64')
     for i in range(self.robot_.joint_num):
@@ -422,13 +422,13 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
 
   def show_link_points(self):
     self._ensure_not_batched("show_link_points")
-    from .core.state_dict import state_dict_to_links_pos
+    from .core.state_dict_utils import state_dict_to_links_pos
 
     show_link_points(state_dict_to_links_pos(self.to_state_dict(), self.robot_.link_names))
 
   def show_target_link_points(self, plt = None, dimension=3):
     self._ensure_not_batched("show_target_link_points")
-    from .core.state_dict import state_dict_to_links_pos
+    from .core.state_dict_utils import state_dict_to_links_pos
 
     if not self.target_:
       raise ValueError("target_ is not set")

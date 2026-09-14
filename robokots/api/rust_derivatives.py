@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 
 from ..core import batch as batch_api
-from ..core.state import StateType, keys_force, keys_kinematics, keys_momentum, keys_torque
+from ..core.state_spec import StateType, keys_force, keys_kinematics, keys_momentum, keys_torque
 
 
 class RustDerivativesMixin:

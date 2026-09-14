@@ -1,7 +1,7 @@
 import numpy as np
 
 from robokots.core import RobotStruct
-from robokots.core.state import dim_to_dof
+from robokots.core.state_spec import dim_to_dof
 
 from .total_dynamics_mat import total_link_inertia_mat, total_joint_wrench_to_joint_torque_mat
 from .total_dynamics_mat import total_world_link_wrench_to_world_joint_wrench_mat

@@ -1,0 +1,350 @@
+"""State selection specifications, quantity names, orders, and dimensions."""
+
+from typing import List
+
+frame_names = ("world","local")
+
+data_owner_types = ("joint","link","total_link","total_joint","total","total_body")
+total_owner_names = ("total_link", "total_joint", "total", "total_body")
+
+
+def state_data_name(data_type: str) -> str:
+    try:
+        return keys_name[data_type]
+    except KeyError as e:
+        raise KeyError(f"Invalid data_type: {data_type}") from e
+
+
+def state_dict_key(owner_type: str, owner_name: str, data_type: str) -> str:
+    data_name = state_data_name(data_type)
+    return state_storage_key(owner_type, owner_name, data_name)
+
+
+def state_storage_key(owner_type: str, owner_name: str, data_name: str) -> str:
+    if owner_name in total_owner_names:
+        return f"{owner_name}_{data_name}"
+    return f"{owner_name}_{owner_type}_{data_name}"
+
+class StateType:
+    owner_type : str
+    owner_name : str
+    data_type : str
+    frame_name : str
+
+    def __init__(self, owner_type : str = None, owner_name : str = None, data_type : str = None, frame_name : str = None):
+        self.owner_type = owner_type
+        self.owner_name = owner_name
+        self.data_type = data_type
+
+        self.frame_name = frame_name
+        self.time_order = keys_time_order.get(data_type, 1)
+        self.key_order = keys_order.get(data_type, 1)
+        self.is_dynamics = is_in_keys_dynamics([data_type])
+        self.alliance = state_dict_key(owner_type, owner_name, data_type)
+
+    def __repr__(self):
+        return f"StateType(\n  owner type: {self.owner_type}\n  owner name: {self.owner_name}\n  data type: {self.data_type}\n  frame name: {self.frame_name}\n  time order: {self.time_order}\n  key order: {self.key_order}\n  is dynamics: {self.is_dynamics}\n  alliance: {self.alliance}\n)"
+
+    @staticmethod
+    def create_list(owner_type: str, owner_name: str, data_type_list: List[str], frame_name: str = None) -> List["StateType"]:
+        state_type_list = []
+        for dt in data_type_list:
+            st = StateType(
+                owner_type=owner_type,
+                owner_name=owner_name,
+                data_type=dt,
+                frame_name=frame_name
+            )
+            state_type_list.append(st)
+        return state_type_list
+
+    @staticmethod
+    def max_time_order(state_type_list : List["StateType"]) -> int:
+        max_order = 0
+        for st in state_type_list:
+            if st.time_order > max_order:
+                max_order = st.time_order
+        return max_order
+
+    def is_list_all_in_kinematics(state_type_list : List["StateType"]) -> bool:
+        for st in state_type_list:
+            if st.is_dynamics:
+                return False
+        return True
+
+    def is_list_all_in_dynamics(state_type_list : List["StateType"]) -> bool:
+        for st in state_type_list:
+            if not st.is_dynamics:
+                return False
+        return True
+
+    @staticmethod
+    def filter_list_by_kinematics(state_type_list : List["StateType"]) -> bool:
+        return [st for st in state_type_list if not st.is_dynamics]
+    @staticmethod
+    def filter_list_by_dynamics(state_type_list : List["StateType"]) -> bool:
+        return [st for st in state_type_list if st.is_dynamics]
+
+    @staticmethod
+    def filter_list_by_owner_type(state_type_list : List["StateType"], owner_type : List[str]) -> List["StateType"]:
+        return [st for st in state_type_list if st.owner_type in owner_type]
+    @staticmethod
+    def filter_list_by_owner_name(state_type_list : List["StateType"], owner_name : List[str]) -> List["StateType"]:
+        return [st for st in state_type_list if st.owner_name in owner_name]
+    @staticmethod
+    def filter_list_by_data_type(state_type_list : List["StateType"], data_type : List[str]) -> List["StateType"]:
+        return [st for st in state_type_list if st.data_type in data_type]
+    @staticmethod
+    def get_owner_names_from_list(state_type_list : List["StateType"]) -> List[str]:
+        owner_names = []
+        for st in state_type_list:
+            if st.owner_name not in owner_names:
+                owner_names.append(st.owner_name)
+        return owner_names
+
+
+keys_kinematics = \
+    ("pos", "rot", "frame", "vel", "acc", "jerk", "snap", "crackle", "pop", "lock", "drop", "shot", "put")
+
+keys_joint_motion = \
+    ("coord", "veloc", "accel", "jerk")
+
+keys_momentum = \
+    ("momentum","momentum_diff1", "momentum_diff2", "momentum_diff3", "momentum_diff4", "momentum_diff5", "momentum_diff6", "momentum_diff7", "momentum_diff8")
+
+keys_force = \
+    ("force","force_diff1", "force_diff2", "force_diff3", "force_diff4", "force_diff5", "force_diff6", "force_diff7")
+
+keys_torque = \
+    ("torque", "torque_diff1", "torque_diff2", "torque_diff3", "torque_diff4", "torque_diff5", "torque_diff6", "torque_diff7")
+
+# Whole-body scalar quantities.  They intentionally do not belong to the
+# spatial kinematics/dynamics families above: their canonical owner is
+# `total_body`, not an individual link or joint.
+keys_total_body = ("kinetic_energy",)
+
+keys = keys_kinematics + keys_joint_motion + keys_momentum + keys_force + keys_torque + keys_total_body
+
+def is_in_keys_kinematics(keys_list):
+    for k in keys_list:
+        if k not in keys_kinematics:
+            return False
+    return True
+
+def is_in_keys_momentum(keys_list):
+    for k in keys_list:
+        if k not in keys_momentum:
+            return False
+    return True
+
+def is_in_keys_force(keys_list):
+    for k in keys_list:
+        if k not in keys_force:
+            return False
+    return True
+
+def is_in_keys_torque(keys_list):
+    for k in keys_list:
+        if k not in keys_torque:
+            return False
+    return True
+
+def is_in_keys_dynamics(keys_list):
+    for k in keys_list:
+        if k not in keys_momentum and k not in keys_force and k not in keys_torque:
+            return False
+    return True
+
+def is_in_keys(keys_list):
+    for k in keys_list:
+        if k not in keys:
+            return False
+    return True
+
+def filter_keys_kinematics(keys_list):
+    return [k for k in keys_list if k in keys_kinematics]
+
+def is_in_keys_joint_motion(keys_list):
+    for k in keys_list:
+        if k not in keys_joint_motion:
+            return False
+    return True
+
+def filter_keys_joint_motion(keys_list):
+    return [k for k in keys_list if k in keys_joint_motion]
+
+def filter_keys_momentum(keys_list):
+    return [k for k in keys_list if k in keys_momentum]
+
+def filter_keys_force(keys_list):
+    return [k for k in keys_list if k in keys_force]
+
+def filter_keys_torque(keys_list):
+    return [k for k in keys_list if k in keys_torque]
+
+keys_time_order = {
+    "coord": 1,
+    "veloc": 2,
+    "accel": 3,
+    "pos": 1,
+    "rot": 1,
+    "frame": 1,
+    "vel": 2,
+    "acc": 3,
+    "jerk": 4,
+    "snap": 5,
+    "crackle": 6,
+    "pop": 7,
+    "lock": 8,
+    "drop": 9,
+    "shot": 10,
+    "put": 11,
+}
+keys_time_order.update({key: i + 2 for i, key in enumerate(keys_momentum)})
+keys_time_order.update({key: i + 3 for i, key in enumerate(keys_force)})
+keys_time_order.update({key: i + 3 for i, key in enumerate(keys_torque)})
+keys_time_order.update({"kinetic_energy": 2})
+
+keys_order_kinematics = {
+    "coord": 1,
+    "veloc": 2,
+    "accel": 3,
+    "frame": 1,
+    "vel": 2,
+    "acc": 3,
+    "jerk": 4,
+    "snap": 5,
+    "crackle": 6,
+    "pop": 7,
+    "lock": 8,
+    "drop": 9,
+    "shot": 10,
+    "put": 11,
+}
+
+keys_order_force = {key: i + 1 for i, key in enumerate(keys_force)}
+
+keys_order_momentum = {key: i + 1 for i, key in enumerate(keys_momentum)}
+
+keys_order_torque = {key: i + 1 for i, key in enumerate(keys_torque)}
+
+keys_order = {**keys_order_kinematics, **keys_order_momentum, **keys_order_force, **keys_order_torque}
+keys_order["kinetic_energy"] = 1
+
+keys_name = {
+    "coord" : "coord",
+    "veloc" : "veloc",
+    "accel" : "accel",
+    "pos" : "pos",
+    "rot" : "rot",
+    "frame" : "frame",
+    "vel" : "vel",
+    "acc" : "acc",
+    "jerk" : "acc_diff1",
+    "snap" : "acc_diff2",
+    "crackle" : "acc_diff3",
+    "pop" : "acc_diff4",
+    "lock" : "acc_diff5",
+    "drop" : "acc_diff6",
+    "shot" : "acc_diff7",
+    "put" : "acc_diff8",
+    "momentum" : "momentum",
+    "momentum_diff1" : "momentum_diff1",
+    "momentum_diff2" : "momentum_diff2",
+    "momentum_diff3" : "momentum_diff3",
+    "momentum_diff4" : "momentum_diff4",
+    "momentum_diff5" : "momentum_diff5",
+    "momentum_diff6" : "momentum_diff6",
+    "momentum_diff7" : "momentum_diff7",
+    "momentum_diff8" : "momentum_diff8",
+    "force" : "force",
+    "force_diff1" : "force_diff1",
+    "force_diff2" : "force_diff2",
+    "force_diff3" : "force_diff3",
+    "force_diff4" : "force_diff4",
+    "force_diff5" : "force_diff5",
+    "force_diff6" : "force_diff6",
+    "force_diff7" : "force_diff7",
+    "torque" : "torque",
+    "torque_diff1" : "torque_diff1",
+    "torque_diff2" : "torque_diff2",
+    "torque_diff3" : "torque_diff3",
+    "torque_diff4" : "torque_diff4",
+    "torque_diff5" : "torque_diff5",
+    "torque_diff6" : "torque_diff6",
+    "torque_diff7" : "torque_diff7",
+    "kinetic_energy" : "kinetic_energy",
+}
+
+def data_type_to_sub_func(data_type : str):
+    if data_type == "rot":
+        from mathrobo import SO3
+        return SO3.sub_tan_vec
+    elif data_type == "frame":
+        from mathrobo import SE3
+        return SE3.sub_tan_vec
+    elif data_type == "cmtm":
+        from mathrobo import CMTM
+        return CMTM.sub_vec
+    elif data_type in ["coord", "veloc", "accel", "kinetic_energy"]:
+        return None
+    elif data_type in ["pos", "vel", "acc"] \
+        or data_type in ["jerk", "snap", "crackle", "pop", "lock", "drop", "shot", "put"]  \
+        or data_type in keys_force \
+        or data_type in keys_momentum \
+        or data_type in keys_torque:
+        return None
+    else:
+        raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'jerk', 'frame' or 'cmtm'.")
+
+def data_type_offset(data_type : str):
+    if data_type == "pos":
+        return 1
+    elif data_type == "rot":
+        return 0
+    else:
+        return 0
+
+def data_type_dof(data_type : str, order = None, dim = 3):
+    if data_type in ("coord", "veloc", "accel", "kinetic_energy") or data_type in keys_torque:
+        return 1
+    elif data_type == "pos" or data_type == "rot":
+        return dim
+    elif data_type in ["vel", "acc"] \
+        or data_type in ["jerk", "snap", "crackle", "pop", "lock", "drop", "shot", "put"]  \
+        or data_type in keys_force \
+        or data_type in keys_momentum:
+        return dim * 2
+    elif data_type == "frame":
+        return dim * 2
+    elif data_type == "cmtm":
+        if order is None:
+            return dim * 2
+        else:
+            return dim * 2 * order
+    elif data_type == "cmtm_so3":
+        if order is None:
+            return dim * 2
+        else:
+            return dim * order
+    else:
+        raise ValueError(f"Invalid data_type: {data_type}. Must be 'pos', 'rot', 'vel', 'acc', 'frame' or 'cmtm'.")
+
+def dim_to_dof(dim : int):
+    if dim == 1:
+        return 2
+    elif dim == 2:
+        return 3
+    elif dim == 3:
+        return 6
+
+def state_type_list_condition(state_type_list : list[StateType]) -> int:
+    max_order = 1
+    is_dynamics = False
+    for st in state_type_list:
+        order = keys_order.get(st.data_type, 1)
+        if order > max_order:
+            max_order = order
+        if is_in_keys_dynamics([st.data_type]):
+            is_dynamics = True
+    return max_order, is_dynamics

@@ -10,13 +10,13 @@ from mathrobo import CMVector, CMTM, Factorial, SE3, SE3wrench
 from ..core.robot import RobotStruct
 from ..core.motion import RobotMotions
 from ..core.outward_state import OutwardState
-from ..core.state_dict import (
+from ..core.state_dict_utils import (
     state_dict_to_cmtm,
     state_dict_to_cmtm_wrench,
     state_dict_to_cmvec,
     state_dict_to_frame,
 )
-from ..core.state import data_type_dof, StateType, state_dict_key
+from ..core.state_spec import data_type_dof, StateType, state_dict_key
 
 from ..core.models.kinematics.base import convert_joint_to_data, convert_link_to_data
 from ..core.models.kinematics.kinematics import joint_local_cmtm, joint_rel_frame

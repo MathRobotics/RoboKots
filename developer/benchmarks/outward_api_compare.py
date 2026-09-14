@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
-from robokots.core.state import StateType
+from robokots.core.state_spec import StateType
 from robokots.kots import Kots
 
 from .common import build_model, format_time, measure, select_unit, write_csv

@@ -5,7 +5,7 @@ import numpy as np
 
 from .. import outward as outward_api
 from ..core.motion import RobotMotions
-from ..core.state import StateType
+from ..core.state_spec import StateType
 
 
 class WholeBodyMixin:

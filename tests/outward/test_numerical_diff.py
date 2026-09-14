@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from robokots.kots import Kots
-from robokots.core.state import StateType, data_type_to_sub_func
+from robokots.core.state_spec import StateType, data_type_to_sub_func
 from robokots.outward.diff.numerical_diff import (
     _make_lifted_update_func,
     diff_outward_numerical,

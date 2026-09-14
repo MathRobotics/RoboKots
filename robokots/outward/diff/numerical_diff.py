@@ -2,8 +2,8 @@ import numpy as np
 from mathrobo import numerical_difference, build_integrator
 
 from robokots.core import RobotStruct
-from robokots.core.state import StateType, data_type_dof, data_type_to_sub_func
-from robokots.core.state_dict import extract_dict_link_info
+from robokots.core.state_spec import StateType, data_type_dof, data_type_to_sub_func
+from robokots.core.state_dict_utils import extract_dict_link_info
 
 from robokots.outward.state import build_kinematics_state
 from robokots.outward.values import compute_outward_value

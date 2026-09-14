@@ -1,8 +1,8 @@
 import numpy as np
 
 from robokots.core import RobotStruct
-from robokots.core.state import dim_to_dof
-from robokots.core.state_dict import extract_dict_total_link_cmvec, state_dict_to_cmtm, state_dict_to_cmvec
+from robokots.core.state_spec import dim_to_dof
+from robokots.core.state_dict_utils import extract_dict_total_link_cmvec, state_dict_to_cmtm, state_dict_to_cmvec
 from ..dynamics.base import spatial_inertia
 from ..dynamics.dynamics_matrix import link_sp_vel_to_link_force_grad_mat, partial_link_sp_vel_to_force_grad_mat, partial_momentum_to_force_grad_mat
 from .basic import total_factorial_mat, total_factorial_mat_inv

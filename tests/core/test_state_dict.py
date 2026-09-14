@@ -1,9 +1,9 @@
 import numpy as np
 
 from mathrobo import SE3, CMTM
-from robokots.core.state import StateType, state_dict_key
-from robokots.core.state_dict import *
-from robokots.core.state_json import make_jsonl_row
+from robokots.core.state_spec import StateType, state_dict_key
+from robokots.core.state_dict_utils import *
+from robokots.core.state_jsonl import make_jsonl_row
 
 def test_extract_state_keys():
     state = {

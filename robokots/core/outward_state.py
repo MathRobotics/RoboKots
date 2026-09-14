@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 from mathrobo import CMTM, CMVector, SE3, SE3wrench
 
-from .state_dict import cmtm_to_state_list, vecs_to_state_dict
+from .state_dict_utils import cmtm_to_state_list, vecs_to_state_dict
 
 if TYPE_CHECKING:
     from .robot import RobotStruct

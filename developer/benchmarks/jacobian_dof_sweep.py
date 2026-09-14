@@ -11,7 +11,7 @@ import jax.numpy as jnp
 import numpy as np
 import robokots.core.models.kinematics.kinematics_jax as kinematics_jax
 
-from robokots.core.state import StateType
+from robokots.core.state_spec import StateType
 from robokots.kots import Kots
 
 

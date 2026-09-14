@@ -1,8 +1,8 @@
 import numpy as np
 
 from robokots.core import RobotStruct
-from robokots.core.state import dim_to_dof
-from robokots.core.state_dict import state_dict_to_cmtm, state_dict_to_rel_cmtm
+from robokots.core.state_spec import dim_to_dof
+from robokots.core.state_dict_utils import state_dict_to_cmtm, state_dict_to_rel_cmtm
 from robokots.core.models.cmtm_apply import apply_mat_adj, apply_tangent_mat
 from ..kinematics.kinematics_matrix import joint_select_diag_mat
 

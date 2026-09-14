@@ -3,7 +3,7 @@
 Submodules are intentionally not imported automatically so that optional
 heavy dependencies are only loaded when requested. Import the specific
 modules you need, for example ``from robokots.core import robot`` or
-``from robokots.core.state import StateType``.
+``from robokots.core.state_spec import StateType``.
 """
 
 from importlib import import_module
@@ -15,7 +15,7 @@ _lazy_attributes: Dict[str, str] = {
     "RobotStruct": "robokots.core.robot",
     "JointStruct": "robokots.core.robot",
     "LinkStruct": "robokots.core.robot",
-    "OutwardDataView": "robokots.core.outward_data",
+    "OutwardDataView": "robokots.core.outward_protocol",
     "OutwardState": "robokots.core.outward_state",
     "ArrayOutwardState": "robokots.core.outward_state",
     "MotionLayoutOwner": "robokots.core.motion",
@@ -25,16 +25,16 @@ _lazy_attributes: Dict[str, str] = {
     "RobotDF": "robokots.contrib.polars.state_table",
     "RobotState": "robokots.contrib.polars.state_table",
     # State dictionary helpers
-    "state_dict_to_cmtm": "robokots.core.state_dict",
-    "state_dict_to_cmtm_wrench": "robokots.core.state_dict",
-    "state_dict_to_cmvec": "robokots.core.state_dict",
-    "state_dict_to_rel_cmtm_wrench": "robokots.core.state_dict",
-    "extract_dict_link_info": "robokots.core.state_dict",
-    "extract_dict_info": "robokots.core.state_dict",
-    "vecs_to_state_dict": "robokots.core.state_dict",
-    "cmtm_to_state_list": "robokots.core.state_dict",
-    "state_dict_to_frame": "robokots.core.state_dict",
-    "state_dict_to_vecs": "robokots.core.state_dict",
+    "state_dict_to_cmtm": "robokots.core.state_dict_utils",
+    "state_dict_to_cmtm_wrench": "robokots.core.state_dict_utils",
+    "state_dict_to_cmvec": "robokots.core.state_dict_utils",
+    "state_dict_to_rel_cmtm_wrench": "robokots.core.state_dict_utils",
+    "extract_dict_link_info": "robokots.core.state_dict_utils",
+    "extract_dict_info": "robokots.core.state_dict_utils",
+    "vecs_to_state_dict": "robokots.core.state_dict_utils",
+    "cmtm_to_state_list": "robokots.core.state_dict_utils",
+    "state_dict_to_frame": "robokots.core.state_dict_utils",
+    "state_dict_to_vecs": "robokots.core.state_dict_utils",
     # State cache utility
     "StateCache": "robokots.core.state_cache",
     # Axis-aware tensor adapters
