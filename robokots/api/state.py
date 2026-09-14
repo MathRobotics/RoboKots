@@ -7,7 +7,7 @@ from .. import outward as outward_api
 from ..core.state_batch import StateBatch
 from ..core.state_cache import StateCache
 from ..core.state_tensor import StateTensor
-from ..core import batch as batch_api
+from ..core import batch_shape as batch_shapes
 
 
 class StateManagementMixin:
@@ -39,7 +39,7 @@ class StateManagementMixin:
   def _ensure_state_table(self):
     if self.state_ is None:
       try:
-        from ..contrib.polars.state_table import RobotState
+        from ..contrib.polars import RobotState
       except ImportError as e:
         raise ImportError("DataFrame state tables are optional. Install RoboKots with the `table` extra.") from e
       self.state_ = RobotState(self.robot_.link_names, self.robot_.joint_names, self._state_l_aliases, self._state_j_aliases)
@@ -113,7 +113,7 @@ class StateManagementMixin:
   def _build_state_result(self, order: int, is_dynamics: bool = False, backend: str = None, gravity=None):
     resolved, build_state = self._state_builder(order, is_dynamics=is_dynamics, backend=backend, gravity=gravity)
     motion = self.motion(order)
-    if batch_api.is_batched_feature_array(motion) and resolved in (None, "numpy", "rust"):
+    if batch_shapes.is_batched_feature_array(motion) and resolved in (None, "numpy", "rust"):
       try:
         if is_dynamics:
           active_gravity = self.gravity_ if gravity is None else gravity
@@ -127,7 +127,7 @@ class StateManagementMixin:
         return outward_api.build_kinematics_outward_state(self.robot_, motion, order), motion.shape[:-1]
       except Exception:
         pass
-    return batch_api.map_flat_batch(motion, build_state)
+    return batch_shapes.map_flat_batch(motion, build_state)
 
   def _set_current_state(self, state_obj, materialize_dict: bool = True):
     self.batch_shape_ = ()
@@ -153,7 +153,7 @@ class StateManagementMixin:
     if not self.motions_.is_batched() and self.state_cache_ is not None and self.state_cache_config_ == config and self.state_cache_.is_fresh(revision):
       return self._set_current_state(self.state_cache_.state, materialize_dict=False)
     motion = self.motion(order)
-    if batch_api.is_batched_feature_array(motion):
+    if batch_shapes.is_batched_feature_array(motion):
       states, batch_shape = self._build_state_result(order, is_dynamics=is_dynamics, backend=backend)
       return self._set_batch_states(states, batch_shape, materialize_dict=False)
     if self.state_cache_ is None or self.state_cache_config_ != config:

@@ -70,19 +70,33 @@ outputs.
 
 ### Core state module names
 
+`robokots.core.batch_shape` manages leading batch axes and trailing feature
+axes: validation, flattening, broadcasting, and restoring output shapes.
+Its mapping helper evaluates samples sequentially in Python. The former
+`robokots.core.batch` import path has been removed.
+
 Use these implementation paths for new code:
 
-| Implementation module | Responsibility | Compatibility path |
+| Implementation module | Responsibility | Removed path |
 | --- | --- | --- |
 | `robokots.core.state_spec` | State selection, quantity definitions, orders and dimensions | `robokots.core.state` |
 | `robokots.core.outward_protocol` | Shared read-only backend protocol | `robokots.core.outward_data` |
 | `robokots.core.state_dict_utils` | State dictionary conversion and extraction | `robokots.core.state_dict` |
 | `robokots.core.state_jsonl` | JSON Lines serialization | `robokots.core.state_json` |
 
-The compatibility paths alias the same module objects, preserving class identity
-and shared caches. Existing imports and old pickle module references continue to
-resolve. Class/function `__module__` attributes and newly written pickle data use
-the new paths; reading new pickles with an older RoboKots release is not guaranteed.
+The old modules have been removed. Update direct imports, dynamic import strings,
+and monkeypatch targets to the implementation paths above. Imports from
+`robokots.kots` (including `Kots` and `StateType`) remain unchanged.
+
+Polars table helpers are available through
+`from robokots.contrib.polars import RobotDF, RobotState`. The compatibility
+modules `robokots.core.state_table` and `robokots.core.dataframe`, as well as
+the `RobotDF` and `RobotState` exports from `robokots.core`, have been removed.
+
+Pickles containing the removed module paths no longer load by default. Migrate
+trusted existing pickles using the compatibility release (commit `32fa548`):
+load them and save them again so class/function references use the new paths.
+Reading these new pickles with an older RoboKots release is not guaranteed.
 Public method signatures, array layouts and JSONL formats are unchanged.
 
 ### Facade and computation

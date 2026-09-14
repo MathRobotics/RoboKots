@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 from mathrobo import SE3
 
-from ...core import batch as batch_api
+from ...core import batch_shape as batch_shapes
 from ...core.robot import RobotStruct
 from ...core.state_spec import keys_force, keys_kinematics, keys_momentum, keys_torque
 from ...core.state_dict_utils import cmtm_to_state_list, vecs_to_state_dict
@@ -994,7 +994,7 @@ class RustBatchOutwardState(RustOutwardState):
 
   def _flat_motion(self, motion) -> np.ndarray:
     motion = np.asarray(motion, dtype=float)
-    flat_motion, batch_shape = batch_api.flatten_feature_batch(motion)
+    flat_motion, batch_shape = batch_shapes.flatten_feature_batch(motion)
     if tuple(batch_shape) != self.batch_shape:
       raise ValueError(f"motion batch shape must be {self.batch_shape}, got {batch_shape}")
     return flat_motion

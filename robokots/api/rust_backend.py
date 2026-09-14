@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..core import batch as batch_api
+from ..core import batch_shape as batch_shapes
 
 
 class RustBackendMixin:
@@ -95,7 +95,7 @@ class RustBackendMixin:
     if order is None:
       order = self.order_
     motion = self.motion(order)
-    batch_shape = motion.shape[:-1] if batch_api.is_batched_feature_array(motion) else ()
+    batch_shape = motion.shape[:-1] if batch_shapes.is_batched_feature_array(motion) else ()
     data = self._cached_rust_data(order, batch_shape)
     active_gravity = self.gravity_ if gravity is None else self._validate_gravity(gravity)
     gravity_key = tuple(active_gravity) if is_dynamics else None

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ...core import batch as batch_api
+from ...core import batch_shape as batch_shapes
 from ...core.outward_state import ArrayOutwardState
 from ...core.robot import RobotStruct
 from .model import _rust_compiled_robot
@@ -22,7 +22,7 @@ def build_kinematics_outward_state_rust(
     arrays = rust_robot.kinematics_cmtm(motion, order)
     batch_shape = ()
   else:
-    flat_motion, batch_shape = batch_api.flatten_feature_batch(motion)
+    flat_motion, batch_shape = batch_shapes.flatten_feature_batch(motion)
     if flat_motion.shape[-1] != robot.dof * order:
       raise ValueError(f"Invalid motion length: {flat_motion.shape[-1]}. Must be {robot.dof * order}.")
     arrays = rust_robot.kinematics_cmtm_batch(flat_motion, order)
@@ -53,7 +53,7 @@ def build_dynamics_outward_state_rust(
     _validate_motion_length(robot, motion, kin_order)
     arrays = rust_robot.dynamics_outward_cmtm(motion, dynamics_order, gravity)
   else:
-    flat_motion, batch_shape = batch_api.flatten_feature_batch(motion)
+    flat_motion, batch_shape = batch_shapes.flatten_feature_batch(motion)
     if flat_motion.shape[-1] != robot.dof * kin_order:
       raise ValueError(f"Invalid motion length: {flat_motion.shape[-1]}. Must be {robot.dof * kin_order}.")
     arrays = rust_robot.dynamics_outward_cmtm_batch(flat_motion, dynamics_order, gravity)

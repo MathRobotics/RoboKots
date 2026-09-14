@@ -21,9 +21,6 @@ _lazy_attributes: Dict[str, str] = {
     "MotionLayoutOwner": "robokots.core.motion",
     "MotionTensor": "robokots.core.motion",
     "RobotMotions": "robokots.core.motion",
-    # Optional Polars-backed state table helpers
-    "RobotDF": "robokots.contrib.polars.state_table",
-    "RobotState": "robokots.contrib.polars.state_table",
     # State dictionary helpers
     "state_dict_to_cmtm": "robokots.core.state_dict_utils",
     "state_dict_to_cmtm_wrench": "robokots.core.state_dict_utils",

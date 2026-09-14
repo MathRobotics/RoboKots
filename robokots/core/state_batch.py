@@ -5,7 +5,7 @@ from typing import Callable, Sequence
 
 import numpy as np
 
-from . import batch as batch_api
+from . import batch_shape as batch_shapes
 
 
 @dataclass(frozen=True)
@@ -31,7 +31,7 @@ class StateBatch:
   def state_info(self, robot, state_type, get_value: Callable):
     states = self._states_for_read()
     values = [get_value(robot, state, state_type) for state in states]
-    return batch_api.stack_batch_values(values, self.batch_shape)
+    return batch_shapes.stack_batch_values(values, self.batch_shape)
 
   def state_info_list(self, robot, state_type_list, get_value: Callable, list_output: bool = False):
     states = self._states_for_read()
@@ -45,10 +45,10 @@ class StateBatch:
 
     if list_output:
       return [
-        batch_api.stack_batch_values([sample[i] for sample in values], self.batch_shape)
+        batch_shapes.stack_batch_values([sample[i] for sample in values], self.batch_shape)
         for i in range(len(state_type_list))
       ]
-    return batch_api.stack_sample_results(values, self.batch_shape)
+    return batch_shapes.stack_sample_results(values, self.batch_shape)
 
   def _states_for_read(self):
     if self.outward_states is not None and self.outward_states and hasattr(self.outward_states[0], "cmtm"):

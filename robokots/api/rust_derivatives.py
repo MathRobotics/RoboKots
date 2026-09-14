@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..core import batch as batch_api
+from ..core import batch_shape as batch_shapes
 from ..core.state_spec import StateType, keys_force, keys_kinematics, keys_momentum, keys_torque
 
 
@@ -852,7 +852,7 @@ class RustDerivativesMixin:
     batch shape.
     """
     motion = np.asarray(self.motion(2), dtype=float)
-    batch_shape = motion.shape[:-1] if batch_api.is_batched_feature_array(motion) else ()
+    batch_shape = motion.shape[:-1] if batch_shapes.is_batched_feature_array(motion) else ()
     robot = self._rust_compiled_robot()
     if not batch_shape:
       return float(np.asarray(robot.kinetic_energy(np.ascontiguousarray(motion)))[0])
@@ -866,9 +866,9 @@ class RustDerivativesMixin:
     ``2 * dof``.  The scalar energy output retains its row dimension of one.
     """
     motion = np.asarray(self.motion(2), dtype=float)
-    batch_shape = motion.shape[:-1] if batch_api.is_batched_feature_array(motion) else ()
+    batch_shape = motion.shape[:-1] if batch_shapes.is_batched_feature_array(motion) else ()
     input_dim = self.robot_.dof * 2
-    rhs, rhs_is_matrix = batch_api.broadcast_feature_rhs(rhs, batch_shape, input_dim, name="rhs")
+    rhs, rhs_is_matrix = batch_shapes.broadcast_feature_rhs(rhs, batch_shape, input_dim, name="rhs")
     tangent = rhs if rhs_is_matrix else rhs[..., None]
     robot = self._rust_compiled_robot()
     if not batch_shape:
@@ -889,8 +889,8 @@ class RustDerivativesMixin:
     returned gradient is ordered ``[q0, qdot0, q1, qdot1, ...]``.
     """
     motion = np.asarray(self.motion(2), dtype=float)
-    batch_shape = motion.shape[:-1] if batch_api.is_batched_feature_array(motion) else ()
-    rhs, rhs_is_matrix = batch_api.broadcast_feature_rhs(rhs, batch_shape, 1, name="rhs")
+    batch_shape = motion.shape[:-1] if batch_shapes.is_batched_feature_array(motion) else ()
+    rhs, rhs_is_matrix = batch_shapes.broadcast_feature_rhs(rhs, batch_shape, 1, name="rhs")
     cotangent = rhs if rhs_is_matrix else rhs[..., None]
     robot = self._rust_compiled_robot()
     if not batch_shape:

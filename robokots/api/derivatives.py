@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 
 from .. import outward as outward_api
-from ..core import batch as batch_api
+from ..core import batch_shape as batch_shapes
 from ..core.state_spec import StateType, data_type_dof, dim_to_dof, keys_force, keys_kinematics, keys_momentum, keys_torque
 from ..core.state_tensor import JacobianTensor
 
@@ -52,7 +52,7 @@ class DerivativesMixin:
       ]
       return jacobs if list_output else np.vstack(jacobs)
 
-    flat_motion, batch_shape = batch_api.flatten_feature_batch(self.motion(max_order))
+    flat_motion, batch_shape = batch_shapes.flatten_feature_batch(self.motion(max_order))
     sample_results = [
       [
         outward_api.jacobian_numerical(
@@ -62,7 +62,7 @@ class DerivativesMixin:
       ]
       for x in flat_motion
     ]
-    return batch_api.stack_results(
+    return batch_shapes.stack_results(
       sample_results,
       batch_shape,
       list_output,
@@ -101,13 +101,13 @@ class DerivativesMixin:
           pass
         is_dynamics = any(st.is_dynamics for st in state_type_list)
         _, build_state = self._state_builder(max_order, is_dynamics=is_dynamics)
-        flat_motion, batch_shape = batch_api.flatten_feature_batch(self.motion(max_order))
+        flat_motion, batch_shape = batch_shapes.flatten_feature_batch(self.motion(max_order))
         states = [build_state(x) for x in flat_motion]
         sample_results = [
           outward_api.outward_jacobian(self.robot_, st, state_type_list, max_time_order=max_order, dim = self.dim_, list_output = list_output)
           for st in states
         ]
-        return batch_api.stack_results(
+        return batch_shapes.stack_results(
           sample_results,
           batch_shape,
           list_output,
@@ -119,7 +119,7 @@ class DerivativesMixin:
       outward_api.outward_jacobian(self.robot_, st, state_type_list, max_time_order=max_order, dim = self.dim_, list_output = list_output)
       for st in state
     ]
-    return batch_api.stack_results(
+    return batch_shapes.stack_results(
       sample_results,
       self.batch_shape_,
       list_output,
@@ -136,7 +136,7 @@ class DerivativesMixin:
       ]
       return results if list_output else np.concatenate(results)
 
-    flat_motion, batch_shape = batch_api.flatten_feature_batch(self.motion(max_order))
+    flat_motion, batch_shape = batch_shapes.flatten_feature_batch(self.motion(max_order))
     sample_results = []
     for x, v in zip(flat_motion, vec):
       sample_motions = self._sample_motions(x, max_order)
@@ -147,7 +147,7 @@ class DerivativesMixin:
         for st in state_type_list
       ]
       sample_results.append(parts if list_output else np.concatenate(parts))
-    return batch_api.stack_results(
+    return batch_shapes.stack_results(
       sample_results,
       batch_shape,
       list_output,
@@ -188,13 +188,13 @@ class DerivativesMixin:
           pass
         is_dynamics = any(st.is_dynamics for st in state_type_list)
         _, build_state = self._state_builder(max_order, is_dynamics=is_dynamics)
-        flat_motion, _ = batch_api.flatten_feature_batch(self.motion(max_order))
+        flat_motion, _ = batch_shapes.flatten_feature_batch(self.motion(max_order))
         states = [build_state(x) for x in flat_motion]
         sample_results = [
           outward_api.outward_jacobian_matvec(self.robot_, st, state_type_list, v, max_time_order=max_order, dim = self.dim_, list_output = list_output)
           for st, v in zip(states, vec)
         ]
-        return batch_api.stack_results(
+        return batch_shapes.stack_results(
           sample_results,
           batch_shape,
           list_output,
@@ -206,7 +206,7 @@ class DerivativesMixin:
       outward_api.outward_jacobian_matvec(self.robot_, st, state_type_list, v, max_time_order=max_order, dim = self.dim_, list_output = list_output)
       for st, v in zip(state, vec)
     ]
-    return batch_api.stack_results(
+    return batch_shapes.stack_results(
       sample_results,
       batch_shape,
       list_output,
@@ -247,13 +247,13 @@ class DerivativesMixin:
           pass
         is_dynamics = any(st.is_dynamics for st in state_type_list)
         _, build_state = self._state_builder(max_order, is_dynamics=is_dynamics)
-        flat_motion, _ = batch_api.flatten_feature_batch(self.motion(max_order))
+        flat_motion, _ = batch_shapes.flatten_feature_batch(self.motion(max_order))
         states = [build_state(x) for x in flat_motion]
         sample_results = [
           outward_api.outward_jacobian_matmul_rhs(self.robot_, st, state_type_list, r, max_time_order=max_order, dim = self.dim_, list_output = list_output)
           for st, r in zip(states, rhs)
         ]
-        return batch_api.stack_results(
+        return batch_shapes.stack_results(
           sample_results,
           batch_shape,
           list_output,
@@ -265,7 +265,7 @@ class DerivativesMixin:
       outward_api.outward_jacobian_matmul_rhs(self.robot_, st, state_type_list, r, max_time_order=max_order, dim = self.dim_, list_output = list_output)
       for st, r in zip(state, rhs)
     ]
-    return batch_api.stack_results(
+    return batch_shapes.stack_results(
       sample_results,
       batch_shape,
       list_output,
@@ -336,7 +336,7 @@ class DerivativesMixin:
       jacob = self._jacobian_numerical(state_type_list, max_order)
       return jacob.T @ vec
 
-    flat_motion, batch_shape = batch_api.flatten_feature_batch(self.motion(max_order))
+    flat_motion, batch_shape = batch_shapes.flatten_feature_batch(self.motion(max_order))
     sample_results = []
     for x, v in zip(flat_motion, vec):
       sample_motions = self._sample_motions(x, max_order)
@@ -348,7 +348,7 @@ class DerivativesMixin:
       ]
       jacob = np.vstack(parts)
       sample_results.append(jacob.T @ v)
-    return batch_api.stack_sample_results(sample_results, batch_shape)
+    return batch_shapes.stack_sample_results(sample_results, batch_shape)
 
   def _jacobian_transpose_matvec_from_state(self, state, state_type_list, max_order : int, vec, batch_shape : tuple):
     world_vjp = getattr(self, "_rust_cmtm_world_link_dynamics_jacobian_transpose_apply", None)
@@ -407,7 +407,7 @@ class DerivativesMixin:
       _, build_state = self._state_builder(
         max_order, is_dynamics=is_dynamics, gravity=self.gravity_
       )
-      flat_motion, _ = batch_api.flatten_feature_batch(self.motion(max_order))
+      flat_motion, _ = batch_shapes.flatten_feature_batch(self.motion(max_order))
       flat_vec = np.asarray(vec).reshape((-1, vec.shape[-1]))
       sample_results = [
         outward_api.outward_jacobian_transpose_matvec(
@@ -416,7 +416,7 @@ class DerivativesMixin:
         )
         for x, v in zip(flat_motion, flat_vec)
       ]
-      return batch_api.stack_sample_results(sample_results, batch_shape)
+      return batch_shapes.stack_sample_results(sample_results, batch_shape)
 
     if not isinstance(state, list):
       if batch_shape:
@@ -436,20 +436,20 @@ class DerivativesMixin:
           pass
         is_dynamics = any(st.is_dynamics for st in state_type_list)
         _, build_state = self._state_builder(max_order, is_dynamics=is_dynamics)
-        flat_motion, _ = batch_api.flatten_feature_batch(self.motion(max_order))
+        flat_motion, _ = batch_shapes.flatten_feature_batch(self.motion(max_order))
         states = [build_state(x) for x in flat_motion]
         sample_results = [
           outward_api.outward_jacobian_transpose_matvec(self.robot_, st, state_type_list, v, max_time_order=max_order, dim=self.dim_)
           for st, v in zip(states, vec)
         ]
-        return batch_api.stack_sample_results(sample_results, batch_shape)
+        return batch_shapes.stack_sample_results(sample_results, batch_shape)
       return outward_api.outward_jacobian_transpose_matvec(self.robot_, state, state_type_list, vec, dim=self.dim_)
 
     sample_results = [
       outward_api.outward_jacobian_transpose_matvec(self.robot_, st, state_type_list, v, max_time_order=max_order, dim=self.dim_)
       for st, v in zip(state, vec)
     ]
-    return batch_api.stack_sample_results(sample_results, batch_shape)
+    return batch_shapes.stack_sample_results(sample_results, batch_shape)
 
   def _jacobian_transpose_mul_numerical(self, state_type_list, max_order : int, rhs, rhs_is_matrix : bool):
     if not rhs_is_matrix:
@@ -521,7 +521,7 @@ class DerivativesMixin:
         _, build_state = self._state_builder(
           max_order, is_dynamics=is_dynamics, gravity=self.gravity_
         )
-        flat_motion, _ = batch_api.flatten_feature_batch(self.motion(max_order))
+        flat_motion, _ = batch_shapes.flatten_feature_batch(self.motion(max_order))
         states = [build_state(x) for x in flat_motion]
       sample_results = [
         np.moveaxis(
@@ -534,7 +534,7 @@ class DerivativesMixin:
         )
         for st, r in zip(states, flat_rhs)
       ]
-      return batch_api.stack_sample_results(sample_results, batch_shape)
+      return batch_shapes.stack_sample_results(sample_results, batch_shape)
 
     if (
       not batch_shape
@@ -598,7 +598,7 @@ class DerivativesMixin:
     max_order = StateType.max_time_order(state_type_list)
     input_dim = self.robot_.dof * max_order
     batch_shape = self.batch_shape_ if self.batch_shape_ else self.motions_.batch_shape()
-    rhs, rhs_is_matrix = batch_api.broadcast_feature_rhs(rhs, batch_shape, input_dim, name="rhs")
+    rhs, rhs_is_matrix = batch_shapes.broadcast_feature_rhs(rhs, batch_shape, input_dim, name="rhs")
 
     if any(self._is_total_body_kinetic_energy(st) for st in state_type_list) and not all(self._is_total_body_kinetic_energy(st) for st in state_type_list):
       parts = []
@@ -635,7 +635,7 @@ class DerivativesMixin:
     max_order = StateType.max_time_order(state_type_list)
     output_dim = self._jacobian_output_dim(state_type_list)
     batch_shape = self.batch_shape_ if self.batch_shape_ else self.motions_.batch_shape()
-    rhs, rhs_is_matrix = batch_api.broadcast_feature_rhs(rhs, batch_shape, output_dim, name="rhs")
+    rhs, rhs_is_matrix = batch_shapes.broadcast_feature_rhs(rhs, batch_shape, output_dim, name="rhs")
 
     if any(self._is_total_body_kinetic_energy(st) for st in state_type_list) and not all(self._is_total_body_kinetic_energy(st) for st in state_type_list):
       out = np.zeros(rhs.shape[:-(2 if rhs_is_matrix else 1)] + (self.robot_.dof * max_order,) + ((rhs.shape[-1],) if rhs_is_matrix else ()), dtype=rhs.dtype)
@@ -693,7 +693,7 @@ class DerivativesMixin:
       if not pair_states:
         raise ValueError(f"state_rhs_pairs[{index}] must contain at least one StateType")
       pair_output_dim = self._jacobian_output_dim(pair_states)
-      pair_rhs, pair_is_matrix = batch_api.broadcast_feature_rhs(
+      pair_rhs, pair_is_matrix = batch_shapes.broadcast_feature_rhs(
         pair[1], batch_shape, pair_output_dim, name=f"state_rhs_pairs[{index}][1]",
       )
       if rhs_is_matrix is None:
@@ -767,7 +767,7 @@ class DerivativesMixin:
     if len(states) != self.robot_.dof or any(st.data_type != "torque" for st in states):
       raise ValueError("squared_power_torque_vjp_terms requires a total_joint torque StateType")
     batch_shape = self.batch_shape_ if self.batch_shape_ else self.motions_.batch_shape()
-    power_rhs, rhs_is_matrix = batch_api.broadcast_feature_rhs(
+    power_rhs, rhs_is_matrix = batch_shapes.broadcast_feature_rhs(
       power_rhs, batch_shape, 1, name="power_rhs",
     )
     tau = np.asarray(self.state_info(torque_state) if torque_value is None else torque_value, dtype=float)

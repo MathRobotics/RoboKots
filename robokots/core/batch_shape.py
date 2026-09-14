@@ -1,3 +1,9 @@
+"""Batch/feature shape validation, flattening, broadcasting, and restoration.
+
+Leading axes represent batch dimensions; trailing axes represent features.
+The mapping helper evaluates samples sequentially in Python.
+"""
+
 from __future__ import annotations
 
 from typing import Callable, Sequence, TypeVar

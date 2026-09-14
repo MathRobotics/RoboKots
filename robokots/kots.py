@@ -13,7 +13,7 @@ from .core.state_tensor import JacobianTensor, StateTensor
 from .core.robot import RobotStruct
 from .core.target import TargetList, RobotNames
 from .core.viz import show_robot, show_robot_traj, RobotColor, show_link_points
-from .core import batch as batch_api
+from .core import batch_shape as batch_shapes
 
 from . import outward as outward_api
 from .robot_io import load_json_file
@@ -238,7 +238,7 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
   def _ensure_state_table(self):
     if self.state_ is None:
       try:
-        from .contrib.polars.state_table import RobotState
+        from .contrib.polars import RobotState
       except ImportError as e:
         raise ImportError(
           "DataFrame state tables are optional. Install RoboKots with the "
