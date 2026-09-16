@@ -126,6 +126,38 @@ Polars and JSONL consume these snapshots at the output boundary. Dictionary
 restoration helpers live in `state_io.dictionary` and do not cache derived
 objects from mutable snapshots. State-object caches continue to serve computation.
 
+### Ownership and failed updates
+
+Motion imports own their input arrays. `Kots.motions()` returns a copy; use
+`import_motions()` or `import_motion_array()` to change motion. The underlying
+`RobotMotions` setters advance the revision after successful changes.
+`Kots.state_info()` and `state_info_list(..., list_output=True)` return detached
+values; edits do not affect subsequent queries. Computational state readers
+remain reference-based. State objects returned by `dynamics()/kinematics()` are
+not promised to be snapshots: Rust workspaces can be reused on later updates.
+Direct edits to internal attributes (such as `motions_.motions` or
+`outward_state_`) bypass the public ownership and revision contract.
+
+`dynamics()` commits gravity only after successful calculation and requested
+dictionary export. Input validation failures preserve the previous state.
+NumPy calculation/export failures also preserve it. If a Rust compute/export
+operation fails, its reusable workspace is evicted and the current computed
+state is invalidated, because the workspace may have been partially changed.
+The previous gravity setting remains in effect; call `update_state()` or
+`dynamics()` again before querying state. Previously retained raw state handles
+must not be used after such a failure.
+
+### JSONL validation
+
+`iter_jsonl_rows()` preserves both `times` and `steps` when supplied. Their
+lengths must match the states; mismatches raise `ValueError` during iteration.
+The keys `t`, `step` and `schema_version` are reserved for explicit arguments
+and cannot appear in state or metadata. Metadata/payload key collisions and
+collisions after string conversion also raise `ValueError`.
+Earlier rows may already have been yielded before a length error is detected.
+The existing `write_jsonl()` writer is not transactional: it may leave a partial
+file on an iteration or serialization error.
+
 ### Facade and computation
 
 `robokots.kots.Kots` remains the public facade. Its implementation is being

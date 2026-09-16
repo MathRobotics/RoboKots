@@ -1,6 +1,8 @@
 """Semantic state access and batch-state ownership for the ``Kots`` facade."""
 from __future__ import annotations
 
+from copy import deepcopy
+
 import numpy as np
 
 from .. import outward as outward_api
@@ -10,17 +12,31 @@ from ..core.state_tensor import StateTensor
 from ..core import batch_shape as batch_shapes
 
 
+def _copy_public_state_value(value):
+  """Detach public results without copying computational readers internally."""
+  if isinstance(value, np.ndarray):
+    return value.copy()
+  return deepcopy(value)
+
+
 class StateManagementMixin:
   def _set_batch_states(self, states, batch_shape: tuple, materialize_dict: bool = False):
-    self.batch_shape_ = batch_shape
     if not batch_shape:
       return self._set_current_state(states, materialize_dict=materialize_dict)
+    if materialize_dict:
+      from ..state_io.dictionary import export_state_dict
+
     if hasattr(states, "cmtm"):
+      result = export_state_dict(self.robot_, states) if materialize_dict else states
+      self.batch_shape_ = batch_shape
       self.state_batch_ = self.outward_state_ = states
-      return self.to_state_dict() if materialize_dict else states
-    self.state_batch_ = StateBatch.from_states(states, batch_shape)
+      return result
+    batch = StateBatch.from_states(states, batch_shape)
+    result = [export_state_dict(self.robot_, state) for state in batch.outward_states] if materialize_dict else batch.outward_states
+    self.batch_shape_ = batch_shape
+    self.state_batch_ = batch
     self.outward_state_ = self.state_batch_.outward_states
-    return self.to_state_dict() if materialize_dict else self.outward_state_
+    return result
 
   def _invalidate_current_state(self):
     self.state_cache_ = self.state_cache_config_ = self.state_batch_ = self.outward_state_ = None
@@ -49,6 +65,10 @@ class StateManagementMixin:
     return self.outward_state_
 
   def state_info(self, state_type):
+    """Return a detached value; modifying it never updates computed state."""
+    return _copy_public_state_value(self._read_state_info(state_type))
+
+  def _read_state_info(self, state_type):
     if self._is_total_body_kinetic_energy(state_type):
       return self.kinetic_energy_state()
     if state_type.owner_type == "total_joint":
@@ -70,7 +90,7 @@ class StateManagementMixin:
           return self.state_batch_.state_info_list(self.robot_, state_type_list, outward_api.get_value, list_output=list_output)
         values = [outward_api.get_value(self.robot_, self._state_for_direct_read(), st) for st in state_type_list]
     if list_output:
-      return values
+      return [_copy_public_state_value(value) for value in values]
     if self.batch_shape_:
       return np.concatenate([np.asarray(v).reshape(self.batch_shape_ + (-1,)) for v in values], axis=-1)
     return np.concatenate([np.asarray(v).reshape(-1) for v in values], axis=-1) if any(self._is_total_body_kinetic_energy(st) for st in state_type_list) or self._joint_motion_state_info_list(state_type_list) is not None else np.vstack(values)
@@ -126,10 +146,14 @@ class StateManagementMixin:
     return batch_shapes.map_flat_batch(motion, build_state)
 
   def _set_current_state(self, state_obj, materialize_dict: bool = False):
+    if materialize_dict:
+      from ..state_io.dictionary import export_state_dict
+
+    result = export_state_dict(self.robot_, state_obj) if materialize_dict else state_obj
     self.batch_shape_ = ()
     self.state_batch_ = None
     self.outward_state_ = state_obj
-    return self.to_state_dict() if materialize_dict else state_obj
+    return result
 
   def update_state(self, order: int = None, is_dynamics: bool = False, backend: str = None):
     if order is None:

@@ -158,7 +158,8 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
     return self.robot_.joint_names
 
   def motions(self):
-    return self.motions_.motions
+    """Return an independent snapshot of the stored owner-major motion."""
+    return self.motions_.motions.copy()
 
   def set_motion_aliases(self, aliases : list[str]):
     self.motions_.set_aliases(aliases)
@@ -166,13 +167,11 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
     
   def import_motions(self, vecs : np.ndarray):
     self.motions_.set_motion(vecs)
-    self.motions_.increment_revision()
     self._invalidate_current_state()
     self.batch_shape_ = self.motions_.batch_shape()
 
   def import_motion_array(self, array : np.ndarray):
     self.motions_.set_dof_order(array)
-    self.motions_.increment_revision()
     self._invalidate_current_state()
     self.batch_shape_ = self.motions_.batch_shape()
 

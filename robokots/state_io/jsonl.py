@@ -9,6 +9,24 @@ import numpy as np
 from .dictionary import is_state_payload_key
 
 
+_RESERVED_KEYS = frozenset({"t", "step", "schema_version"})
+
+
+def _validate_row_keys(state, meta):
+    for name, mapping in (("state", state), ("meta", meta or {})):
+        keys = [str(key) for key in mapping if name != "state" or is_state_payload_key(key)]
+        if len(set(keys)) != len(keys):
+            raise ValueError(f"JSONL key collision after string conversion in {name}")
+    state_keys = {str(key) for key in state if is_state_payload_key(key)}
+    meta_keys = {str(key) for key in meta} if meta else set()
+    reserved = (state_keys | meta_keys) & _RESERVED_KEYS
+    if reserved:
+        raise ValueError(f"JSONL reserved keys cannot appear in state or meta: {sorted(reserved)}")
+    collision = state_keys & meta_keys
+    if collision:
+        raise ValueError(f"JSONL state/meta key collision: {sorted(collision)}")
+
+
 # ============================================================
 # JSONL helpers (flat schema rows)
 # ============================================================
@@ -41,7 +59,11 @@ def make_jsonl_row(
     Required by convention:
       - schema_version
       - t or step (if available)
+
+    State and metadata must not contain t, step, or schema_version, nor share
+    keys with one another. Collisions raise ValueError instead of losing data.
     """
+    _validate_row_keys(state, meta)
     row: dict[str, Any] = {}
     if t is not None:
         row["t"] = float(t)
@@ -68,18 +90,21 @@ def iter_jsonl_rows(
     """
     Yield JSONL rows for a sequence of state dicts.
 
-    If times/steps are provided, they are zipped in order.
+    Supplied times and steps are both preserved and must match the state count.
+    Length errors are detected during iteration; earlier rows may have been yielded.
     """
+    _validate_row_keys({}, meta)
+    inputs = [states]
+    names = []
     if times is not None:
-        for st, t in zip(states, times):
-            yield make_jsonl_row(st, t=t, meta=meta, schema_version=schema_version)
-        return
+        inputs.append(times)
+        names.append("t")
     if steps is not None:
-        for st, s in zip(states, steps):
-            yield make_jsonl_row(st, step=s, meta=meta, schema_version=schema_version)
-        return
-    for st in states:
-        yield make_jsonl_row(st, meta=meta, schema_version=schema_version)
+        inputs.append(steps)
+        names.append("step")
+    for state, *coordinates in zip(*inputs, strict=True):
+        yield make_jsonl_row(state, **dict(zip(names, coordinates, strict=True)),
+                             meta=meta, schema_version=schema_version)
 
 
 def write_jsonl(path: str, rows: Iterable[dict], *, ensure_ascii: bool = False) -> None:

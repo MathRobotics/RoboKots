@@ -94,20 +94,38 @@ class RustBackendMixin:
   def update_rust_data(self, order=None, is_dynamics=False, materialize_dict=False, gravity=None):
     if order is None:
       order = self.order_
+    if is_dynamics and order < 2:
+      raise ValueError("dynamics requires order >= 2")
     motion = self.motion(order)
     batch_shape = motion.shape[:-1] if batch_shapes.is_batched_feature_array(motion) else ()
+    active_gravity = self._validate_gravity(self.gravity_ if gravity is None else gravity).copy()
     data = self._cached_rust_data(order, batch_shape)
-    active_gravity = self.gravity_ if gravity is None else self._validate_gravity(gravity)
     gravity_key = tuple(active_gravity) if is_dynamics else None
     key = (int(order), tuple(batch_shape))
     cached = self._rust_outward_data_cache_state_.get(key)
-    if cached is None or cached[0] != self.motions_.revision() or (is_dynamics and (not cached[1] or cached[2] != gravity_key)):
-      if is_dynamics:
-        data.compute_dynamics(motion, active_gravity) if np.any(active_gravity) else data.compute_dynamics(motion)
+    try:
+      if cached is None or cached[0] != self.motions_.revision() or (is_dynamics and (not cached[1] or cached[2] != gravity_key)):
+        if is_dynamics:
+          data.compute_dynamics(motion, active_gravity) if np.any(active_gravity) else data.compute_dynamics(motion)
+        else:
+          data.compute_kinematics(motion)
+        self._rust_outward_data_cache_state_[key] = (self.motions_.revision(), bool(is_dynamics), gravity_key)
+      if materialize_dict:
+        from ..state_io.dictionary import export_state_dict
+        result = export_state_dict(self.robot_, data)
       else:
-        data.compute_kinematics(motion)
-      self._rust_outward_data_cache_state_[key] = (self.motions_.revision(), bool(is_dynamics), gravity_key)
+        result = data
+    except Exception:
+      # A reusable workspace may already have been partially overwritten.
+      # Never mark it fresh or expose it as the current state after failure.
+      self._rust_outward_data_cache_.pop(key, None)
+      self._rust_outward_data_cache_state_.pop(key, None)
+      self._invalidate_current_state()
+      self.batch_shape_ = self.motions_.batch_shape()
+      raise
     self.batch_shape_ = tuple(batch_shape)
     self.state_batch_ = None
     self.outward_state_ = data
-    return self.to_state_dict() if materialize_dict else data
+    if is_dynamics:
+      self.gravity_ = active_gravity
+    return result

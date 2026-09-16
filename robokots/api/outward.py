@@ -32,12 +32,14 @@ class OutwardDynamicsMixin:
     """Compute higher-order inverse-dynamics state with world-frame gravity."""
     if order is None:
       order = self.order_
-    self.gravity_ = self._validate_gravity(gravity).copy()
+    active_gravity = self._validate_gravity(gravity).copy()
     resolved_backend = self._resolve_kinematics_backend(True, backend)
     if resolved_backend == "rust":
-      return self.update_rust_data(order=order, is_dynamics=True, materialize_dict=materialize_dict, gravity=self.gravity_)
-    states, batch_shape = self._build_state_result(order=order, is_dynamics=True, backend=backend, gravity=self.gravity_)
-    return self._set_batch_states(states, batch_shape, materialize_dict=materialize_dict)
+      return self.update_rust_data(order=order, is_dynamics=True, materialize_dict=materialize_dict, gravity=active_gravity)
+    states, batch_shape = self._build_state_result(order=order, is_dynamics=True, backend=backend, gravity=active_gravity)
+    result = self._set_batch_states(states, batch_shape, materialize_dict=materialize_dict)
+    self.gravity_ = active_gravity
+    return result
 
   def _use_jax_kinematics_backend(self, backend: str = None) -> bool:
     return backend == "jax" or (
