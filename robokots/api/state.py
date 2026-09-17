@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import logging
 
 import numpy as np
 
@@ -19,6 +20,9 @@ def _copy_public_state_value(value):
   return deepcopy(value)
 
 
+_logger = logging.getLogger(__name__)
+
+
 class StateManagementMixin:
   def _set_batch_states(self, states, batch_shape: tuple, materialize_dict: bool = False):
     if not batch_shape:
@@ -32,7 +36,7 @@ class StateManagementMixin:
       self.state_batch_ = self.outward_state_ = states
       return result
     batch = StateBatch.from_states(states, batch_shape)
-    result = [export_state_dict(self.robot_, state) for state in batch.outward_states] if materialize_dict else batch.outward_states
+    result = export_state_dict(self.robot_, batch) if materialize_dict else batch.outward_states
     self.batch_shape_ = batch_shape
     self.state_batch_ = batch
     self.outward_state_ = self.state_batch_.outward_states
@@ -91,9 +95,7 @@ class StateManagementMixin:
         values = [outward_api.get_value(self.robot_, self._state_for_direct_read(), st) for st in state_type_list]
     if list_output:
       return [_copy_public_state_value(value) for value in values]
-    if self.batch_shape_:
-      return np.concatenate([np.asarray(v).reshape(self.batch_shape_ + (-1,)) for v in values], axis=-1)
-    return np.concatenate([np.asarray(v).reshape(-1) for v in values], axis=-1) if any(self._is_total_body_kinetic_energy(st) for st in state_type_list) or self._joint_motion_state_info_list(state_type_list) is not None else np.vstack(values)
+    return batch_shapes.concatenate_state_values(values, self.batch_shape_)
 
   def target_state_info(self, list_output: bool = False):
     if self.target_ is None:
@@ -141,8 +143,8 @@ class StateManagementMixin:
           return outward_api.build_kinematics_outward_state_rust(
             self.robot_, motion, order, compiled_robot=self._rust_compiled_robot()), motion.shape[:-1]
         return outward_api.build_kinematics_outward_state(self.robot_, motion, order), motion.shape[:-1]
-      except Exception:
-        pass
+      except NotImplementedError as exc:
+        _logger.debug("Batched state unavailable; evaluating individual samples: %s", exc)
     return batch_shapes.map_flat_batch(motion, build_state)
 
   def _set_current_state(self, state_obj, materialize_dict: bool = False):
@@ -184,15 +186,15 @@ class StateManagementMixin:
       self.robot_, MotionPack(motion, revision), self.state_cache_, is_dynamics, order, gravity=self.gravity_)
     return self._set_current_state(state, materialize_dict=False)
 
-  def to_state_dict(self) -> dict | list[dict]:
+  def to_state_dict(self) -> dict:
     """Export the current state on demand; no dictionary is retained for computation."""
     from ..state_io.dictionary import export_state_dict
 
     if isinstance(self.state_batch_, StateBatch):
-      return [export_state_dict(self.robot_, state) for state in self.state_batch_.outward_states]
+      return export_state_dict(self.robot_, self.state_batch_)
     return export_state_dict(self.robot_, self._state_for_direct_read())
 
-  def update_state_dict(self, order: int = None, is_dynamics: bool = False, backend: str = None) -> dict | list[dict]:
+  def update_state_dict(self, order: int = None, is_dynamics: bool = False, backend: str = None) -> dict:
     self.update_state(order=order, is_dynamics=is_dynamics, backend=backend)
     return self.to_state_dict()
 

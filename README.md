@@ -142,7 +142,7 @@ gravity Jacobian.
 ## JAX Automatic Differentiation of Dynamics
 
 `jacobian_autodiff()` computes dynamics Jacobians independently with JAX
-forward-mode automatic differentiation:
+forward-mode (default) or reverse-mode automatic differentiation:
 
 ```python
 import jax
@@ -154,6 +154,7 @@ kots = Kots.from_json_file("examples/model/sample_robot.json", order=5)
 kots.dynamics(gravity=[0, 0, -9.81])
 state = StateType("total_joint", "total_joint", "torque_diff2")
 jac_ad = kots.jacobian_autodiff(state)
+jac_reverse = kots.jacobian_autodiff(state, mode="reverse")
 jac_analytic = kots.jacobian(state)
 ```
 
@@ -163,6 +164,8 @@ force/torque derivative N needs order N+3. Spatial outputs accept local or
 world frames. The API preserves batch axes and accepts `list_output=True`,
 using the same row and motion-column ordering as `jacobian()`. Gravity follows
 the last `dynamics()` call and defaults to zero.
+`mode="forward"` uses `jax.jacfwd`; `mode="reverse"` uses `jax.jacrev`.
+Both return NumPy arrays without JIT; neither mode changes the output layout.
 
 The JAX implementation supports rigid links with fixed, revolute and prismatic
 joints, including branched trees. Flexible links and spherical/floating joints
@@ -170,7 +173,7 @@ raise `NotImplementedError`. This is inverse dynamics, not forward dynamics.
 `jacobian()` and `dynamics()` retain their existing backend selection;
 `jacobian_autodiff()` explicitly selects this independent JAX calculation.
 
-For JIT, reverse-mode AD, or differentiable optimization code, use the pure
+For JIT or differentiable optimization code, use the pure
 array function directly (the `Kots` wrapper returns NumPy arrays):
 
 ```python

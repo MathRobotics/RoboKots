@@ -20,8 +20,6 @@ class OutwardDataView(Protocol):
 
     order: int
 
-    def state_value(self, state_type: StateType) -> Any: ...
-
     def cmtm(self, owner_type: str, owner_name: str, order: int | None = None) -> Any: ...
 
     def cmtm_wrench(self, owner_type: str, owner_name: str, order: int | None = None) -> Any: ...
@@ -47,3 +45,10 @@ class OutwardDataView(Protocol):
     def quantity_series(self, owner_type: str, owner_name: str, data_type: str) -> np.ndarray:
         """Read (..., order, dimension) derivatives; missing values raise KeyError."""
         ...
+
+
+@runtime_checkable
+class StateValueProvider(Protocol):
+    """Optional optimized value lookup, separate from the shared state reader."""
+
+    def state_value(self, state_type: StateType) -> Any: ...

@@ -297,7 +297,7 @@ def test_outward_kinematics_jacobian_single_link_uses_selected_rows(monkeypatch)
 
     jacob = outward_total_gradient.outward_kinematics_jacobian(
         robot,
-        {},
+        kots.kinematics(),
         [StateType("link", "arm3", "frame")],
     )
 

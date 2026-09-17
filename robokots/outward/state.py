@@ -10,6 +10,7 @@ from mathrobo import CMVector, CMTM, Factorial, SE3, SE3wrench
 from ..core.robot import RobotStruct
 from ..core.motion import RobotMotions
 from ..core.outward_state import OutwardState
+from ..core.outward_protocol import OutwardDataView, StateValueProvider
 from ..core.state_access import (
     state_cmtm,
     state_cmtm_wrench,
@@ -133,8 +134,8 @@ def get_dof(robot : RobotStruct, state_type : StateType, dim : int = 3) -> int:
     else:
         return data_type_dof(state_type.data_type, dim = dim)
 
-def get_value(robot : RobotStruct, state : OutwardState, state_type : StateType):
-    if hasattr(state, "state_value"):
+def get_value(robot : RobotStruct, state : OutwardDataView, state_type : StateType):
+    if isinstance(state, StateValueProvider):
         try:
             return state.state_value(state_type)
         except NotImplementedError:

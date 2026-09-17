@@ -33,7 +33,7 @@ class StateCache:
     """
     Cache for expensive state computations.
 
-    build_state should ideally accept:
+    build_state must accept:
       build_state(x_all, time=time_grid, required=required_keys) -> state object
 
     Builders return computational state objects. Flat dictionaries belong to
@@ -84,13 +84,7 @@ class StateCache:
 
         x_all = np.asarray(pack.get(), dtype=float).reshape(-1)
 
-        try:
-            st = self.build_state(x_all, time=time, required=required)
-        except TypeError:
-            try:
-                st = self.build_state(x_all, time=time)
-            except TypeError:
-                st = self.build_state(x_all)
+        st = self.build_state(x_all, time=time, required=required)
 
         self.state = st
         self._rev_last = rev

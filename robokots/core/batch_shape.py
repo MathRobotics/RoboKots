@@ -7,10 +7,32 @@ The mapping helper evaluates samples sequentially in Python.
 from __future__ import annotations
 
 from typing import Callable, Sequence, TypeVar
+from numbers import Integral
 
 import numpy as np
 
 T = TypeVar("T")
+
+
+def validate_batch_shape(shape, *, require_batch=False) -> tuple[int, ...]:
+  shape = tuple(shape)
+  if require_batch and not shape:
+    raise ValueError("StateBatch requires a non-empty batch_shape")
+  if any(isinstance(size, (bool, np.bool_)) or not isinstance(size, Integral) or size <= 0
+         for size in shape):
+    raise ValueError("batch_shape dimensions must be positive integers; empty batches are unsupported")
+  return tuple(int(size) for size in shape)
+
+
+def concatenate_state_values(values, batch_shape=()):
+  """Pack numeric values in selection order; matrices use row-major flattening."""
+  if not values:
+    return np.empty(tuple(batch_shape) + (0,))
+  arrays = [np.asarray(value.mat() if hasattr(value, "mat") else value) for value in values]
+  for array in arrays:
+    if array.shape[:len(batch_shape)] != tuple(batch_shape):
+      raise ValueError(f"state value shape {array.shape} does not match batch_shape {batch_shape}")
+  return np.concatenate([array.reshape(tuple(batch_shape) + (-1,)) for array in arrays], axis=-1)
 
 
 def is_batched_feature_array(data, feature_ndim: int = 1) -> bool:
@@ -26,7 +48,7 @@ def flatten_feature_batch(data, feature_ndim: int = 1) -> tuple[np.ndarray, tupl
   feature_shape = arr.shape[-feature_ndim:]
   if arr.ndim == feature_ndim:
     return arr.reshape((1,) + feature_shape), ()
-  batch_shape = arr.shape[:-feature_ndim]
+  batch_shape = validate_batch_shape(arr.shape[:-feature_ndim])
   return arr.reshape((-1,) + feature_shape), batch_shape
 
 
@@ -43,10 +65,7 @@ def stack_batch_values(values: Sequence, batch_shape: tuple[int, ...]):
   if hasattr(first, "mat"):
     stacked = np.stack([np.asarray(v.mat()) for v in values], axis=0)
   else:
-    try:
-      stacked = np.stack([np.asarray(v) for v in values], axis=0)
-    except Exception:
-      return np.asarray(values, dtype=object).reshape(batch_shape)
+    stacked = np.stack([np.asarray(v) for v in values], axis=0)
   return stacked.reshape(batch_shape + stacked.shape[1:])
 
 

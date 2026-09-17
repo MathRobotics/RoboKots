@@ -3468,7 +3468,8 @@ def test_batched_target_api_shape_contract():
     single.dynamics()
 
     np.testing.assert_allclose(target_values[1, 1], single.target_state_info().reshape(-1))
-    np.testing.assert_allclose(target_jacobian[1, 1], single.jacobian_target())
+    # Native batch and scalar kernels differ at roundoff around zero.
+    np.testing.assert_allclose(target_jacobian[1, 1], single.jacobian_target(), atol=1e-12)
     np.testing.assert_allclose(shared_matvec[1, 1], single.jacobian_target() @ shared_vec)
     np.testing.assert_allclose(sample_matvec[1, 1], single.jacobian_target() @ sample_vecs[1, 1])
 

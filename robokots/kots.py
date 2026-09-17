@@ -367,7 +367,7 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
         start = joint.dof_index * self.order_ + motion_index * joint.dof
         values.append(np.asarray(motion[..., start:start + joint.dof]))
       else:
-        values.append(outward_api.get_value(self.robot_, self._state_for_direct_read(), st))
+        values.append(self._read_state_info(st))
     return values
 
   def _sample_motions(self, motion : np.ndarray, order : int) -> RobotMotions:

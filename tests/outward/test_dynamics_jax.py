@@ -30,7 +30,8 @@ def _states(kots, order):
 
 
 @pytest.mark.parametrize("model", ["serial_zero", "branched", "prismatic"])
-def test_dynamics_autodiff_values_and_jacobians(model, tmp_path):
+@pytest.mark.parametrize("mode", ["forward", "reverse"])
+def test_dynamics_autodiff_values_and_jacobians(model, tmp_path, mode):
     order = 5
     if model == "serial_zero":
         kots = Kots.from_json_file(str(MODELS / "sample_robot.json"), order=order)
@@ -52,7 +53,7 @@ def test_dynamics_autodiff_values_and_jacobians(model, tmp_path):
     values = dynamics_state_vector_jax(kots.robot_, jnp.asarray(motion), states, order, gravity)
     expected = np.concatenate([np.asarray(kots.state_info(state)).reshape(-1) for state in states])
     np.testing.assert_allclose(values, expected, atol=2e-10, rtol=2e-10)
-    autodiff = kots.jacobian_autodiff(states)
+    autodiff = kots.jacobian_autodiff(states, mode=mode)
     assert np.all(np.isfinite(autodiff))
     np.testing.assert_allclose(autodiff, kots.jacobian(states), atol=2e-9, rtol=2e-9)
 
@@ -67,24 +68,25 @@ def test_dynamics_autodiff_values_and_jacobians(model, tmp_path):
     np.testing.assert_allclose(autodiff @ direction, difference, atol=2e-7, rtol=2e-7)
 
 
-def test_dynamics_autodiff_batch_list_and_momentum_only():
+@pytest.mark.parametrize("mode", ["forward", "reverse"])
+def test_dynamics_autodiff_batch_list_and_momentum_only(mode):
     kots = Kots.from_urdf_file(str(MODELS / "branched_fixed.urdf"), order=3)
     motion = np.random.default_rng(9).normal(scale=0.3, size=(2, 1, kots.dof() * 3))
     kots.import_motions(motion)
     kots.dynamics(backend="numpy", gravity=[0, 0, -9.81])
     state = StateType("total_joint", "total_joint", "torque")
-    parts = kots.jacobian_autodiff(state, list_output=True)
+    parts = kots.jacobian_autodiff(state, list_output=True, mode=mode)
     actual = np.concatenate(parts, axis=-2)
     assert actual.shape == (2, 1, kots.dof(), kots.dof() * 3)
     np.testing.assert_allclose(actual, kots.jacobian(state), atol=2e-10, rtol=2e-10)
     momentum = StateType("link", "a_tip", "momentum", "world")
-    np.testing.assert_allclose(kots.jacobian_autodiff(momentum), kots.jacobian(momentum), atol=2e-10, rtol=2e-10)
+    np.testing.assert_allclose(kots.jacobian_autodiff(momentum, mode=mode), kots.jacobian(momentum), atol=2e-10, rtol=2e-10)
     mixed = [
         StateType("link", "a_tip", "force", "world"),
         StateType("joint", "a_shoulder", "force", "world"),
         state,
     ]
-    np.testing.assert_allclose(kots.jacobian_autodiff(mixed), kots.jacobian(mixed), atol=2e-10, rtol=2e-10)
+    np.testing.assert_allclose(kots.jacobian_autodiff(mixed, mode=mode), kots.jacobian(mixed), atol=2e-10, rtol=2e-10)
 
 
 def test_dynamics_jax_jit_forward_and_reverse_ad():
@@ -112,6 +114,8 @@ def test_dynamics_jax_rejects_unsupported_inputs():
         kots.jacobian_autodiff(StateType("link", kots.link_name_list()[-1], "vel"))
     with pytest.raises(ValueError, match="requires at least one"):
         kots.jacobian_autodiff([])
+    with pytest.raises(ValueError, match="mode must be"):
+        kots.jacobian_autodiff([], mode="auto")
     kots.robot_.joints[-1].type = "spherical"
     with pytest.raises(NotImplementedError, match="fixed, revolute and prismatic"):
         dynamics_jax(kots.robot_, np.zeros(kots.dof() * 3))

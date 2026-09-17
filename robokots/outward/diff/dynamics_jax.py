@@ -47,13 +47,18 @@ def _relative_transform(joint, q):
 
 
 def dynamics_jax(robot, motions, order=3, gravity=(0.0, 0.0, 0.0)):
-    """Return local momentum, force and torque series as JAX array dictionaries.
+    """Return local velocity, momentum, force and torque series as JAX dictionaries.
 
     ``motions`` has shape ``(robot.dof * order,)`` in ``Kots.motion(order)``
-    layout. Momentum has ``order-1`` rows and force/torque ``order-2`` rows.
+    layout. Velocity/momentum have ``order-1`` rows and force/torque ``order-2`` rows.
     Gravity is expressed in world coordinates. Use ``jax.vmap`` for batches
     and close over ``robot`` and ``order`` when using ``jax.jit``/``jacfwd``.
     This computes inverse dynamics; it does not solve for acceleration.
+
+    Higher time derivatives are evaluated analytically on ordinary derivative
+    coefficient series, without building full CMTM block matrices. This is a
+    representation of the same high-order algebra, not a different mathematical
+    differentiation method. Outer motion Jacobians may then be obtained by AD.
     """
     if order < 2:
         raise ValueError("JAX dynamics requires order >= 2 (>= 3 for force/torque).")
@@ -123,6 +128,7 @@ def dynamics_jax(robot, motions, order=3, gravity=(0.0, 0.0, 0.0)):
         joint_torque[joint.name] = force @ jnp.asarray(joint.select_mat)
 
     return {
+        "link_velocity": {name: jnp.stack(rows) for name, rows in velocities.items()},
         "link_momentum": link_momentum, "link_force": link_force,
         "joint_momentum": joint_momentum, "joint_force": joint_force,
         "joint_torque": joint_torque,

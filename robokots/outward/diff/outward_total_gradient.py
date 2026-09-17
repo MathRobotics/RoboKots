@@ -77,6 +77,8 @@ def _selected_coord_to_link_vel_grad_mat(
     order: int = 3,
     dim: int = 3,
 ) -> np.ndarray:
+    if links and _state_batch_shape(state, links[0].name, "link", order):
+        return _batch_selected_coord_to_link_vel_grad_mat(robot, state, links, order, dim)
     n_ = dim_to_dof(dim) * order
     joint_tan_mat = total_coord_to_joint_tan_vel_grad_mat(robot, state, order, dim)
     mat = np.zeros((len(links) * n_, robot.dof * order))
@@ -127,10 +129,7 @@ def _is_batched_kinematics_state(
         return False
     if robot.link(owner_name) is None:
         return False
-    try:
-        return len(_state_batch_shape(state, owner_name, owner_type, order)) > 0
-    except Exception:
-        return False
+    return len(_state_batch_shape(state, owner_name, owner_type, order)) > 0
 
 
 def _batched_matvec(mat: np.ndarray, vec: np.ndarray) -> np.ndarray:
@@ -1352,9 +1351,9 @@ def _selected_coord_to_world_link_force_grad_mat(
         block_tan = factorial @ cmtm_wrench.mat_var_x_arb_vec_jacob(
             link_force, frame="bframe"
         )
-        mat[row:row+n_f, :] = (
-            block_force @ mat_link_force[row:row+n_f, :]
-            + block_tan @ mat_tan_kine[row:row+n_f, :]
+        mat[..., row:row+n_f, :] = (
+            block_force @ mat_link_force[..., row:row+n_f, :]
+            + block_tan @ mat_tan_kine[..., row:row+n_f, :]
         )
     return mat
 
@@ -1396,9 +1395,9 @@ def _selected_coord_to_world_joint_force_grad_mat(
         block_tan = factorial @ cmtm_wrench.mat_var_x_arb_vec_jacob(
             joint_force, frame="bframe"
         )
-        mat[row:row+n_f, :] = (
-            block_force @ mat_joint_force[row:row+n_f, :]
-            + block_tan @ mat_tan_kine[row:row+n_f, :]
+        mat[..., row:row+n_f, :] = (
+            block_force @ mat_joint_force[..., row:row+n_f, :]
+            + block_tan @ mat_tan_kine[..., row:row+n_f, :]
         )
     return mat
 

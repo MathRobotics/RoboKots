@@ -16,6 +16,7 @@ _lazy_attributes: Dict[str, str] = {
     "JointStruct": "robokots.core.robot",
     "LinkStruct": "robokots.core.robot",
     "OutwardDataView": "robokots.core.outward_protocol",
+    "StateValueProvider": "robokots.core.outward_protocol",
     "OutwardState": "robokots.core.outward_state",
     "ArrayOutwardState": "robokots.core.outward_state",
     "MotionLayoutOwner": "robokots.core.motion",

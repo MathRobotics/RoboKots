@@ -82,12 +82,21 @@ class RobotState:
     return df[state_storage_key(owner_type, owner_name, data_type)].to_numpy()
 
   @staticmethod
-  def state_vecs_traj(df, owner_name_list : list, owner_type : str, data_type : str) -> np.ndarray:
-    length = df[state_storage_key(owner_type, owner_name_list[0], data_type)].shape[0]
-    vecs = np.zeros((len(owner_name_list), length, 3))
-    for i in range(len(owner_name_list)):
-      vecs[i] = np.array(df[state_storage_key(owner_type, owner_name_list[i], data_type)].to_list())
-    return vecs
+  def state_vecs_traj(df, owner_name_list : list, owner_type : str, data_type : str, *, list_output=False):
+    """Read (owner, time, component); use list_output for unequal joint DOFs."""
+    if not owner_name_list:
+      if list_output:
+        return []
+      raise ValueError("owner_name_list must not be empty")
+    values = [np.asarray(df[state_storage_key(owner_type, name, data_type)].to_list(), dtype=float)
+              for name in owner_name_list]
+    if any(value.ndim != 2 for value in values):
+      raise ValueError("Trajectory columns must contain non-empty series of equal-length vectors")
+    if list_output:
+      return values
+    if any(value.shape != values[0].shape for value in values[1:]):
+      raise ValueError("Owner trajectory dimensions differ; use list_output=True")
+    return np.stack(values)
   
   @staticmethod
   def state_mat(df, owner_name : str, owner_type : str, data_type : str) -> np.ndarray:

@@ -1,6 +1,7 @@
 """Generic Jacobian, JVP, and VJP dispatch for the ``Kots`` facade."""
 from __future__ import annotations
 
+import logging
 import numpy as np
 
 from .. import outward as outward_api
@@ -9,9 +10,15 @@ from ..core.state_spec import StateType, data_type_dof, dim_to_dof, keys_force, 
 from ..core.state_tensor import JacobianTensor
 
 
+_logger = logging.getLogger(__name__)
+
+
 class DerivativesMixin:
-  def jacobian_autodiff(self, state_type, list_output: bool = False):
-    """Differentiate rigid-body dynamics with JAX forward-mode AD.
+  def jacobian_autodiff(self, state_type, list_output: bool = False, *, mode: str = "forward"):
+    """Differentiate rigid-body dynamics with JAX AD (without JIT).
+
+    mode='forward' uses jacfwd (default); mode='reverse' uses jacrev.
+    Both return NumPy arrays with the same output and motion axes.
 
     Supports link/joint momentum, force, torque and their time derivatives,
     local/world spatial outputs, and the same batch/motion axes as jacobian().
@@ -22,6 +29,8 @@ class DerivativesMixin:
     import jax.numpy as jnp
     from ..outward.diff.dynamics_jax import dynamics_state_vector_jax
 
+    if mode not in ("forward", "reverse"):
+      raise ValueError("mode must be 'forward' or 'reverse'")
     states = self._state_type_list(state_type)
     if not states:
       raise ValueError("jacobian_autodiff requires at least one dynamics state.")
@@ -29,7 +38,7 @@ class DerivativesMixin:
     motion = jnp.asarray(self.motion(order))
     def value(x):
       return dynamics_state_vector_jax(self.robot_, x, states, order, self.gravity_)
-    derivative = jax.jacfwd(value)
+    derivative = (jax.jacfwd if mode == "forward" else jax.jacrev)(value)
     if motion.ndim == 1:
       jacobian = np.asarray(derivative(motion))
     else:
@@ -95,10 +104,8 @@ class DerivativesMixin:
       if self.batch_shape_:
         try:
           return outward_api.outward_jacobian(self.robot_, state, state_type_list, max_time_order=max_order, dim = self.dim_, list_output = list_output)
-        except (AttributeError, IndexError, TypeError, ValueError):
-          # Fall back when the cached state cannot be consumed as a batched
-          # outward state. Unexpected runtime errors should still surface.
-          pass
+        except NotImplementedError as exc:
+          _logger.debug("Batched derivative unavailable; evaluating individual samples: %s", exc)
         is_dynamics = any(st.is_dynamics for st in state_type_list)
         _, build_state = self._state_builder(max_order, is_dynamics=is_dynamics)
         flat_motion, batch_shape = batch_shapes.flatten_feature_batch(self.motion(max_order))
@@ -182,10 +189,8 @@ class DerivativesMixin:
         try:
           direct_vec = vec.reshape(batch_shape + (vec.shape[-1],))
           return outward_api.outward_jacobian_matvec(self.robot_, state, state_type_list, direct_vec, max_time_order=max_order, dim = self.dim_, list_output = list_output)
-        except (AttributeError, IndexError, TypeError, ValueError):
-          # Fall back when the cached state cannot be consumed as a batched
-          # outward state. Unexpected runtime errors should still surface.
-          pass
+        except NotImplementedError as exc:
+          _logger.debug("Batched derivative unavailable; evaluating individual samples: %s", exc)
         is_dynamics = any(st.is_dynamics for st in state_type_list)
         _, build_state = self._state_builder(max_order, is_dynamics=is_dynamics)
         flat_motion, _ = batch_shapes.flatten_feature_batch(self.motion(max_order))
@@ -241,10 +246,8 @@ class DerivativesMixin:
         try:
           direct_rhs = rhs.reshape(batch_shape + rhs.shape[-2:])
           return outward_api.outward_jacobian_matmul_rhs(self.robot_, state, state_type_list, direct_rhs, max_time_order=max_order, dim = self.dim_, list_output = list_output)
-        except (AttributeError, IndexError, TypeError, ValueError):
-          # Fall back when the cached state cannot be consumed as a batched
-          # outward state. Unexpected runtime errors should still surface.
-          pass
+        except NotImplementedError as exc:
+          _logger.debug("Batched derivative unavailable; evaluating individual samples: %s", exc)
         is_dynamics = any(st.is_dynamics for st in state_type_list)
         _, build_state = self._state_builder(max_order, is_dynamics=is_dynamics)
         flat_motion, _ = batch_shapes.flatten_feature_batch(self.motion(max_order))
@@ -430,10 +433,8 @@ class DerivativesMixin:
             max_time_order=max_order,
             dim=self.dim_,
           )
-        except (AttributeError, IndexError, TypeError, ValueError):
-          # Fall back when the cached state cannot be consumed as a batched
-          # outward state. Unexpected runtime errors should still surface.
-          pass
+        except NotImplementedError as exc:
+          _logger.debug("Batched derivative unavailable; evaluating individual samples: %s", exc)
         is_dynamics = any(st.is_dynamics for st in state_type_list)
         _, build_state = self._state_builder(max_order, is_dynamics=is_dynamics)
         flat_motion, _ = batch_shapes.flatten_feature_batch(self.motion(max_order))

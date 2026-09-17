@@ -158,6 +158,46 @@ Earlier rows may already have been yielded before a length error is detected.
 The existing `write_jsonl()` writer is not transactional: it may leave a partial
 file on an iteration or serialization error.
 
+### State selection, batch exports, and fallback contracts
+
+- `state_info_list()` always packs numeric values as `(..., state_dim)`, also
+  for single samples and mixed quantities. Selection order is preserved.
+  An empty selection returns `batch_shape + (0,)`; `list_output=True` returns
+  an empty list. Frame matrices are flattened in row-major order (16 values
+  for a 4x4 frame); this is a stored-value layout, not the six-dimensional
+  tangent representation used by frame Jacobians. `list_output=True` keeps
+  the individual value representations.
+- `StateBatch` validates positive integer batch dimensions and the sample
+  count at construction. Empty batches are rejected, including motion imports.
+  An empty **selection** is supported; an empty **batch** is not.
+- `to_state_dict()` and `materialize_dict=True` always return a dictionary,
+  including flexible-link and JAX batches. Every array preserves the original
+  batch axes. Batched samples must expose identical keys and value shapes.
+  To build sample-wise JSONL rows, explicitly index these leading axes; a
+  flattened `list[dict]` is no longer returned implicitly.
+- `OutwardDataView` is the common computational reader implemented by NumPy,
+  array-backed, JAX-produced, and Rust states. `StateValueProvider` separately
+  describes the optional optimized `state_value()` lookup.
+- `RobotState.state_vecs_traj()` infers component counts from the stored
+  vectors, rather than assuming three. For different joint DOFs, pass
+  `list_output=True` to receive one `(time, component)` array per owner.
+  Empty/invalid trajectories fail explicitly rather than guessing dimensions.
+- `StateCache` builders must accept `build_state(x_all, time=..., required=...)`.
+  Exceptions from inside a builder are not retried with different signatures.
+- Batched/Rust derivative fallbacks catch only `NotImplementedError`, meaning
+  an explicitly unsupported path. `RuntimeError`, `ValueError`, `TypeError`,
+  and `AttributeError` propagate. Shape errors are no longer treated as lack
+  of backend support. Enable DEBUG logging for `robokots.api.state`,
+  `robokots.api.derivatives`, and `robokots.api.rust_derivatives` to see reasons
+  for exception-triggered fallbacks. Capability checks may still select the
+  next implementation without raising an exception.
+
+Removing exception-based shape fallbacks also exposed native batch indexing
+issues. Torque projection now broadcasts the joint tangent over derivative
+axes explicitly; world-force Jacobian slices preserve batch axes. Batched
+dynamics reverse products reuse per-sample computational readers and do not
+materialize dense Jacobians in the generic reverse kernel.
+
 ### Facade and computation
 
 `robokots.kots.Kots` remains the public facade. Its implementation is being

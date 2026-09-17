@@ -7,17 +7,26 @@ from mathrobo import CMVector
 from mathrobo import SE3, SE3wrench, CMTM, CMTM, SO3, Factorial
 
 from ..core.state_spec import keys, keys_order, keys_time_order, state_dict_key
+from ..core.state_batch import StateBatch
+from ..core.outward_protocol import OutwardDataView
 
 
 _STATE_MEMO_KEY = "__robokots_state_memo__"
 
 
-def export_state_dict(robot, state) -> dict:
+def export_state_dict(robot, state: OutwardDataView | StateBatch) -> dict:
     """Export available state values as an independent dictionary snapshot.
 
     State readers provide CMTMs and derivative series; key naming, flattening,
     and copying belong here, independently of the computational backend.
     """
+    if isinstance(state, StateBatch):
+        samples = [export_state_dict(robot, sample) for sample in state.outward_states]
+        keys = samples[0].keys()
+        if any(sample.keys() != keys for sample in samples[1:]):
+            raise ValueError("Batch states must expose identical dictionary keys")
+        return {key: np.stack([sample[key] for sample in samples]).reshape(
+                    state.batch_shape + np.shape(samples[0][key])) for key in keys}
     result = {}
     owners = (("link", robot.links), ("joint", robot.joints))
     for owner_type, entries in owners:

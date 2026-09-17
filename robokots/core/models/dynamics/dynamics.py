@@ -31,6 +31,10 @@ def joint_project_wrench(joint: JointStruct, wrench: np.ndarray, joint_coord: np
             return wrench @ tangent_mat
         tan = joint_coord @ select_mat.T
         tangent_mat = SE3.exp_integ_adj(-tan, 1.0) @ select_mat
+        # Wrench series have derivative axes after the configuration's batch
+        # axes. Broadcast the same joint tangent over those axes, not samples.
+        while tangent_mat.ndim < wrench.ndim + 1:
+            tangent_mat = np.expand_dims(tangent_mat, axis=-3)
         return np.einsum("...i,...ij->...j", wrench, tangent_mat)
     axis = np.asarray(joint.axis, dtype=wrench.dtype)
     if joint.type == "revolute" and joint.dof == 1:

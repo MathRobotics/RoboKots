@@ -10,7 +10,9 @@ from robokots.core.state_access import (
     state_cmtm_wrench,
     state_cmvec,
     state_rel_cmtm,
+    state_sample,
 )
+from robokots.core import batch_shape as batch_shapes
 from robokots.core.models.kinematics.kinematics_matrix import joint_select_diag_mat
 from robokots.core.models.dynamics.base import spatial_inertia
 from robokots.core.models.dynamics.dynamics_matrix import (
@@ -30,7 +32,7 @@ from robokots.core.models.whole_body.topology_layout import scatter_joint_child_
 from .outward_total_gradient import (
     _batch_selected_coord_to_link_vel_grad_mat,
     _is_batched_kinematics_state,
-    outward_jacobian,
+    _state_batch_shape,
 )
 
 
@@ -733,11 +735,21 @@ def outward_jacobian_transpose_matvec(
         [StateType("link", robot.links[0].name, "vel")],
         max_time_order,
     ):
-        jacob = outward_jacobian(robot, state, state_type_list, max_time_order=max_time_order, dim=dim)
-        vec = np.asarray(vec)
-        if vec.ndim >= 2 and vec.shape[-2] == jacob.shape[-2]:
-            return np.swapaxes(jacob, -1, -2) @ vec
-        return (np.swapaxes(jacob, -1, -2) @ vec[..., None])[..., 0]
+        # Keep reverse products matrix-free when native batched state is
+        # available. Scalar views reuse computed values instead of recomputing
+        # motion or constructing a dense Jacobian.
+        batch_shape = _state_batch_shape(state, robot.links[0].name, "link", max_time_order)
+        state_dim = sum(robot.joint(st.owner_name).dof if st.data_type in keys_torque
+                        else data_type_dof(st.data_type, dim=dim) for st in state_type_list)
+        rhs, is_matrix = batch_shapes.broadcast_feature_rhs(vec, batch_shape, state_dim)
+        results = []
+        for i, index in enumerate(np.ndindex(batch_shape)):
+            value = outward_jacobian_transpose_matvec(
+                robot, state_sample(robot, state, index), state_type_list,
+                rhs[i].T if is_matrix else rhs[i], max_time_order, dim,
+            )
+            results.append(value.T if is_matrix else value)
+        return batch_shapes.stack_sample_results(results, batch_shape)
 
     vec = np.asarray(vec)
     dof = dim_to_dof(dim)

@@ -8,6 +8,7 @@ import math
 from dataclasses import dataclass
 
 from .axis_tensor import AxisTensor
+from .batch_shape import validate_batch_shape
 
 
 @dataclass(frozen=True)
@@ -187,6 +188,7 @@ class RobotMotions:
     motions = np.asarray(vecs, dtype=float)
     if motions.ndim == 0:
       raise ValueError("motions must have at least one dimension")
+    validate_batch_shape(motions.shape[:-1])
     expected = self.dof * self.motion_num
     if motions.shape[-1] != expected:
       raise ValueError(f"motions last dimension must be {expected}, got {motions.shape[-1]}")
@@ -291,6 +293,7 @@ class RobotMotions:
 
   def set_dof_order(self, data):
     tensor = MotionTensor.from_dof_order(data, self.owner_layout)
+    validate_batch_shape(tensor.batch_shape)
     if tensor.order != self.motion_num:
       raise ValueError(f"dof-order motion order must be {self.motion_num}, got {tensor.order}")
     self.motions = tensor.to_flat_owner_major(self.motion_num).data

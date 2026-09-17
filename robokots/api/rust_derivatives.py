@@ -1,10 +1,14 @@
 """Rust-backed derivative kernels, including CMTM and kinetic energy."""
 from __future__ import annotations
 
+import logging
 import numpy as np
 
 from ..core import batch_shape as batch_shapes
 from ..core.state_spec import StateType, keys_force, keys_kinematics, keys_momentum, keys_torque
+
+
+_logger = logging.getLogger(__name__)
 
 
 class RustDerivativesMixin:
@@ -60,7 +64,8 @@ class RustDerivativesMixin:
         jacob = jacob.reshape(batch_shape + jacob.shape[-2:])
       else:
         jacob = np.asarray(self._rust_compiled_robot().dynamics_jacobian(q, v, a, gravity=self.gravity_))
-    except Exception:
+    except NotImplementedError as exc:
+      _logger.debug("Unsupported Rust derivative path; trying next implementation: %s", exc)
       return None
     selected = jacob[..., rows, :]
     if not list_output:
@@ -95,7 +100,8 @@ class RustDerivativesMixin:
         applied = applied.reshape(batch_shape + applied.shape[-2:])
       else:
         applied = np.asarray(self._rust_compiled_robot().dynamics_jacobian_matmul_rhs(q, v, a, np.ascontiguousarray(rhs_matrix), gravity=self.gravity_))
-    except Exception:
+    except NotImplementedError as exc:
+      _logger.debug("Unsupported Rust derivative path; trying next implementation: %s", exc)
       return None
     selected = applied[..., rows, :]
 
@@ -150,7 +156,8 @@ class RustDerivativesMixin:
           out = np.stack([np.asarray(robot.world_link_dynamics_cmtm_transpose_matmul_rhs(m, a, b, dynamics_order, gravity=self.gravity_)) for m, a, b in zip(flat_motion, flat_lm, flat_lf)]).reshape(batch_shape + (motion.shape[-1], cols))
       else:
         out = np.asarray(robot.world_link_dynamics_cmtm_transpose_matmul_rhs(motion, lm, lf, dynamics_order, gravity=self.gravity_))
-    except Exception:
+    except NotImplementedError as exc:
+      _logger.debug("Unsupported Rust derivative path; trying next implementation: %s", exc)
       return None
     return out if rhs_is_matrix else out[..., 0]
   def _rust_cmtm_world_joint_dynamics_jacobian_transpose_apply(self, state_type_list, max_order : int, rhs, batch_shape : tuple, rhs_is_matrix : bool):
@@ -191,7 +198,8 @@ class RustDerivativesMixin:
           out = np.stack([np.asarray(robot.world_joint_dynamics_cmtm_transpose_matmul_rhs(m, a, b, dynamics_order, gravity=self.gravity_)) for m, a, b in zip(flat_motion, flat_jm, flat_jf)]).reshape(batch_shape + (motion.shape[-1], cols))
       else:
         out = np.asarray(robot.world_joint_dynamics_cmtm_transpose_matmul_rhs(motion, jm, jf, dynamics_order, gravity=self.gravity_))
-    except Exception:
+    except NotImplementedError as exc:
+      _logger.debug("Unsupported Rust derivative path; trying next implementation: %s", exc)
       return None
     return out if rhs_is_matrix else out[..., 0]
 
@@ -247,7 +255,8 @@ class RustDerivativesMixin:
         return None
       out = kin_out + dyn_out
       return out if rhs_is_matrix else out[..., 0]
-    except Exception:
+    except NotImplementedError as exc:
+      _logger.debug("Unsupported Rust derivative path; trying next implementation: %s", exc)
       return None
 
   def _rust_cmtm_kinematics_row_parts(self, state_type_list, max_order : int):
@@ -308,7 +317,8 @@ class RustDerivativesMixin:
           np.ascontiguousarray(motion), np.ascontiguousarray(link_rhs),
           np.ascontiguousarray(joint_rhs), max_order,
         ))
-    except Exception:
+    except NotImplementedError as exc:
+      _logger.debug("Unsupported Rust derivative path; trying next implementation: %s", exc)
       return None
     return out if rhs_is_matrix else out[..., 0]
 
@@ -429,7 +439,8 @@ class RustDerivativesMixin:
           ]).reshape(batch_shape + (motion.shape[-1], rhs_cols))
       else:
         out = apply_one(motion)
-    except Exception:
+    except NotImplementedError as exc:
+      _logger.debug("Unsupported Rust derivative path; trying next implementation: %s", exc)
       return None
     return out if rhs_is_matrix else out[..., 0]
 
@@ -512,7 +523,8 @@ class RustDerivativesMixin:
         applied = applied.reshape(batch_shape + applied.shape[-3:])
       else:
         applied = np.asarray(scalar_kernel(np.ascontiguousarray(motion), basis, dynamics_order, gravity=self.gravity_))
-    except Exception:
+    except NotImplementedError as exc:
+      _logger.debug("Unsupported Rust derivative path; trying next implementation: %s", exc)
       return None
     selected_parts = []
     for rows, _ in part_specs:
@@ -564,7 +576,8 @@ class RustDerivativesMixin:
         applied = np.asarray(robot.dynamics_joint_torque_series_tangent(
           np.ascontiguousarray(motion), np.ascontiguousarray(rhs_matrix), dynamics_order, gravity=self.gravity_
         ))
-    except Exception:
+    except NotImplementedError as exc:
+      _logger.debug("Unsupported Rust derivative path; trying next implementation: %s", exc)
       return None
 
     parts = []
@@ -650,7 +663,8 @@ class RustDerivativesMixin:
             dynamics_order,
             gravity=self.gravity_,
           ))[0]
-    except Exception:
+    except NotImplementedError as exc:
+      _logger.debug("Unsupported Rust derivative path; trying next implementation: %s", exc)
       return None
     if rhs_is_matrix:
       return out
@@ -711,7 +725,8 @@ class RustDerivativesMixin:
           np.ascontiguousarray(motion), np.ascontiguousarray(packed),
           np.ascontiguousarray(energy_matrix), dynamics_order, gravity=self.gravity_,
         ))
-    except Exception:
+    except NotImplementedError as exc:
+      _logger.debug("Unsupported Rust derivative path; trying next implementation: %s", exc)
       return None
     return out if rhs_is_matrix else out[..., 0]
 
@@ -743,7 +758,8 @@ class RustDerivativesMixin:
         out = out.reshape(batch_shape + out.shape[-2:])
       else:
         out = np.asarray(self._rust_compiled_robot().dynamics_jacobian_transpose_matmul_rhs(q, v, a, np.ascontiguousarray(full_rhs), gravity=self.gravity_))
-    except Exception:
+    except NotImplementedError as exc:
+      _logger.debug("Unsupported Rust derivative path; trying next implementation: %s", exc)
       return None
     if rhs_is_matrix:
       return out
@@ -791,7 +807,8 @@ class RustDerivativesMixin:
         jacob = np.stack(parts, axis=0).reshape(batch_shape + parts[0].shape)
       else:
         jacob = np.asarray(self._rust_compiled_robot().link_local_jacobian(q, v, a, link_ids, data_codes))
-    except Exception:
+    except NotImplementedError as exc:
+      _logger.debug("Unsupported Rust derivative path; trying next implementation: %s", exc)
       return None
     if not list_output:
       return jacob
@@ -825,7 +842,8 @@ class RustDerivativesMixin:
         applied = np.stack(parts, axis=0).reshape(batch_shape + parts[0].shape)
       else:
         applied = np.asarray(self._rust_compiled_robot().link_local_jacobian_matmul_rhs(q, v, a, np.ascontiguousarray(rhs_matrix), link_ids, data_codes))
-    except Exception:
+    except NotImplementedError as exc:
+      _logger.debug("Unsupported Rust derivative path; trying next implementation: %s", exc)
       return None
     if not rhs_is_matrix:
       applied = applied[..., 0]
