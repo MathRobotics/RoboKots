@@ -221,10 +221,36 @@ impl RustCompiledRobot {
         primal: &mut DynamicsCmtmWorkspace,
         out: &mut [f64],
     ) {
+        self.dynamics_cmtm_into(motion, dynamics_order, gravity, primal);
+        self.dynamics_cmtm_reverse_from_state_into(
+            motion, link_momentum_cotangent, link_force_cotangent,
+            joint_momentum_cotangent, joint_force_cotangent, torque_cotangent,
+            dynamics_order, gravity, rhs_cols, kinetic_energy_cotangent, None, primal, out,
+        );
+    }
+
+    /// Reverse an already computed dynamics state. World-output transport
+    /// seeds join the local dynamics seeds before the single kinematics VJP.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn dynamics_cmtm_reverse_from_state_into(
+        &self,
+        motion: &[f64],
+        link_momentum_cotangent: &[f64],
+        link_force_cotangent: &[f64],
+        joint_momentum_cotangent: &[f64],
+        joint_force_cotangent: &[f64],
+        torque_cotangent: &[f64],
+        dynamics_order: usize,
+        gravity: [f64; 3],
+        rhs_cols: usize,
+        kinetic_energy_cotangent: Option<&[f64]>,
+        link_kinematics_cotangent: Option<(&[f64], &[f64])>,
+        primal: &mut DynamicsCmtmWorkspace,
+        out: &mut [f64],
+    ) {
         let kin_order = dynamics_order + 2;
         let momentum_order = dynamics_order + 1;
         let input_len = self.dof * kin_order;
-        self.dynamics_cmtm_into(motion, dynamics_order, gravity, primal);
         out.fill(0.0);
         let vec_len = (kin_order - 1) * 6;
         let momentum_len = momentum_order * 6;
@@ -241,6 +267,17 @@ impl RustCompiledRobot {
             let mut link_force_bar = vec![0.0; self.link_num * force_len];
             let mut joint_force_bar = vec![0.0; self.joint_num * force_len];
             let mut joint_gravity_bar = vec![0.0; self.joint_num * force_len];
+
+            if let Some((mat_seed, vec_seed)) = link_kinematics_cotangent {
+                for link in 0..self.link_num {
+                    for r in 0..4 { for c in 0..4 {
+                        link_mat_bar[link][r][c] += mat_seed[(link * 16 + r * 4 + c) * rhs_cols + rhs];
+                    }}
+                    for i in 0..vec_len {
+                        link_vec_bar[link * vec_len + i] += vec_seed[(link * vec_len + i) * rhs_cols + rhs];
+                    }
+                }
+            }
 
             for link in 0..self.link_num {
                 for i in 0..momentum_len {
@@ -443,9 +480,9 @@ impl RustCompiledRobot {
         );
     }
 
-    /// Differentiate local link momentum and force series after the CMTM
-    /// kinematics tangent has been propagated.  Joint wrench accumulation and
-    /// gravity are intentionally layered above this primitive.
+    /// Differentiate the complete local dynamics series, sharing the link
+    /// momentum/force tangents with joint accumulation and torque projection.
+    /// Moving-frame gravity derivatives are included at both levels.
     #[allow(dead_code)]
     pub(crate) fn dynamics_cmtm_link_tangent_into(
         &self,
@@ -699,15 +736,14 @@ impl RustCompiledRobot {
                 if !gravity_is_zero(gravity) {
                     let child_gravity =
                         cmvec_slice(&ws.joint_gravity_force, child_joint_id, dynamics_order);
-                    cmtm_accumulate_mat_adj_wrench_series_into(
-                        rel_mat,
-                        &rel_vecs[..dynamics_order.saturating_sub(1) * 6],
+                    // Momentum prepared this joint's blocks through one
+                    // higher order. Gravity uses exactly the same prefix.
+                    cmtm_accumulate_wrench_series_from_blocks_into(
                         child_gravity,
                         dynamics_order,
                         &ws.factorial,
-                        &mut ws.tmp_scaled_vecs,
-                        &mut ws.tmp_wrench_adj_a_blocks,
-                        &mut ws.tmp_wrench_adj_c_blocks,
+                        &ws.tmp_wrench_adj_a_blocks,
+                        &ws.tmp_wrench_adj_c_blocks,
                         &mut ws.tmp_gravity_force,
                     );
                 }

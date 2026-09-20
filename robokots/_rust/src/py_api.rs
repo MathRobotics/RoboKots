@@ -8,6 +8,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict, PyList};
 
 use crate::model::*;
+use crate::dynamics_outputs::DynamicsOutput;
 use crate::pinocchio_like::PinocchioLikeWorkspace;
 use crate::spatial::*;
 use crate::types::{RustAbaData, RustBatchOutwardData, RustCompiledRobot, RustFastData, RustOutwardData};
@@ -1452,8 +1453,77 @@ impl RustCompiledRobot {
         ))
     }
 
-    /// Analytic Jv for the local (pre-wrench-aggregation) CMTM dynamics
-    /// series.  Gravity and joint aggregation are added by the next layer.
+    /// Selected local/world momentum, force and torque products. A scalar
+    /// sample uses a leading batch dimension of one. Output order is preserved.
+    #[pyo3(signature = (motions, rhs, outputs, dynamics_order, gravity = None))]
+    fn dynamics_selected_tangent_batch<'py>(
+        &self, py: Python<'py>, motions: PyReadonlyArray2<'py, f64>,
+        rhs: PyReadonlyArray3<'py, f64>, outputs: Vec<DynamicsOutput>,
+        dynamics_order: usize, gravity: Option<PyReadonlyArray1<'py, f64>>,
+    ) -> PyResult<Bound<'py, PyArray3<f64>>> {
+        let rows = self.check_dynamics_outputs(&outputs, dynamics_order)?;
+        let input_len = self.dof * (dynamics_order + 2);
+        let shape = motions.shape();
+        let rhs_shape = rhs.shape();
+        let batch = shape[0];
+        let cols = rhs_shape[2];
+        let rhs_rows = input_len;
+        let out_rows = rows;
+        if shape[1] != input_len || rhs_shape[..2] != [batch, rhs_rows] {
+            return Err(PyValueError::new_err("selected dynamics motion or RHS shape is invalid"));
+        }
+        let motions = motions.as_slice()?;
+        let rhs = rhs.as_slice()?;
+        let gravity = gravity_vec3(gravity)?;
+        let mut primal = DynamicsCmtmWorkspace::new(self, dynamics_order);
+        let mut tangent = DynamicsCmtmTangentWorkspace::new(self, dynamics_order, cols);
+        let mut out = vec![0.0; batch * out_rows * cols];
+        for sample in 0..batch {
+            let motion = &motions[sample * input_len..(sample + 1) * input_len];
+            self.check_cmtm_motion(motion, dynamics_order + 2)?;
+            let rhs = &rhs[sample * rhs_rows * cols..(sample + 1) * rhs_rows * cols];
+            let result = &mut out[sample * out_rows * cols..(sample + 1) * out_rows * cols];
+            self.dynamics_selected_tangent_into(motion, rhs, &outputs, dynamics_order, gravity, &mut primal, &mut tangent, result);
+        }
+        Ok(out.into_pyarray(py).reshape([batch, out_rows, cols])?)
+    }
+
+    /// Selected local/world momentum, force and torque products. A scalar
+    /// sample uses a leading batch dimension of one. Output order is preserved.
+    #[pyo3(signature = (motions, rhs, outputs, dynamics_order, gravity = None))]
+    fn dynamics_selected_transpose_batch<'py>(
+        &self, py: Python<'py>, motions: PyReadonlyArray2<'py, f64>,
+        rhs: PyReadonlyArray3<'py, f64>, outputs: Vec<DynamicsOutput>,
+        dynamics_order: usize, gravity: Option<PyReadonlyArray1<'py, f64>>,
+    ) -> PyResult<Bound<'py, PyArray3<f64>>> {
+        let rows = self.check_dynamics_outputs(&outputs, dynamics_order)?;
+        let input_len = self.dof * (dynamics_order + 2);
+        let shape = motions.shape();
+        let rhs_shape = rhs.shape();
+        let batch = shape[0];
+        let cols = rhs_shape[2];
+        let rhs_rows = rows;
+        let out_rows = input_len;
+        if shape[1] != input_len || rhs_shape[..2] != [batch, rhs_rows] {
+            return Err(PyValueError::new_err("selected dynamics motion or RHS shape is invalid"));
+        }
+        let motions = motions.as_slice()?;
+        let rhs = rhs.as_slice()?;
+        let gravity = gravity_vec3(gravity)?;
+        let mut primal = DynamicsCmtmWorkspace::new(self, dynamics_order);
+        let mut out = vec![0.0; batch * out_rows * cols];
+        for sample in 0..batch {
+            let motion = &motions[sample * input_len..(sample + 1) * input_len];
+            self.check_cmtm_motion(motion, dynamics_order + 2)?;
+            let rhs = &rhs[sample * rhs_rows * cols..(sample + 1) * rhs_rows * cols];
+            let result = &mut out[sample * out_rows * cols..(sample + 1) * out_rows * cols];
+            self.dynamics_selected_reverse_into(motion, rhs, &outputs, dynamics_order, gravity, cols, &mut primal, result);
+        }
+        Ok(out.into_pyarray(py).reshape([batch, out_rows, cols])?)
+    }
+
+    /// Select local link momentum/force Jv from the complete CMTM dynamics
+    /// tangent recurrence, including gravity.
     #[pyo3(signature = (motion, motion_tangent, dynamics_order, gravity = None))]
     fn cmtm_link_dynamics_tangent<'py>(
         &self,

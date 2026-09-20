@@ -641,6 +641,22 @@ pub(crate) fn cmtm_accumulate_mat_adj_wrench_series_into(
         c_blocks[k] = scale_mat3(acc_c, scale);
     }
 
+    cmtm_accumulate_wrench_series_from_blocks_into(
+        raw_rhs, order, fact, a_blocks, c_blocks, raw_target,
+    );
+}
+
+/// Apply a prefix of already prepared factorial-scaled wrench blocks to an
+/// ordinary derivative series. This permits momentum and gravity transport
+/// across the same joint to share blocks without caching another transform.
+pub(crate) fn cmtm_accumulate_wrench_series_from_blocks_into(
+    raw_rhs: &[f64],
+    order: usize,
+    fact: &[f64],
+    a_blocks: &[[[f64; 3]; 3]],
+    c_blocks: &[[[f64; 3]; 3]],
+    raw_target: &mut [f64],
+) {
     for k in 0..order {
         let mut acc = [0.0; 6];
         for i in 0..=k {

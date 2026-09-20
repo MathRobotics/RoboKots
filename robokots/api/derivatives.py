@@ -100,6 +100,10 @@ class DerivativesMixin:
     if fast is not None:
       return fast
 
+    fast = self._rust_selected_dynamics_jacobian(state_type_list, max_order, list_output=list_output)
+    if fast is not None:
+      return fast
+
     if not isinstance(state, list):
       if self.batch_shape_:
         try:
@@ -162,6 +166,12 @@ class DerivativesMixin:
     )
 
   def _jacobian_matvec_from_state(self, state, state_type_list, max_order : int, vec, batch_shape : tuple, list_output : bool = False):
+    fast = self._rust_selected_dynamics_apply(
+      state_type_list, max_order, vec, batch_shape, rhs_is_matrix=False,
+      transpose=False, list_output=list_output,
+    )
+    if fast is not None:
+      return fast
     if any(st.owner_type in ("link", "joint") and st.data_type in keys_force and st.frame_name == "world" for st in state_type_list):
       jacob = self._jacobian_from_state(state, state_type_list, max_order, False)
       vec_part = vec.reshape(batch_shape + (vec.shape[-1],)) if batch_shape else vec
@@ -219,6 +229,12 @@ class DerivativesMixin:
     )
 
   def _jacobian_matmul_rhs_from_state(self, state, state_type_list, max_order : int, rhs, batch_shape : tuple, list_output : bool = False):
+    fast = self._rust_selected_dynamics_apply(
+      state_type_list, max_order, rhs, batch_shape, rhs_is_matrix=True,
+      transpose=False, list_output=list_output,
+    )
+    if fast is not None:
+      return fast
     if any(st.owner_type in ("link", "joint") and st.data_type in keys_force and st.frame_name == "world" for st in state_type_list):
       jacob = self._jacobian_from_state(state, state_type_list, max_order, False)
       rhs_part = rhs.reshape(batch_shape + rhs.shape[-2:]) if batch_shape else rhs
@@ -354,6 +370,12 @@ class DerivativesMixin:
     return batch_shapes.stack_sample_results(sample_results, batch_shape)
 
   def _jacobian_transpose_matvec_from_state(self, state, state_type_list, max_order : int, vec, batch_shape : tuple):
+    fast = self._rust_selected_dynamics_apply(
+      state_type_list, max_order, vec, batch_shape, rhs_is_matrix=False,
+      transpose=True,
+    )
+    if fast is not None:
+      return fast
     world_vjp = getattr(self, "_rust_cmtm_world_link_dynamics_jacobian_transpose_apply", None)
     if world_vjp is not None:
       fast = world_vjp(state_type_list, max_order, vec, batch_shape, rhs_is_matrix=False)
@@ -466,6 +488,12 @@ class DerivativesMixin:
   def _jacobian_transpose_mul_from_state(self, state, state_type_list, max_order : int, rhs, batch_shape : tuple, rhs_is_matrix : bool):
     if not rhs_is_matrix:
       return self._jacobian_transpose_matvec_from_state(state, state_type_list, max_order, rhs, batch_shape)
+
+    fast = self._rust_selected_dynamics_apply(
+      state_type_list, max_order, rhs, batch_shape, rhs_is_matrix=True, transpose=True,
+    )
+    if fast is not None:
+      return fast
 
     world_vjp = getattr(self, "_rust_cmtm_world_link_dynamics_jacobian_transpose_apply", None)
     if world_vjp is not None:

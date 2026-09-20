@@ -3,6 +3,58 @@
 These scripts are for local performance investigation and are not part of the
 normal RoboKots runtime path.
 
+## State Cache Scope Experiment
+
+```bash
+.venv/bin/python -m developer.benchmarks.state_cache_scope --build /tmp/robokots-cache-probe
+.venv/bin/python -u -m developer.benchmarks.state_cache_scope --extension /tmp/robokots-cache-probe/probe.so
+```
+
+Builds an isolated Rust extension from the current sources, without installing
+it or changing production kernels. Compares existing recomputation, eager full
+state, lazy completion of the order-3 zero-gravity state, and lazy full
+recomputation. Measures dynamics, first/repeated JVP/VJP, and numeric buffer
+capacities independently. Build uses the existing Cargo dependency cache
+(`--offline`). See [the report](results/state_cache_scope.md) and
+[raw timings/environment/source hashes](results/state_cache_scope.json).
+Benchmark-only Rust additions are in `cache_probe/`; their prepared kernels
+reuse the primal state without recomputing dynamics or kinematics.
+
+## High-order Production Comparison
+
+Preserve the old release extension before rebuilding, then compare two binaries:
+
+```bash
+.venv/bin/python -m developer.benchmarks.high_order_production \
+  --baseline /path/to/baseline.so --optimized /path/to/optimized.so
+```
+
+Each binary runs in a fresh process. Three rounds alternate binary order, with
+5 warmups and 30 samples of 5 evaluations each. Measures raw persistent-workspace
+updates and public `import_motions` + `dynamics`, with cache invalidation on every
+call; includes order 3 as a regression check. Checks all local link/joint
+momentum and force derivatives against the baseline. Results and binary/source
+hashes are saved in [the report](results/high_order_production.md) and
+[JSON](results/high_order_production.json). These are production API timings;
+`high_order_speed` above remains an isolated kernel experiment and reconstructs
+the pre-optimization baseline inside its temporary source copy.
+
+## High-order Dynamics Speed Experiment
+
+```bash
+.venv/bin/python -m developer.benchmarks.high_order_speed --build /tmp/robokots-high-order-probe
+.venv/bin/python -u -m developer.benchmarks.high_order_speed --extension /tmp/robokots-high-order-probe/probe.so
+```
+
+Uses an isolated extension to compare orders 4/5/6/8: direct spatial-velocity
+series propagation, reuse of wrench transport blocks for gravity, and their
+combination. Preserves complete state outputs and checks all semantic buffers
+against existing Rust plus independent NumPy momentum/force values. Measures
+kinematics and full dynamics separately, without changing production dispatch.
+See [the report](results/high_order_speed.md) and
+[raw results/environment/source hashes](results/high_order_speed.json).
+Prototype sources are in `high_order_probe/`.
+
 ## Runtime Benchmark
 
 ```bash

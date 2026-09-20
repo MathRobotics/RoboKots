@@ -222,8 +222,47 @@ split incrementally without adding another user-visible state container.
 `StateCache` holds semantic outward/CMTM state. Rust and inward workspaces are
 algorithm-specific numerical storage and must not be inserted into that cache.
 
+### Selected Rust dynamics derivatives
+
+For dynamics requests with motion order at least 3, the Rust derivative adapter
+can select link/joint momentum and force in local or world coordinates together
+with joint torque. `None` and `"local"` denote local spatial outputs. Mixed
+owners, frames, derivative orders, repeated selections, `total_joint` expansion,
+and leading batch axes retain the public output ordering.
+
+`robokots/_rust/src/dynamics_outputs.rs` selects results from the same primal
+and tangent recurrence used by the torque-series API. World JVPs include both
+wrench and moving-transform derivatives. World VJP seeds are accumulated with
+local force/momentum/torque seeds before the common dynamics and kinematics
+reverse pass. `jacobian_mul()` and `jacobian_transpose_mul()` use direct products;
+only `jacobian()` supplies a full input basis to materialize a dense Jacobian.
+The existing pure-torque fast paths remain in use.
+
+The Python adapter is in `robokots/api/rust_derivatives.py`, and the batched PyO3
+entry points are `dynamics_selected_tangent_batch` and
+`dynamics_selected_transpose_batch`. Each call computes its own primal state;
+workspaces are reused across samples within the call, not cached across calls.
+The supported model set remains the Rust CMTM fixed/revolute rigid-link subset.
+Requests outside the selected-output contract retain their existing dispatch.
+
 Run the fixed Rust comparison used for optimization work:
 
 ```bash
 uv run --extra developer python -m developer.benchmarks.fixed_rust_compare --profile quick
 ```
+
+### Rust high-order state computation
+
+For motion order >= 4, `cmtm_generic.rs::kinematics_cmtm_high_order_into`
+propagates ordinary spatial-velocity derivatives using factorial-scaled
+relative inverse-rotation coefficients. This replaces 4x4 series composition
+and velocity recovery for the supported fixed/revolute models.
+`cmtm_series.rs::dynamics_cmtm_into` reuses momentum wrench-transport blocks
+for the gravity series across the same joint. No persistent state-cache fields
+are added; one temporary rotation buffer of `72 * (order - 1)` bytes is reused
+across joints. The order-3 zero-gravity specialized path remains in place.
+
+See the [production comparison](benchmarks/results/high_order_production.md)
+for timings including public API costs. High-order state values and existing
+analytic Jacobian/JVP/VJP paths are checked against NumPy and central differences
+in `tests/outward/test_rust_high_order.py`.

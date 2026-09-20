@@ -12,6 +12,70 @@ _logger = logging.getLogger(__name__)
 
 
 class RustDerivativesMixin:
+  def _rust_selected_dynamics_specs(self, states, max_order):
+    """Describe complete dynamics requests; leave pure torque to its fast path."""
+    if not hasattr(self.outward_state_, "raw_data") or self.dim_ != 3 or max_order < 3:
+      return None
+    if not states or all(st.data_type in keys_torque and st.frame_name is None for st in states):
+      return None
+    link_ids = {link.name: i for i, link in enumerate(self.robot_.links)}
+    joint_ids = {joint.name: i for i, joint in enumerate(self.robot_.joints)}
+    specs, widths = [], []
+    for st in states:
+      ids = link_ids if st.owner_type == "link" else joint_ids if st.owner_type == "joint" else None
+      if ids is None or st.owner_name not in ids or st.frame_name not in (None, "local", "world"):
+        return None
+      if st.data_type in keys_momentum:
+        family, width = 0, 6
+      elif st.data_type in keys_force:
+        family, width = 1, 6
+      elif st.data_type in keys_torque:
+        if st.owner_type != "joint" or st.frame_name == "world" or self.robot_.joint(st.owner_name).dof != 1:
+          return None
+        family, width = 2, 1
+      else:
+        return None
+      time = st.key_order - 1
+      if time < 0 or time >= max_order - (1 if family == 0 else 2):
+        return None
+      specs.append((0 if st.owner_type == "link" else 1, ids[st.owner_name], family, time, st.frame_name == "world"))
+      widths.append(width)
+    return specs, widths
+
+  def _rust_selected_dynamics_apply(self, states, max_order, rhs, batch_shape, *, rhs_is_matrix, transpose=False, list_output=False):
+    spec = self._rust_selected_dynamics_specs(states, max_order)
+    if spec is None:
+      return None
+    specs, widths = spec
+    motion = np.asarray(self.motion(max_order), dtype=float)
+    input_dim = self.robot_.dof * max_order
+    rows = sum(widths) if transpose else input_dim
+    rhs = np.asarray(rhs, dtype=float)
+    cols = rhs.shape[-1] if rhs_is_matrix else 1
+    batch_size = int(np.prod(batch_shape)) if batch_shape else 1
+    flat_motion = np.ascontiguousarray(motion.reshape(batch_size, input_dim))
+    flat_rhs = np.ascontiguousarray(rhs.reshape(batch_size, rows, cols))
+    robot = self._rust_compiled_robot()
+    kernel = robot.dynamics_selected_transpose_batch if transpose else robot.dynamics_selected_tangent_batch
+    result = np.asarray(kernel(flat_motion, flat_rhs, specs, max_order - 2, gravity=self.gravity_))
+    result = result.reshape(tuple(batch_shape) + (input_dim if transpose else sum(widths), cols))
+    if not rhs_is_matrix:
+      result = result[..., 0]
+    if transpose or not list_output:
+      return result
+    offsets = np.cumsum([0] + widths)
+    return [result[..., offsets[i]:offsets[i + 1], :] if rhs_is_matrix else result[..., offsets[i]:offsets[i + 1]] for i in range(len(widths))]
+
+  def _rust_selected_dynamics_jacobian(self, states, max_order, list_output=False):
+    if self._rust_selected_dynamics_specs(states, max_order) is None:
+      return None
+    batch_shape = np.asarray(self.motion(max_order)).shape[:-1]
+    input_dim = self.robot_.dof * max_order
+    basis = np.broadcast_to(np.eye(input_dim), batch_shape + (input_dim, input_dim))
+    return self._rust_selected_dynamics_apply(
+      states, max_order, basis, batch_shape, rhs_is_matrix=True, list_output=list_output,
+    )
+
   def _rust_torque_row_parts(self, state_type_list, max_order : int):
     if self.dim_ != 3 or max_order != 3:
       return None
