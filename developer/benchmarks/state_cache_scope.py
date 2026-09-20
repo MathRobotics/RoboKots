@@ -194,7 +194,7 @@ def report(metadata, rows):
     for r in rows:
         p=r['policies']; c=p['current']; e=p['eager']; l=p['lazy_fill']; lr=p['lazy_recompute']
         lines.append(f"|{r['dof']}|{r['batch']}|{r['order']}|{'nonzero' if any(r['gravity']) else 'zero'}|{c['median_us']['dynamics']:.2f}|{e['median_us']['dynamics']:.2f}|{l['median_us']['dynamics']:.2f}|{l['median_us']['promotion']:.2f}|{lr['median_us']['promotion']:.2f}|{c['total_median_us']:.2f}|{e['total_median_us']:.2f}|{l['total_median_us']:.2f}|")
-    lines += ["", "## Memory", "", "Numeric Vec capacities only (KiB): excludes model copies, Vec/struct headers, allocator overhead, Python views and output arrays. Semantic state is a subset of dynamics buffers, not an additional copy. Tangent buffer is one sample with two RHS columns; it can be reused across batch samples. Removing scratch/separate kinematics is a byte-count estimate, not a measured alternative implementation.", "", "|DOF|Batch|Order|Dynamics buffers|Separate kinematics|Semantic subset|One tangent buffer|", "|---:|---:|---:|---:|---:|---:|---:|"]
+    lines += ["", "## Memory", "", "Numeric Vec capacities only (KiB): excludes model copies, Vec/struct headers, allocator overhead, Python views and output arrays. Semantic state is a subset of dynamics buffers, not an additional copy. Tangent buffer is one sample with two RHS columns; it can be reused across batch samples. Production shares the kinematics allocation; the separate-kinematics column is zero. Scratch reduction is not measured here.", "", "|DOF|Batch|Order|Dynamics buffers|Separate kinematics|Semantic subset|One tangent buffer|", "|---:|---:|---:|---:|---:|---:|---:|"]
     for r in rows:
         if any(r['gravity']): continue
         m=r['memory_bytes']; lines.append(f"|{r['dof']}|{r['batch']}|{r['order']}|"+'|'.join(f'{v/1024:.2f}' for v in m.values())+'|')
@@ -207,7 +207,7 @@ def report(metadata, rows):
         "推奨は lazy_fill。通常の dynamics は同じ計算経路を維持し、微分が最初に要求されたときだけ、既存のリンク運動・関節運動量から不足する関節情報、リンク運動量・力、関節力を補う。order 5や非ゼロ重力では元々計算済みの状態をそのまま利用する。",
         "補完先の数値領域は現在の DynamicsCmtmWorkspace に既に確保されており、今回の試作では状態保存用の追加配列を作っていない。保持するのは motion/重力/次数に依存する状態。JVP/VJPの右辺に依存する配列は計算用バッファとして分離し、密ヤコビ行列・world変換後の全系列を無条件に状態キャッシュへ追加しない。",
         "同一条件の新旧状態を重複保持せず、motion更新時は既存領域を更新する。モデル・motion revision・次数・重力・batch shape を有効性条件とし、異なる形状を無制限には蓄積しない。最新の利用中状態と必要な作業バッファを優先する。キャッシュ上限や形状変更時の割り当て性能は今回の測定対象外。",
-        "64自由度・batch 8・order 5では、動力学バッファ949 KiBに対し、別の運動学バッファが449.81 KiB。後者は遅延確保・共用化の候補だが、今回は削除した場合の速度を測定していないため、削減効果の予測と実測を区別する。状態とscratchの分離によるコピーを増やす変更も採用前に測定する。", "",
+        "運動学領域の一本化と動力学固有領域の遅延確保は本体へ適用済み。別確保の運動学領域はゼロ。領域の確保・切り替え・定常更新の測定は shared_workspace.md を参照。この実験は dynamics 後の微分で状態を再利用する方針を比較する。", "",
         "### dynamics + 最初のJVP/VJP各1回", "",
         "以下も同じ測定の先頭4フェーズの和の中央値。単位はµs。", "",
         "|DOF|Batch|Order|Gravity|Current|Lazy fill|", "|---:|---:|---:|:---:|---:|---:|"]

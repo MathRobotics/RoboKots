@@ -35,11 +35,8 @@ impl RustOutwardData {
     }
 
     pub(crate) fn cmtm_source(&self) -> PyResult<&CmtmWorkspace> {
-        if self.has_dynamics {
-            return Ok(&self.dynamics.cmtm);
-        }
         if self.has_kinematics {
-            return Ok(&self.kinematics);
+            return Ok(&self.dynamics.cmtm);
         }
         Err(PyValueError::new_err(
             "compute_kinematics or compute_dynamics must be called before reading kinematics values",
@@ -119,11 +116,8 @@ impl RustBatchOutwardData {
     }
 
     pub(crate) fn cmtm_source(&self, sample: usize) -> PyResult<&CmtmWorkspace> {
-        if self.has_dynamics {
-            return Ok(&self.dynamics[sample].cmtm);
-        }
         if self.has_kinematics {
-            return Ok(&self.kinematics[sample]);
+            return Ok(&self.dynamics[sample].cmtm);
         }
         Err(PyValueError::new_err(
             "compute_kinematics or compute_dynamics must be called before reading kinematics values",

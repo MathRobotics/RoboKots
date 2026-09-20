@@ -509,8 +509,7 @@ impl RustCompiledRobot {
             robot: self.clone(),
             order,
             dynamics_order,
-            kinematics: CmtmWorkspace::new(self, order),
-            dynamics: DynamicsCmtmWorkspace::new(self, dynamics_order),
+            dynamics: DynamicsCmtmWorkspace::kinematics_only(self, order),
             has_kinematics: false,
             has_dynamics: false,
             has_cached_order1_dynamics: false,
@@ -549,18 +548,15 @@ impl RustCompiledRobot {
             return Err(PyValueError::new_err("order must be >= 1"));
         }
         let dynamics_order = order.saturating_sub(2);
-        let mut kinematics = Vec::with_capacity(batch);
         let mut dynamics = Vec::with_capacity(batch);
         for _ in 0..batch {
-            kinematics.push(CmtmWorkspace::new(self, order));
-            dynamics.push(DynamicsCmtmWorkspace::new(self, dynamics_order));
+            dynamics.push(DynamicsCmtmWorkspace::kinematics_only(self, order));
         }
         Ok(RustBatchOutwardData {
             robot: self.clone(),
             order,
             dynamics_order,
             batch,
-            kinematics,
             dynamics,
             has_kinematics: false,
             has_dynamics: false,
@@ -2791,6 +2787,11 @@ impl RustFastData {
 
 #[pymethods]
 impl RustOutwardData {
+    /// Internal allocation diagnostic: shared kinematics and dynamics-only bytes.
+    fn _workspace_buffer_bytes(&self) -> (usize, usize) {
+        (self.dynamics.cmtm.buffer_bytes(), self.dynamics.buffer_bytes())
+    }
+
     #[getter]
     fn order(&self) -> usize {
         self.order
@@ -2805,7 +2806,7 @@ impl RustOutwardData {
         let motion = motion.as_slice()?;
         self.robot.check_cmtm_motion(motion, self.order)?;
         self.robot
-            .kinematics_cmtm_into(motion, self.order, &mut self.kinematics);
+            .kinematics_cmtm_into(motion, self.order, &mut self.dynamics.cmtm);
         self.has_kinematics = true;
         self.has_dynamics = false;
         self.has_cached_order1_dynamics = false;
@@ -2824,6 +2825,7 @@ impl RustOutwardData {
         let gravity = gravity_vec3(gravity)?;
         let motion = motion.as_slice()?;
         self.robot.check_cmtm_motion(motion, self.order)?;
+        self.dynamics.ensure_dynamics(&self.robot, self.dynamics_order);
         if self.order == 3 && self.dynamics_order == 1 && gravity == [0.0; 3] {
             self.robot
                 .dynamics_cmtm_order1_cached_into(motion, &mut self.dynamics);
@@ -2850,6 +2852,7 @@ impl RustOutwardData {
         let gravity = gravity_vec3(gravity)?;
         let motion = motion.as_slice()?;
         self.robot.check_cmtm_motion(motion, self.order)?;
+        self.dynamics.ensure_dynamics(&self.robot, self.dynamics_order);
         self.robot.dynamics_cmtm_minimal_into(
             motion,
             self.dynamics_order,
@@ -3272,6 +3275,13 @@ impl RustOutwardData {
 
 #[pymethods]
 impl RustBatchOutwardData {
+    /// Internal allocation diagnostic: shared kinematics and dynamics-only bytes.
+    fn _workspace_buffer_bytes(&self) -> (usize, usize) {
+        self.dynamics.iter().fold((0, 0), |(kin, dyn_bytes), ws| {
+            (kin + ws.cmtm.buffer_bytes(), dyn_bytes + ws.buffer_bytes())
+        })
+    }
+
     #[getter]
     fn order(&self) -> usize {
         self.order
@@ -3297,7 +3307,7 @@ impl RustBatchOutwardData {
             self.robot.kinematics_cmtm_into(
                 &motions[start..end],
                 self.order,
-                &mut self.kinematics[sample],
+                &mut self.dynamics[sample].cmtm,
             );
         }
         self.has_kinematics = true;
@@ -3322,6 +3332,7 @@ impl RustBatchOutwardData {
         for sample in 0..self.batch {
             let start = sample * motion_len;
             let end = start + motion_len;
+            self.dynamics[sample].ensure_dynamics(&self.robot, self.dynamics_order);
             if self.order == 3 && self.dynamics_order == 1 && gravity == [0.0; 3] {
                 self.robot.dynamics_cmtm_order1_cached_into(
                     &motions[start..end],
@@ -3359,6 +3370,7 @@ impl RustBatchOutwardData {
         for sample in 0..self.batch {
             let start = sample * motion_len;
             let end = start + motion_len;
+            self.dynamics[sample].ensure_dynamics(&self.robot, self.dynamics_order);
             self.robot.dynamics_cmtm_minimal_into(
                 &motions[start..end],
                 self.dynamics_order,

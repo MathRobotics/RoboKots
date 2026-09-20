@@ -1,5 +1,7 @@
 # Rust state-cache scope experiment
 
+Historical measurement before shared kinematics and lazy dynamics allocation. The separate 449.81 KiB allocation discussed below has since been removed; see [the workspace comparison](shared_workspace.md). Original measurements are preserved. Derivative-state reuse remains an isolated experiment.
+
 This is an isolated prototype; production dynamics and installed extension are unchanged.
 
 Environment: macOS-15.7.4-arm64-arm-64bit-Mach-O, Python 3.13.1, NumPy 2.4.6. Seed 872, float64, RHS columns 2.

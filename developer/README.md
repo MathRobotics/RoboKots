@@ -266,3 +266,20 @@ See the [production comparison](benchmarks/results/high_order_production.md)
 for timings including public API costs. High-order state values and existing
 analytic Jacobian/JVP/VJP paths are checked against NumPy and central differences
 in `tests/outward/test_rust_high_order.py`.
+
+### Shared Rust outward workspace
+
+`RustOutwardData` and `RustBatchOutwardData` each use `dynamics.cmtm` as their
+single kinematics allocation. At creation, `DynamicsCmtmWorkspace::kinematics_only`
+leaves all dynamics-specific vectors empty. The first full or minimal dynamics
+call invokes `ensure_dynamics` to allocate them without replacing or copying the
+CMTM state. Later kinematics calls invalidate dynamics values while retaining
+its allocated capacity for reuse. Read access is controlled by the existing
+`has_kinematics`, `has_dynamics`, and order-3 completion flags.
+
+Transient derivative workspaces still use the fully allocated `new` constructor.
+The raw object's private `_workspace_buffer_bytes()` diagnostic returns shared
+kinematics and dynamics-only numerical capacities; it excludes model copies,
+object headers, allocator overhead and Python outputs. See
+[allocation and timing measurements](benchmarks/results/shared_workspace.md).
+This does not change the existing cache of workspaces by order and batch shape.

@@ -142,6 +142,27 @@ pub(crate) struct CmtmWorkspace {
 }
 
 impl CmtmWorkspace {
+    /// Heap capacity of numerical buffers, excluding structs and allocator overhead.
+    pub(crate) fn buffer_bytes(&self) -> usize {
+        self.link_mat.capacity() * std::mem::size_of::<f64>()
+            + self.link_vecs.capacity() * std::mem::size_of::<f64>()
+            + self.joint_mat.capacity() * std::mem::size_of::<f64>()
+            + self.joint_vecs.capacity() * std::mem::size_of::<f64>()
+            + self.fast_r.capacity() * std::mem::size_of::<f64>()
+            + self.fast_p.capacity() * std::mem::size_of::<f64>()
+            + self.fast_w.capacity() * std::mem::size_of::<f64>()
+            + self.fast_lin_v.capacity() * std::mem::size_of::<f64>()
+            + self.fast_alpha.capacity() * std::mem::size_of::<f64>()
+            + self.fast_lin_a.capacity() * std::mem::size_of::<f64>()
+            + self.factorial.capacity() * std::mem::size_of::<f64>()
+            + self.tmp_rel_vecs.capacity() * std::mem::size_of::<f64>()
+            + self.tmp_out_vecs.capacity() * std::mem::size_of::<f64>()
+            + self.tmp_mat4_blocks_a.capacity() * std::mem::size_of::<[[f64; 4]; 4]>()
+            + self.tmp_mat4_blocks_b.capacity() * std::mem::size_of::<[[f64; 4]; 4]>()
+            + self.tmp_mat4_blocks_out.capacity() * std::mem::size_of::<[[f64; 4]; 4]>()
+            + self.tmp_hat4_blocks.capacity() * std::mem::size_of::<[[f64; 4]; 4]>()
+    }
+
     pub(crate) fn new(robot: &RustCompiledRobot, order: usize) -> Self {
         Self {
             link_mat: vec![0.0; robot.link_num * 16],
@@ -331,28 +352,85 @@ impl DynamicsCmtmTangentWorkspace {
 }
 
 impl DynamicsCmtmWorkspace {
+    /// Heap capacity of numerical buffers, excluding structs and allocator overhead.
+    pub(crate) fn buffer_bytes(&self) -> usize {
+        self.link_momentum.capacity() * std::mem::size_of::<f64>()
+            + self.link_force.capacity() * std::mem::size_of::<f64>()
+            + self.joint_momentum.capacity() * std::mem::size_of::<f64>()
+            + self.joint_force.capacity() * std::mem::size_of::<f64>()
+            + self.joint_gravity_force.capacity() * std::mem::size_of::<f64>()
+            + self.link_local_gravity.capacity() * std::mem::size_of::<f64>()
+            + self.joint_torque.capacity() * std::mem::size_of::<f64>()
+            + self.factorial.capacity() * std::mem::size_of::<f64>()
+            + self.tmp_link_momentum.capacity() * std::mem::size_of::<f64>()
+            + self.tmp_joint_momentum.capacity() * std::mem::size_of::<f64>()
+            + self.tmp_force.capacity() * std::mem::size_of::<f64>()
+            + self.tmp_gravity_force.capacity() * std::mem::size_of::<f64>()
+            + self.tmp_local_gravity.capacity() * std::mem::size_of::<f64>()
+            + self.tmp_rel_vecs.capacity() * std::mem::size_of::<f64>()
+            + self.tmp_scaled_vecs.capacity() * std::mem::size_of::<f64>()
+            + self.cached_motion.capacity() * std::mem::size_of::<f64>()
+            + self.tmp_wrench_adj_a_blocks.capacity() * std::mem::size_of::<[[f64; 3]; 3]>()
+            + self.tmp_wrench_adj_c_blocks.capacity() * std::mem::size_of::<[[f64; 3]; 3]>()
+    }
+
     pub(crate) fn new(robot: &RustCompiledRobot, dynamics_order: usize) -> Self {
+        let mut workspace = Self::kinematics_only(robot, dynamics_order + 2);
+        workspace.ensure_dynamics(robot, dynamics_order);
+        workspace
+    }
+
+    /// One shared kinematics state; dynamics-only arrays initially own no heap storage.
+    pub(crate) fn kinematics_only(robot: &RustCompiledRobot, order: usize) -> Self {
         Self {
-            cmtm: CmtmWorkspace::new(robot, dynamics_order + 2),
-            link_momentum: vec![0.0; robot.link_num * (dynamics_order + 1) * 6],
-            link_force: vec![0.0; robot.link_num * dynamics_order * 6],
-            joint_momentum: vec![0.0; robot.joint_num * (dynamics_order + 1) * 6],
-            joint_force: vec![0.0; robot.joint_num * dynamics_order * 6],
-            joint_gravity_force: vec![0.0; robot.joint_num * dynamics_order * 6],
-            link_local_gravity: vec![0.0; robot.link_num * dynamics_order * 3],
-            joint_torque: vec![0.0; robot.joint_num * dynamics_order],
-            factorial: vec![1.0; (dynamics_order + 2).max(1)],
-            tmp_link_momentum: vec![0.0; (dynamics_order + 1) * 6],
-            tmp_joint_momentum: vec![0.0; (dynamics_order + 1) * 6],
-            tmp_force: vec![0.0; dynamics_order * 6],
-            tmp_gravity_force: vec![0.0; dynamics_order * 6],
-            tmp_local_gravity: vec![0.0; dynamics_order * 3],
-            tmp_rel_vecs: vec![0.0; dynamics_order * 6],
-            tmp_scaled_vecs: vec![0.0; dynamics_order * 6],
-            cached_motion: vec![0.0; robot.dof * (dynamics_order + 2)],
-            tmp_wrench_adj_a_blocks: vec![[[0.0; 3]; 3]; dynamics_order + 1],
-            tmp_wrench_adj_c_blocks: vec![[[0.0; 3]; 3]; dynamics_order + 1],
+            cmtm: CmtmWorkspace::new(robot, order),
+            link_momentum: Vec::new(),
+            link_force: Vec::new(),
+            joint_momentum: Vec::new(),
+            joint_force: Vec::new(),
+            joint_gravity_force: Vec::new(),
+            link_local_gravity: Vec::new(),
+            joint_torque: Vec::new(),
+            factorial: Vec::new(),
+            tmp_link_momentum: Vec::new(),
+            tmp_joint_momentum: Vec::new(),
+            tmp_force: Vec::new(),
+            tmp_gravity_force: Vec::new(),
+            tmp_local_gravity: Vec::new(),
+            tmp_rel_vecs: Vec::new(),
+            tmp_scaled_vecs: Vec::new(),
+            cached_motion: Vec::new(),
+            tmp_wrench_adj_a_blocks: Vec::new(),
+            tmp_wrench_adj_c_blocks: Vec::new(),
         }
+    }
+
+    /// Allocate once on the first dynamics evaluation. Never replace the shared
+    /// CMTM buffers or discard allocations when switching back to kinematics.
+    pub(crate) fn ensure_dynamics(&mut self, robot: &RustCompiledRobot, dynamics_order: usize) {
+        // A populated factorial table is the allocation marker, including zero-DOF models.
+        if !self.factorial.is_empty() {
+            return;
+        }
+        debug_assert_eq!(self.cmtm.factorial.len(), dynamics_order + 2);
+        self.link_momentum = vec![0.0; robot.link_num * (dynamics_order + 1) * 6];
+        self.link_force = vec![0.0; robot.link_num * dynamics_order * 6];
+        self.joint_momentum = vec![0.0; robot.joint_num * (dynamics_order + 1) * 6];
+        self.joint_force = vec![0.0; robot.joint_num * dynamics_order * 6];
+        self.joint_gravity_force = vec![0.0; robot.joint_num * dynamics_order * 6];
+        self.link_local_gravity = vec![0.0; robot.link_num * dynamics_order * 3];
+        self.joint_torque = vec![0.0; robot.joint_num * dynamics_order];
+        self.factorial = vec![1.0; (dynamics_order + 2).max(1)];
+        self.tmp_link_momentum = vec![0.0; (dynamics_order + 1) * 6];
+        self.tmp_joint_momentum = vec![0.0; (dynamics_order + 1) * 6];
+        self.tmp_force = vec![0.0; dynamics_order * 6];
+        self.tmp_gravity_force = vec![0.0; dynamics_order * 6];
+        self.tmp_local_gravity = vec![0.0; dynamics_order * 3];
+        self.tmp_rel_vecs = vec![0.0; dynamics_order * 6];
+        self.tmp_scaled_vecs = vec![0.0; dynamics_order * 6];
+        self.cached_motion = vec![0.0; robot.dof * (dynamics_order + 2)];
+        self.tmp_wrench_adj_a_blocks = vec![[[0.0; 3]; 3]; dynamics_order + 1];
+        self.tmp_wrench_adj_c_blocks = vec![[[0.0; 3]; 3]; dynamics_order + 1];
     }
 
     pub(crate) fn clear(&mut self) {

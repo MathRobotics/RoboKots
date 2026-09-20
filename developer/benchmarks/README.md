@@ -3,6 +3,23 @@
 These scripts are for local performance investigation and are not part of the
 normal RoboKots runtime path.
 
+## Shared Kinematics / Lazy Dynamics Allocation
+
+```bash
+.venv/bin/python -m developer.benchmarks.shared_workspace \
+  --baseline /path/to/baseline.so --optimized /path/to/optimized.so
+```
+
+Preserve the baseline release binary before rebuilding. Compares workspace
+creation, first dynamics after kinematics, repeated kinematics/dynamics,
+alternating calls and public dynamics including motion import. Three fresh
+process rounds each load both binaries and randomly interleave them per phase
+and sample: 5 warmups, 30 samples per round, 5 calls per hot sample.
+The optimized binary reports numeric buffer capacities before/after each state
+transition. See [report](results/shared_workspace.md) and
+[raw data](results/shared_workspace.json). The older cache-scope report below
+retains historical measurements with the former duplicate allocation.
+
 ## State Cache Scope Experiment
 
 ```bash

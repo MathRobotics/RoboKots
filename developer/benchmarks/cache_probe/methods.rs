@@ -73,7 +73,7 @@
         let state = &states[0];
         let memory = vec![
             state.probe_bytes() * batch,
-            state.cmtm.probe_bytes() * batch, // separately allocated kinematics in RustOutwardData
+            0, // production shares dynamics.cmtm; no separate kinematics allocation
             state.probe_semantic_bytes() * batch,
             DynamicsCmtmTangentWorkspace::new(self, dynamics_order, cols).probe_bytes(),
         ];

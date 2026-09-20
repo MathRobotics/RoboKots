@@ -1,7 +1,7 @@
 use pyo3::prelude::*;
 
 use crate::pinocchio_like::PinocchioLikeWorkspace;
-use crate::workspace::{AbaWorkspace, CmtmWorkspace, DynamicsCmtmWorkspace};
+use crate::workspace::{AbaWorkspace, DynamicsCmtmWorkspace};
 
 #[derive(Clone)]
 #[pyclass(name = "RustCompiledRobot")]
@@ -57,7 +57,6 @@ pub struct RustOutwardData {
     pub(crate) robot: RustCompiledRobot,
     pub(crate) order: usize,
     pub(crate) dynamics_order: usize,
-    pub(crate) kinematics: CmtmWorkspace,
     pub(crate) dynamics: DynamicsCmtmWorkspace,
     pub(crate) has_kinematics: bool,
     pub(crate) has_dynamics: bool,
@@ -70,7 +69,6 @@ pub struct RustBatchOutwardData {
     pub(crate) order: usize,
     pub(crate) dynamics_order: usize,
     pub(crate) batch: usize,
-    pub(crate) kinematics: Vec<CmtmWorkspace>,
     pub(crate) dynamics: Vec<DynamicsCmtmWorkspace>,
     pub(crate) has_kinematics: bool,
     pub(crate) has_dynamics: bool,
