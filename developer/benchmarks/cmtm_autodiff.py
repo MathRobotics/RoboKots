@@ -9,7 +9,7 @@ from math import factorial
 
 import jax.numpy as jnp
 
-from robokots.core.models.dynamics.base import spatial_inertia
+from robokots.outward.kernels.inertia import spatial_inertia
 from robokots.core.state.spec import keys_torque
 from robokots.outward.diff.dynamics_jax import _ad, _relative_transform
 from .time_autodiff import _validate_robot, _flat_function

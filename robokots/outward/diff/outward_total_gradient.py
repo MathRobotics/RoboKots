@@ -10,40 +10,40 @@ from robokots.core import RobotStruct
 from robokots.core.state.spec import StateType, dim_to_dof, data_type_dof, data_type_offset
 from robokots.core.state.spec import keys_kinematics, keys_momentum, keys_force, keys_torque
 from robokots.outward.access import total_link_cmvec, state_cmtm, state_cmtm_wrench, state_cmvec, state_rel_cmtm
-from robokots.core.models.kinematics.kinematics_matrix import joint_select_diag_mat
+from robokots.outward.kernels.joint import joint_select_diag_mat
 
-from robokots.core.models.whole_body.total_kinematics_grad_mat import (
+from robokots.outward.kernels.whole_body.kinematics_derivatives import (
     total_coord_to_joint_tan_vel_grad_mat,
     total_coord_to_link_tan_vel_grad_mat,
     total_coord_to_link_tan_vel_grad_matvec,
     total_coord_to_link_vel_grad_mat,
     total_coord_to_link_vel_grad_matvec,
 )
-from robokots.core.models.whole_body.total_kinematics_mat import total_coord_arrange
-from robokots.core.models.whole_body.total_dynamics_grad_mat import (
+from robokots.outward.kernels.whole_body.kinematics import total_coord_arrange
+from robokots.outward.kernels.whole_body.dynamics_derivatives import (
     total_coord_to_joint_momentum_grad_mat,
     total_coord_to_link_momentum_grad_mat,
     total_coord_to_link_momentum_grad_matvec,
     total_coord_to_world_joint_momentum_grad_mat,
     total_coord_to_world_link_momentum_grad_mat,
 )
-from robokots.core.models.whole_body.total_dynamics_grad_mat import (
+from robokots.outward.kernels.whole_body.dynamics_derivatives import (
     total_coord_to_joint_force_grad_mat,
     total_coord_to_joint_torque_grad_mat,
     total_coord_to_link_force_grad_mat,
 )
-from robokots.core.models.whole_body.total_gravity_grad_mat import (
+from robokots.outward.kernels.whole_body.gravity_derivatives import (
     total_coord_to_joint_gravity_force_grad_mat,
     total_coord_to_link_gravity_force_grad_mat,
     total_link_pose_to_gravity_force_grad_matmul_rhs,
 )
-from robokots.core.models.whole_body.total_dynamics_mat import (
+from robokots.outward.kernels.whole_body.dynamics import (
     total_joint_wrench_to_joint_torque_mat,
     total_joint_wrench_to_joint_torque_matvec,
     total_world_link_wrench_to_world_joint_wrench_mat,
     total_world_link_wrench_to_world_joint_wrench_matvec,
 )
-from robokots.core.models.whole_body.total_partial_grad_mat import (
+from robokots.outward.kernels.whole_body.partial_dynamics import (
     total_partial_link_momentum_to_world_link_momentum_grad_mat,
     total_partial_link_momentum_to_world_link_momentum_grad_matvec,
     total_partial_link_sp_vel_to_joint_force_grad_mat,
@@ -59,15 +59,15 @@ from robokots.core.models.whole_body.total_partial_grad_mat import (
     total_partial_world_joint_momentum_to_joint_momentum_grad_mat,
     total_partial_world_joint_momentum_to_joint_momentum_grad_matvec,
 )
-from robokots.core.models.whole_body.topology_layout import (
+from robokots.outward.kernels.whole_body.topology import (
     take_joint_child_link_blocks,
     take_joint_child_link_matrix_blocks,
 )
-from robokots.core.models.dynamics.base import spatial_inertia
-from robokots.core.models.dynamics.dynamics_matrix import (
+from robokots.outward.kernels.inertia import spatial_inertia
+from robokots.outward.kernels.dynamics_derivatives import (
     inertia_diag_mat,
 )
-from robokots.core.models.cmtm_apply import apply_mat_adj, apply_mat_inv_adj
+from robokots.outward.kernels.cmtm_apply import apply_mat_adj, apply_mat_inv_adj
 
 
 def _selected_coord_to_link_vel_grad_mat(

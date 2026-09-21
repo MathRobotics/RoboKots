@@ -13,8 +13,8 @@ from mathrobo import CMTM, SE3
 from ...core.motion import RobotMotions
 from ...core.robot import RobotStruct
 from ...outward.data import OutwardState
-from ...core.models.kinematics.base import convert_joint_to_data
-from ...core.models.kinematics.kinematics_jax import joint_local_cmtm, joint_rel_cmtm
+from robokots.outward.kernels.joint import convert_joint_to_data
+from robokots.outward.kernels.kinematics_jax import joint_local_cmtm, joint_rel_cmtm
 
 
 class KState(NamedTuple):

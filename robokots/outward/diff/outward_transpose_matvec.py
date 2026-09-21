@@ -13,22 +13,22 @@ from robokots.outward.access import (
     state_sample,
 )
 from robokots.core import batch_shape as batch_shapes
-from robokots.core.models.kinematics.kinematics_matrix import joint_select_diag_mat
-from robokots.core.models.dynamics.base import spatial_inertia
-from robokots.core.models.dynamics.dynamics_matrix import (
+from robokots.outward.kernels.joint import joint_select_diag_mat
+from robokots.outward.kernels.inertia import spatial_inertia
+from robokots.outward.kernels.dynamics_derivatives import (
     inertia_diag_mat,
     partial_link_sp_vel_to_force_grad_mat,
     partial_momentum_to_force_grad_mat,
 )
-from robokots.core.models.whole_body.total_dynamics_mat import (
+from robokots.outward.kernels.whole_body.dynamics import (
     total_world_link_cmtm_wrench_matvec,
     total_world_link_wrench_to_world_joint_wrench_matvec,
 )
-from robokots.core.models.whole_body.total_gravity_grad_mat import (
+from robokots.outward.kernels.whole_body.gravity_derivatives import (
     state_gravity,
     total_link_gravity_force,
 )
-from robokots.core.models.whole_body.topology_layout import scatter_joint_child_link_blocks
+from robokots.outward.kernels.whole_body.topology import scatter_joint_child_link_blocks
 from .outward_total_gradient import (
     _batch_selected_coord_to_link_vel_grad_mat,
     _is_batched_kinematics_state,

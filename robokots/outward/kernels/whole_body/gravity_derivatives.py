@@ -5,11 +5,11 @@ from robokots.core import RobotStruct
 from robokots.core.state.spec import dim_to_dof
 from robokots.outward.access import state_cmtm, state_cmtm_wrench
 
-from ..cmtm_apply import apply_mat_inv_adj
-from ..dynamics.base import spatial_inertia
-from ..dynamics.dynamics_matrix import inertia_diag_mat
-from .topology_layout import take_joint_child_link_blocks
-from .total_kinematics_grad_mat import total_coord_to_link_tan_vel_grad_mat
+from robokots.outward.kernels.cmtm_apply import apply_mat_inv_adj
+from robokots.outward.kernels.inertia import spatial_inertia
+from robokots.outward.kernels.dynamics_derivatives import inertia_diag_mat
+from robokots.outward.kernels.whole_body.topology import take_joint_child_link_blocks
+from robokots.outward.kernels.whole_body.kinematics_derivatives import total_coord_to_link_tan_vel_grad_mat
 
 
 def state_gravity(state, gravity=None) -> np.ndarray:

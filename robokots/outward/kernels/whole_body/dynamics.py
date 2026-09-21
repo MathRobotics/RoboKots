@@ -4,13 +4,13 @@ from robokots.core import RobotStruct
 from robokots.core.state.spec import dim_to_dof
 from robokots.outward.access import state_cmtm
 from robokots.outward.access import state_cmtm_wrench, state_rel_cmtm_wrench
-from robokots.core.models.cmtm_apply import apply_mat_adj, apply_mat_inv_adj
+from robokots.outward.kernels.cmtm_apply import apply_mat_adj, apply_mat_inv_adj
 
-from ..kinematics.kinematics_matrix import joint_select_diag_mat
-from ..dynamics.base import spatial_inertia
-from ..dynamics.dynamics_matrix import inertia_diag_mat, momentum_to_force_mat
+from robokots.outward.kernels.joint import joint_select_diag_mat
+from robokots.outward.kernels.inertia import spatial_inertia
+from robokots.outward.kernels.dynamics_derivatives import inertia_diag_mat, momentum_to_force_mat
 
-from .total_kinematics_mat import total_coord_to_link_vel_mat
+from robokots.outward.kernels.whole_body.kinematics import total_coord_to_link_vel_mat
 
 def total_joint_wrench_to_joint_torque_mat(r : RobotStruct, torque_order : int = 1, dim : int = 3) -> np.ndarray:
     n_ = dim_to_dof(dim) * torque_order

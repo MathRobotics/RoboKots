@@ -3,11 +3,32 @@
 # 2025.04.05 Created by T.Ishigaki
 # kinematics module
 
-import numpy as np
+from dataclasses import dataclass
 
+import numpy as np
 from mathrobo import SE3, CMTM
 
-from .base import JointData
+from robokots.core.robot import JointStruct
+
+
+@dataclass
+class JointData:
+    origin: SE3 # origin frame
+    select_mat: np.ndarray # selection matrix
+    dof: int = 0 # degree of freedom
+    select_indeces: np.ndarray = None # indeces of the selection matrix
+
+
+def convert_joint_to_data(joint: JointStruct) -> JointData:
+  '''
+  Convert joint data to JointData structure
+  Args:
+    joint (JointStruct): joint structure
+  Returns:
+    JointData: JointData structure
+  '''
+  return  JointData(joint.origin, joint.select_mat, joint.dof, joint.select_indeces)
+
 
 def local_tangent_mat(select_mat : np.ndarray, joint_coord : np.ndarray) -> np.ndarray:
   if select_mat.shape[1] == 0:
@@ -196,3 +217,7 @@ def part_link_cmtm_tan_jacob(joint : JointData, rel_cmtm : CMTM, joint_cmtm : CM
 def part_link_cmtm_jacob(joint : JointData, rel_cmtm : CMTM, joint_cmtm : CMTM, link_cmtm : CMTM) -> np.ndarray:
   # return link_cmtm.tan_map_inv() @ part_link_cmtm_tan_jacob(joint, rel_cmtm, joint_cmtm)
   return link_cmtm.tangent_mat_inv() @ part_link_cmtm_tan_jacob(joint, rel_cmtm, joint_cmtm)
+
+
+def joint_select_diag_mat(select_mat : np.ndarray, order : int = 1) -> np.ndarray:
+    return np.kron(np.eye(order), select_mat)

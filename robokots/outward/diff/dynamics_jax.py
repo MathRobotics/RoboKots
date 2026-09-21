@@ -8,7 +8,7 @@ from math import comb
 
 import jax.numpy as jnp
 
-from ...core.models.dynamics.base import spatial_inertia
+from robokots.outward.kernels.inertia import spatial_inertia
 from ...core.state.spec import keys_force, keys_momentum, keys_torque
 
 

@@ -6,7 +6,7 @@ from pathlib import Path
 import mathrobo as mr
 from robokots.kots import *
 from robokots.core.target import TargetList, RobotNames
-from robokots.core.models.kinematics.kinematics_jax import *
+from robokots.outward.kernels.kinematics_jax import *
 from robokots.outward.diff.outward_jax import kinematics_jax as outward_kinematics_jax
 
 METHOD = "poly"
@@ -2215,7 +2215,7 @@ def test_numpy_gravity_aware_torque_jacobian_matches_full_numerical(monkeypatch)
 
 
 def test_numpy_cmtm_gravity_force_jacobians_match_full_numerical():
-    from robokots.core.models.whole_body import (
+    from robokots.outward.kernels.whole_body import (
         total_coord_to_joint_torque_grad_mat,
     )
 

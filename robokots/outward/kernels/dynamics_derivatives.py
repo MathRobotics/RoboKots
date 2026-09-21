@@ -8,7 +8,7 @@ from mathrobo import Factorial, CMVector
 from mathrobo import SE3wrench, CMTM
 
 from robokots.core.state.spec import dim_to_dof
-from .dynamics import link_momentum_cmvec
+from robokots.outward.kernels.dynamics import link_momentum_cmvec
 
 def inertia_diag_mat(inertia : np.ndarray, order : int = 1) -> np.ndarray:
     if inertia.shape != (6, 6):

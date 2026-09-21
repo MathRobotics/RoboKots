@@ -8,7 +8,7 @@ from typing import List
 import jax
 import jax.numpy as jnp
 from mathrobo import SE3, CMTM
-from .base import JointData
+from robokots.outward.kernels.joint import JointData
 
 # Joint-space twist calculation with proper JAX conditional
 def local_tan_vec(select_mat: jnp.ndarray, joint_vec: jnp.ndarray) -> jnp.ndarray:

@@ -126,11 +126,51 @@ which is no longer exported by `outward` or `outward.values`.
 `robokots.core` lazily exports only types owned by core. Import `OutwardState`
 and `ArrayOutwardState` from `robokots.outward.data`, and `StateCache` from
 `robokots.api.state_cache`; their former `robokots.core` exports are removed.
-`core/models/`, `target.py`, `time_grid.py`, and `viz.py` retain their existing
-responsibilities in this change. Only imports within the models are updated.
+`target.py`, `time_grid.py`, and `viz.py` retain their existing responsibilities.
 
 Before/after timings and numerical comparisons are documented in the
 [state layout benchmark](benchmarks/README.md#core-state-layout).
+
+### Outward computation kernels
+
+The former `core/models/` implementations now live in `outward/kernels/`.
+They compute local joint/link quantities and assemble whole-body operators;
+they are not backend-independent data definitions. This also removes the
+former dependency from core models back into `outward/access.py`.
+
+| Former module under `core.models` | Module under `outward.kernels` |
+| --- | --- |
+| `kinematics.kinematics`, `kinematics.kinematics_matrix` | `joint` |
+| `kinematics.base` joint adapters | `joint` |
+| `kinematics.base` soft-link adapters, `kinematics.kinematics_soft_link` | `soft_link` |
+| `kinematics.kinematics_jax` | `kinematics_jax` |
+| `dynamics.base` | `inertia` |
+| `dynamics.dynamics` | `dynamics` |
+| `dynamics.dynamics_matrix` | `dynamics_derivatives` |
+| `cmtm_apply` | `cmtm_apply` |
+| `whole_body.basic` | `whole_body.operators` |
+| `whole_body.topology_layout` | `whole_body.topology` |
+| `whole_body.total_kinematics_mat` | `whole_body.kinematics` |
+| `whole_body.total_kinematics_grad_mat` | `whole_body.kinematics_derivatives` |
+| `whole_body.total_dynamics_mat` | `whole_body.dynamics` |
+| `whole_body.total_dynamics_grad_mat` | `whole_body.dynamics_derivatives` |
+| `whole_body.total_partial_grad_mat` | `whole_body.partial_dynamics` |
+| `whole_body.total_gravity_grad_mat` | `whole_body.gravity_derivatives` |
+
+`JointData`/`SoftLinkData` and their converters belong with their local kernels.
+They remain computation adapters, separate from `core.robot` structure types.
+`partial_dynamics` includes both momentum and force partial derivatives.
+Dense matrices and direct products stay together by physical operation; JVP/VJP
+paths are not replaced by dense matrix construction. The numerical definitions,
+factorial normalization, gravity conventions, and CMTM apply selection are unchanged.
+
+There are no old-path compatibility modules or re-exports. Import local kernels
+explicitly, for example `from robokots.outward.kernels.joint import JointData`.
+`outward.kernels.whole_body` retains lazy exports of its own operator functions.
+Importing NumPy kernels does not select the JAX implementation. Existing public
+`Kots` methods are unchanged. Kernel tests live under `tests/outward/kernels/`.
+See the [kernel layout benchmark](benchmarks/README.md#kernel-layout) for
+separate state-building, dense Jacobian, JVP, and VJP measurements.
 
 ### Computational state and export
 

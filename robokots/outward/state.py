@@ -19,17 +19,18 @@ from ..outward.access import (
 )
 from ..core.state.spec import data_type_dof, StateType
 
-from ..core.models.kinematics.base import convert_joint_to_data, convert_link_to_data
-from ..core.models.kinematics.kinematics import joint_local_cmtm
-from ..core.models.kinematics.kinematics_soft_link import soft_link_local_cmtm, calc_link_local_point_frame
+from robokots.outward.kernels.joint import convert_joint_to_data
+from robokots.outward.kernels.soft_link import convert_link_to_data
+from robokots.outward.kernels.joint import joint_local_cmtm
+from robokots.outward.kernels.soft_link import soft_link_local_cmtm, calc_link_local_point_frame
 
-from ..core.models.dynamics.base import spatial_inertia
-from ..core.models.dynamics.dynamics import (
+from robokots.outward.kernels.inertia import spatial_inertia
+from robokots.outward.kernels.dynamics import (
     joint_project_wrench,
     link_force_cmvec,
     link_momentum_cmvec,
 )
-from ..core.models.cmtm_apply import apply_mat_adj, apply_mat_inv_adj
+from robokots.outward.kernels.cmtm_apply import apply_mat_adj, apply_mat_inv_adj
 
 
 def _batch_eye_cmtm(batch_shape: tuple[int, ...], order: int) -> CMTM:

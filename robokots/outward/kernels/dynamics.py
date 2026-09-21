@@ -9,8 +9,8 @@ from mathrobo import CMVector, Factorial
 from mathrobo import SE3, SE3wrench, CMTM
 
 from robokots.core import JointStruct
-from robokots.core.models.cmtm_apply import apply_mat_inv_adj
-from robokots.core.models.kinematics.kinematics import local_tangent_mat
+from robokots.outward.kernels.cmtm_apply import apply_mat_inv_adj
+from robokots.outward.kernels.joint import local_tangent_mat
 
 
 def joint_project_wrench(joint: JointStruct, wrench: np.ndarray, joint_coord: np.ndarray = None) -> np.ndarray:

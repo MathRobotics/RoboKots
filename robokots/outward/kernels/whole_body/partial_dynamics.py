@@ -3,16 +3,16 @@ import numpy as np
 from robokots.core import RobotStruct
 from robokots.core.state.spec import dim_to_dof
 from robokots.outward.access import total_link_cmvec, state_cmtm, state_cmvec
-from ..dynamics.base import spatial_inertia
-from ..dynamics.dynamics_matrix import link_sp_vel_to_link_force_grad_mat, partial_link_sp_vel_to_force_grad_mat, partial_momentum_to_force_grad_mat
-from .basic import total_factorial_mat, total_factorial_mat_inv
-from .basic import total_factorial_matvec, total_factorial_mat_inv_vec
-from .basic import total_link_cmtm_wrench_var_x_arb_vec, total_joint_cmtm_wrench_inv_var_x_arb_vec
-from .basic import total_link_cmtm_wrench_var_x_arb_vec_matvec, total_joint_cmtm_wrench_inv_var_x_arb_vec_matvec
-from .total_dynamics_mat import total_world_link_cmtm_wrench, total_world_joint_cmtm_wrench_inv
-from .total_dynamics_mat import total_world_link_cmtm_wrench_matvec, total_world_joint_cmtm_wrench_inv_matvec
-from .total_dynamics_mat import total_world_link_wrench_to_world_joint_wrench_mat
-from .total_dynamics_mat import total_world_link_wrench_to_world_joint_wrench_matvec
+from robokots.outward.kernels.inertia import spatial_inertia
+from robokots.outward.kernels.dynamics_derivatives import link_sp_vel_to_link_force_grad_mat, partial_link_sp_vel_to_force_grad_mat, partial_momentum_to_force_grad_mat
+from robokots.outward.kernels.whole_body.operators import total_factorial_mat, total_factorial_mat_inv
+from robokots.outward.kernels.whole_body.operators import total_factorial_matvec, total_factorial_mat_inv_vec
+from robokots.outward.kernels.whole_body.operators import total_link_cmtm_wrench_var_x_arb_vec, total_joint_cmtm_wrench_inv_var_x_arb_vec
+from robokots.outward.kernels.whole_body.operators import total_link_cmtm_wrench_var_x_arb_vec_matvec, total_joint_cmtm_wrench_inv_var_x_arb_vec_matvec
+from robokots.outward.kernels.whole_body.dynamics import total_world_link_cmtm_wrench, total_world_joint_cmtm_wrench_inv
+from robokots.outward.kernels.whole_body.dynamics import total_world_link_cmtm_wrench_matvec, total_world_joint_cmtm_wrench_inv_matvec
+from robokots.outward.kernels.whole_body.dynamics import total_world_link_wrench_to_world_joint_wrench_mat
+from robokots.outward.kernels.whole_body.dynamics import total_world_link_wrench_to_world_joint_wrench_matvec
 
 '''
     Gradients of link momentum with respect to world frame

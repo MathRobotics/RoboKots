@@ -7,9 +7,10 @@ from robokots.core.motion import RobotMotions
 from robokots.core.state.spec import data_type_to_sub_func, StateType
 
 from robokots.outward.access import state_rel_frame, state_rel_cmtm, state_cmtm
-from robokots.core.models.kinematics.base import convert_joint_to_data, convert_link_to_data
-from robokots.core.models.kinematics.kinematics import part_link_jacob, part_link_cmtm_tan_jacob
-from robokots.core.models.kinematics.kinematics_soft_link import part_soft_link_jacob, part_soft_link_cmtm_tan_jacob, calc_local_tan_mat
+from robokots.outward.kernels.joint import convert_joint_to_data
+from robokots.outward.kernels.soft_link import convert_link_to_data
+from robokots.outward.kernels.joint import part_link_jacob, part_link_cmtm_tan_jacob
+from robokots.outward.kernels.soft_link import part_soft_link_jacob, part_soft_link_cmtm_tan_jacob, calc_local_tan_mat
 
 from robokots.outward.values import compute_outward_value
 

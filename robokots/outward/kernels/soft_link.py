@@ -3,14 +3,37 @@
 # 2025.04.05 Created by T.Ishigaki
 # kinematics module
 
+from dataclasses import dataclass
+
 import numpy as np
 from scipy.linalg import expm
 
 from mathrobo import SE3, CMTM
 from mathrobo import gq_integrate
 
-from .base import SoftLinkData
-    
+from robokots.core.robot import LinkStruct
+
+
+@dataclass
+class SoftLinkData:
+    origin_coord: np.ndarray
+    select_mat: np.ndarray # selection matrix
+    length: float = 0.0 # length of the soft link
+    dof: int = 0 # degree of freedom
+    select_indeces: np.ndarray = None # indeces of the selection matrix
+
+
+def convert_link_to_data(link: LinkStruct) -> SoftLinkData:
+  '''
+  Convert link data to SoftLinkData structure
+  Args:
+    link (LinkStruct): link structure
+  Returns:
+    SoftLinkData: SoftLinkData structure
+  '''
+  return  SoftLinkData(link.origin_coord , link.select_mat, link.length, link.dof, link.select_indeces)
+
+
 def calc_soft_link_strain(soft_link : SoftLinkData, soft_link_coord : np.ndarray) -> np.ndarray:
     if len(soft_link_coord) != 0:
         strain = soft_link.select_mat @ soft_link_coord.flatten() + soft_link.origin_coord

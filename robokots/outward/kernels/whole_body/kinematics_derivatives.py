@@ -3,10 +3,10 @@ import numpy as np
 from robokots.core import RobotStruct
 from robokots.core.state.spec import dim_to_dof
 from robokots.outward.access import state_cmtm, state_rel_cmtm
-from robokots.core.models.cmtm_apply import apply_mat_adj, apply_tangent_mat
-from ..kinematics.kinematics_matrix import joint_select_diag_mat
+from robokots.outward.kernels.cmtm_apply import apply_mat_adj, apply_tangent_mat
+from robokots.outward.kernels.joint import joint_select_diag_mat
 
-from .total_kinematics_mat import total_coord_arrange
+from robokots.outward.kernels.whole_body.kinematics import total_coord_arrange
 
 def total_coord_arrange_vec(r : RobotStruct, vec : np.ndarray, out_order : int = 3, in_order : int = 3) -> np.ndarray:
     arranged = np.zeros(r.joint_dof * out_order)

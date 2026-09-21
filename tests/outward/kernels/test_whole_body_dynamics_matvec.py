@@ -3,13 +3,13 @@ from pathlib import Path
 import numpy as np
 
 from robokots.kots import Kots
-from robokots.core.models.whole_body.total_dynamics_mat import (
+from robokots.outward.kernels.whole_body.dynamics import (
     total_joint_wrench_to_joint_torque_mat,
     total_joint_wrench_to_joint_torque_matvec,
     total_world_link_wrench_to_world_joint_wrench_mat,
     total_world_link_wrench_to_world_joint_wrench_matvec,
 )
-from robokots.core.models.whole_body.total_partial_grad_mat import (
+from robokots.outward.kernels.whole_body.partial_dynamics import (
     total_partial_link_momentum_to_world_link_momentum_grad_mat,
     total_partial_link_momentum_to_world_link_momentum_grad_matvec,
     total_partial_link_sp_vel_to_joint_force_grad_mat,

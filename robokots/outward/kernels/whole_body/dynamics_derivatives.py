@@ -3,14 +3,14 @@ import numpy as np
 from robokots.core import RobotStruct
 from robokots.core.state.spec import dim_to_dof
 
-from .total_dynamics_mat import total_link_inertia_mat, total_joint_wrench_to_joint_torque_mat
-from .total_dynamics_mat import total_world_link_wrench_to_world_joint_wrench_mat
-from .total_dynamics_mat import total_link_inertia_matvec
-from .total_kinematics_grad_mat import total_coord_to_joint_tan_vel_grad_mat, total_joint_tan_vel_to_link_sp_vel_grad_mat
-from .total_kinematics_grad_mat import total_coord_to_link_tan_vel_grad_mat, total_coord_to_link_vel_grad_mat
-from .total_kinematics_grad_mat import total_coord_to_link_sp_vel_grad_matvec
+from robokots.outward.kernels.whole_body.dynamics import total_link_inertia_mat, total_joint_wrench_to_joint_torque_mat
+from robokots.outward.kernels.whole_body.dynamics import total_world_link_wrench_to_world_joint_wrench_mat
+from robokots.outward.kernels.whole_body.dynamics import total_link_inertia_matvec
+from robokots.outward.kernels.whole_body.kinematics_derivatives import total_coord_to_joint_tan_vel_grad_mat, total_joint_tan_vel_to_link_sp_vel_grad_mat
+from robokots.outward.kernels.whole_body.kinematics_derivatives import total_coord_to_link_tan_vel_grad_mat, total_coord_to_link_vel_grad_mat
+from robokots.outward.kernels.whole_body.kinematics_derivatives import total_coord_to_link_sp_vel_grad_matvec
 
-from .total_partial_grad_mat import (
+from robokots.outward.kernels.whole_body.partial_dynamics import (
     total_partial_link_momentum_to_world_link_momentum_grad_mat,
     total_partial_link_sp_vel_to_joint_force_grad_mat,
     total_partial_link_sp_vel_to_link_force_grad_mat,
@@ -19,12 +19,12 @@ from .total_partial_grad_mat import (
     total_partial_momentum_to_force_grad_mat,
     total_partial_world_joint_momentum_to_joint_momentum_grad_mat,
 )
-from .total_gravity_grad_mat import (
+from robokots.outward.kernels.whole_body.gravity_derivatives import (
     state_gravity,
     total_coord_to_joint_gravity_force_grad_mat,
     total_coord_to_link_gravity_force_grad_mat,
 )
-from .topology_layout import (
+from robokots.outward.kernels.whole_body.topology import (
     take_joint_child_link_blocks,
     take_joint_child_link_matrix_blocks,
 )

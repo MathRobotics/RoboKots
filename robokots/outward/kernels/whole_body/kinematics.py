@@ -5,7 +5,7 @@ from robokots.core import RobotStruct
 from robokots.core.state.spec import dim_to_dof
 from robokots.outward.access import state_cmtm, state_rel_cmtm
 
-from ..kinematics.kinematics_matrix import joint_select_diag_mat
+from robokots.outward.kernels.joint import joint_select_diag_mat
 
 def total_coord_arrange(r : RobotStruct, out_order : int = 3, in_order : int = 3) -> np.ndarray:
     mat = np.zeros((r.joint_dof * out_order, r.joint_dof * in_order))

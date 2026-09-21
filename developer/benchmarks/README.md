@@ -3,6 +3,39 @@
 These scripts are for local performance investigation and are not part of the
 normal RoboKots runtime path.
 
+## Kernel Layout
+
+Measure before moving `core/models`, then run the same workload after moving it:
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 .venv/bin/python -m developer.benchmarks.kernel_layout --output developer/benchmarks/results/kernel_layout_before.json
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 .venv/bin/python -m developer.benchmarks.kernel_layout --output developer/benchmarks/results/kernel_layout_after.json --compare developer/benchmarks/results/kernel_layout_before.json
+```
+
+Uses the sample robot, motion order 4, float64, seed 71, world gravity
+`[0.2, -0.3, -9.81]`, single inputs and batches of two. Measures NumPy and Rust
+public API paths separately: motion import plus dynamics, then dense Jacobian,
+direct JVP, and direct VJP of computed states. Selections mix local link velocity
+and force derivative with local joint torque derivative. Rust labels specify
+state storage: dense/JVP for this mixed output selection use Python analytic
+derivatives over Rust state views, while VJP uses Rust direct kernels.
+Internal scalar-state fallback work is included in
+derivative timings. First calls,
+5 warmups and 30 samples of 5 calls are recorded; JAX/JIT and numerical
+differences are not timed. Product results are checked against dense products;
+before/after outputs are compared using maximum absolute and relative Frobenius
+errors. The dense facade path is disabled outside timing to verify product
+dispatch. Avoid concurrent tests during measurement. Separate-process timing
+changes can include machine noise.
+
+See the [report](results/kernel_layout_after.md),
+[before JSON](results/kernel_layout_before.json), and
+[after JSON](results/kernel_layout_after.json) for environment, samples and results.
+For the recorded comparison, the before package was extracted from the
+pre-refactor commit into a temporary directory and used the same Rust extension;
+the after package was loaded from the working tree. Source locations and commit
+identity are recorded in the JSON environment fields.
+
 ## Core State Layout
 
 Measure once before reorganizing the source, then again after the change:
