@@ -171,14 +171,16 @@ def test_numpy_joint_coordinates_and_pure_spatial_products(monkeypatch):
 
 
 @pytest.mark.parametrize('shape',[(),(2,1)])
-def test_numpy_world_force_only_uses_direct_products(shape,monkeypatch):
+@pytest.mark.parametrize('gravity',[[0.,0.,0.],[.2,-.3,-9.81]])
+def test_numpy_world_force_only_uses_direct_products(shape,gravity,monkeypatch):
     k=Kots.from_urdf_file(str(MODEL),order=5)
     rng=np.random.default_rng(515)
     k.import_motions(rng.normal(size=shape+(k.dof()*5,))*.2)
-    k.dynamics(gravity=[.2,-.3,-9.81])
+    k.dynamics(gravity=gravity)
     states=[StateType('joint','a_elbow','force_diff2','world'),StateType('link','b_payload','force','world')]
     jac=k.jacobian(states)
     v=rng.normal(size=shape+(jac.shape[-1],2));w=rng.normal(size=shape+(jac.shape[-2],2))
     monkeypatch.setattr(k,'_jacobian_from_state',lambda *a,**kw:pytest.fail('dense fallback'))
+    monkeypatch.setattr(k,'_state_builder',lambda *a,**kw:pytest.fail('state rebuild'))
     np.testing.assert_allclose(k.jacobian_mul(states,v),jac@v,atol=1e-10)
     np.testing.assert_allclose(k.jacobian_transpose_mul(states,w),np.swapaxes(jac,-1,-2)@w,atol=1e-10)

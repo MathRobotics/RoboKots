@@ -377,6 +377,13 @@ class DerivativesMixin:
     )
     if fast is not None:
       return fast
+    if self.dim_ == 3 and needs_spatial_selection(state_type_list) and not isinstance(state, list):
+      if not batch_shape and np.asarray(vec).ndim > 1:
+        return outward_api.outward_jacobian_transpose_matmul_rhs(
+          self.robot_, state, state_type_list, np.asarray(vec).T, max_order, self.dim_).T
+      return outward_api.outward_jacobian_transpose_matmul_rhs(
+        self.robot_, state, state_type_list, np.asarray(vec).reshape(batch_shape + (vec.shape[-1],))[..., None], max_order, self.dim_)[..., 0]
+
     world_vjp = getattr(self, "_rust_cmtm_world_link_dynamics_jacobian_transpose_apply", None)
     if world_vjp is not None:
       fast = world_vjp(state_type_list, max_order, vec, batch_shape, rhs_is_matrix=False)
@@ -495,6 +502,10 @@ class DerivativesMixin:
     )
     if fast is not None:
       return fast
+
+    if self.dim_ == 3 and needs_spatial_selection(state_type_list) and not isinstance(state, list):
+      return outward_api.outward_jacobian_transpose_matmul_rhs(
+        self.robot_, state, state_type_list, rhs.reshape(batch_shape + rhs.shape[-2:]), max_order, self.dim_)
 
     world_vjp = getattr(self, "_rust_cmtm_world_link_dynamics_jacobian_transpose_apply", None)
     if world_vjp is not None:

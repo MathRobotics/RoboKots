@@ -912,3 +912,16 @@ def outward_jacobian_transpose_matvec(
         robot, state, adj_link_mom, order=max_time_order, dim=dim
     )
     return result
+
+
+def outward_jacobian_transpose_matmul_rhs(robot, state, states, rhs, max_time_order=None, dim=3):
+    """Matrix VJP without materializing an input Jacobian or rebuilding states."""
+    order = max_time_order or StateType.max_time_order(states)
+    if dim == 3 and needs_spatial_selection(states):
+        def dynamics(selected, directions):
+            return np.stack([outward_jacobian_transpose_matvec(
+                robot, state, selected, directions[..., i], order, dim)
+                for i in range(directions.shape[-1])], axis=-1)
+        return selected_apply(robot, state, states, order, np.asarray(rhs), transpose=True, dynamics_apply=dynamics)
+    return np.stack([outward_jacobian_transpose_matvec(robot, state, states, rhs[..., i], order, dim)
+                     for i in range(rhs.shape[-1])], axis=-1)
