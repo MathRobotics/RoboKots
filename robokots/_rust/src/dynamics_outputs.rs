@@ -20,6 +20,11 @@ impl RustCompiledRobot {
         if dynamics_order == 0 {
             return Err(PyValueError::new_err("selected dynamics requires dynamics_order >= 1"));
         }
+        self.check_selected_outputs(outputs, dynamics_order + 2)
+    }
+
+    pub(crate) fn check_selected_outputs(&self, outputs: &[DynamicsOutput], order: usize) -> PyResult<usize> {
+        if order == 0 { return Err(PyValueError::new_err("selected output order must be positive")); }
         let mut rows = 0;
         for &(owner, id, family, time, world) in outputs {
             let owners = match owner {
@@ -28,9 +33,9 @@ impl RustCompiledRobot {
                 _ => return Err(PyValueError::new_err("invalid dynamics output owner")),
             };
             let count = match family {
-                0 => dynamics_order + 1,
-                1 | 2 => dynamics_order,
-                3 => dynamics_order + 1,
+                0 => order.saturating_sub(1),
+                1 | 2 => order.saturating_sub(2),
+                3 => order.saturating_sub(1),
                 4..=6 => 1,
                 _ => return Err(PyValueError::new_err("invalid dynamics output family")),
             };
@@ -49,10 +54,21 @@ impl RustCompiledRobot {
         primal: &mut DynamicsCmtmWorkspace, tangent: &mut DynamicsCmtmTangentWorkspace,
         out: &mut [f64],
     ) {
-        self.dynamics_cmtm_link_tangent_into(
-            motion, directions, dynamics_order, gravity, primal, tangent,
-        );
-        let kin_order = dynamics_order + 2;
+        self.dynamics_cmtm_into(motion, dynamics_order, gravity, primal);
+        self.selected_tangent_from_state_into(motion, directions, outputs, dynamics_order + 2, gravity, primal, tangent, out);
+    }
+
+    pub(crate) fn selected_tangent_from_state_into(
+        &self, motion: &[f64], directions: &[f64], outputs: &[DynamicsOutput],
+        kin_order: usize, gravity: [f64;3], primal: &mut DynamicsCmtmWorkspace,
+        tangent: &mut DynamicsCmtmTangentWorkspace, out: &mut [f64],
+    ) {
+        let dynamics_order = kin_order.saturating_sub(2);
+        if outputs.iter().any(|x| x.2 < 3) {
+            self.dynamics_cmtm_link_tangent_from_state_into(motion, directions, dynamics_order, gravity, primal, tangent);
+        } else {
+            self.kinematics_cmtm_tangent_from_state_into(motion, directions, kin_order, &mut primal.cmtm, tangent);
+        }
         let cols = tangent.rhs_cols;
         let mut row = 0;
         for &(owner, id, family, time, world) in outputs {
@@ -115,7 +131,7 @@ impl RustCompiledRobot {
                 let mut derivative = vec![0.0; order * 6];
                 cmtm_apply_mat_adj_wrench_tangent_into(
                     mat, &vecs[..vec_len], dmat, &dvecs[..vec_len],
-                    &values[..order * 6], &derivatives[..order * 6], order, &primal.factorial,
+                    &values[..order * 6], &derivatives[..order * 6], order, &primal.cmtm.factorial,
                     &mut blocks, &mut dblocks, &mut value, &mut derivative,
                 );
                 for c in 0..6 { out[(row + c) * cols + col] = derivative[time * 6 + if family == 3 { (c+3)%6 } else { c }]; }
@@ -131,14 +147,23 @@ impl RustCompiledRobot {
         primal: &mut DynamicsCmtmWorkspace, out: &mut [f64],
     ) {
         self.dynamics_cmtm_into(motion, dynamics_order, gravity, primal);
-        let kin_order = dynamics_order + 2;
+        self.selected_reverse_from_state_into(motion, rhs, outputs, dynamics_order + 2, gravity, cols, primal, out);
+    }
+
+    pub(crate) fn selected_reverse_from_state_into(
+        &self, motion: &[f64], rhs: &[f64], outputs: &[DynamicsOutput],
+        kin_order: usize, gravity: [f64;3], cols: usize,
+        primal: &mut DynamicsCmtmWorkspace, out: &mut [f64],
+    ) {
+        let dynamics_order = kin_order.saturating_sub(2);
+        let has_dynamics = outputs.iter().any(|x| x.2 < 3);
         let momentum_order = dynamics_order + 1;
         let vec_len = (kin_order - 1) * 6;
-        let mut lm = vec![0.0; self.link_num * momentum_order * 6 * cols];
-        let mut lf = vec![0.0; self.link_num * dynamics_order * 6 * cols];
-        let mut jm = vec![0.0; self.joint_num * momentum_order * 6 * cols];
-        let mut jf = vec![0.0; self.joint_num * dynamics_order * 6 * cols];
-        let mut jt = vec![0.0; self.joint_num * dynamics_order * cols];
+        let mut lm = vec![0.0; if has_dynamics { self.link_num * momentum_order * 6 * cols } else { 0 }];
+        let mut lf = vec![0.0; if has_dynamics { self.link_num * dynamics_order * 6 * cols } else { 0 }];
+        let mut jm = vec![0.0; if has_dynamics { self.joint_num * momentum_order * 6 * cols } else { 0 }];
+        let mut jf = vec![0.0; if has_dynamics { self.joint_num * dynamics_order * 6 * cols } else { 0 }];
+        let mut jt = vec![0.0; if has_dynamics { self.joint_num * dynamics_order * cols } else { 0 }];
         let mut mat_bar = vec![0.0; self.link_num * 16 * cols];
         let mut vec_bar = vec![0.0; self.link_num * vec_len * cols];
         let mut joint_mat_bar = vec![0.0; self.joint_num * 16 * cols];
@@ -214,7 +239,7 @@ impl RustCompiledRobot {
                 let mut scaled = vec![0.0; transport_vec_len];
                 cmtm_accumulate_mat_adj_wrench_series_reverse_accumulate_into(
                     mat, &vecs[..transport_vec_len], &values[..order * 6], &seed,
-                    order, &primal.factorial, &mut scaled, &mut a, &mut c, &mut ab, &mut cb,
+                    order, &primal.cmtm.factorial, &mut scaled, &mut a, &mut c, &mut ab, &mut cb,
                     &mut local_seed, &mut vec_seed, &mut mat_seed,
                 );
                 let local_bar = match (owner, family) {
@@ -233,10 +258,16 @@ impl RustCompiledRobot {
             }
             row += 6;
         }
-        self.dynamics_cmtm_reverse_from_state_into(
-            motion, &lm, &lf, &jm, &jf, &jt, dynamics_order, gravity, cols,
-            None, Some((&mat_bar, &vec_bar)), Some((&joint_mat_bar, &joint_vec_bar)), primal, out,
-        );
+        if has_dynamics {
+            self.dynamics_cmtm_reverse_from_state_into(
+                motion, &lm, &lf, &jm, &jf, &jt, dynamics_order, gravity, cols,
+                None, Some((&mat_bar, &vec_bar)), Some((&joint_mat_bar, &joint_vec_bar)), primal, out,
+            );
+        } else {
+            self.kinematics_cmtm_outward_reverse_from_state_into(
+                motion, kin_order, &mat_bar, &vec_bar, &joint_mat_bar, &joint_vec_bar, cols, &mut primal.cmtm, out,
+            );
+        }
     }
 }
 

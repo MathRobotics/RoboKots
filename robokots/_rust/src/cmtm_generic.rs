@@ -156,6 +156,17 @@ impl RustCompiledRobot {
         debug_assert_eq!(motion.len(), self.dof * order);
         debug_assert_eq!(motion_tangent.len(), self.dof * order * tangent.rhs_cols);
         self.kinematics_cmtm_into(motion, order, primal);
+        self.kinematics_cmtm_tangent_from_state_into(motion, motion_tangent, order, primal, tangent);
+    }
+
+    pub(crate) fn kinematics_cmtm_tangent_from_state_into(
+        &self,
+        motion: &[f64],
+        motion_tangent: &[f64],
+        order: usize,
+        primal: &mut CmtmWorkspace,
+        tangent: &mut DynamicsCmtmTangentWorkspace,
+    ) {
         self.cmtm_joint_tangent_seed_into(motion, motion_tangent, order, tangent);
 
         for j in 0..self.joint_num {
@@ -253,6 +264,16 @@ impl RustCompiledRobot {
         primal: &mut CmtmWorkspace, motion_cotangent: &mut [f64],
     ) {
         self.kinematics_cmtm_into(motion, order, primal);
+        self.kinematics_cmtm_outward_reverse_from_state_into(motion, order, link_mat_cotangent, link_vec_cotangent, joint_mat_cotangent, joint_vec_cotangent, rhs_cols, primal, motion_cotangent);
+    }
+
+    pub(crate) fn kinematics_cmtm_outward_reverse_from_state_into(
+        &self,
+        motion: &[f64], order: usize,
+        link_mat_cotangent: &[f64], link_vec_cotangent: &[f64],
+        joint_mat_cotangent: &[f64], joint_vec_cotangent: &[f64], rhs_cols: usize,
+        primal: &mut CmtmWorkspace, motion_cotangent: &mut [f64],
+    ) {
         motion_cotangent.fill(0.0);
         let vec_len = (order - 1) * 6;
         let mut link_mat_bar = vec![[[0.0; 4]; 4]; self.link_num];

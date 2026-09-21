@@ -316,6 +316,18 @@ pub(crate) struct DynamicsCmtmTangentWorkspace {
 
 #[allow(dead_code)]
 impl DynamicsCmtmTangentWorkspace {
+    pub(crate) fn kinematics_only(robot: &RustCompiledRobot, order: usize, rhs_cols: usize) -> Self {
+        Self {
+            rhs_cols,
+            link_mat: vec![0.0; robot.link_num * 16 * rhs_cols],
+            link_vecs: vec![0.0; robot.link_num * (order - 1) * 6 * rhs_cols],
+            joint_mat: vec![0.0; robot.joint_num * 16 * rhs_cols],
+            joint_vecs: vec![0.0; robot.joint_num * (order - 1) * 6 * rhs_cols],
+            link_momentum: Vec::new(), link_force: Vec::new(), joint_momentum: Vec::new(),
+            joint_force: Vec::new(), joint_gravity_force: Vec::new(), joint_torque: Vec::new(),
+        }
+    }
+
     pub(crate) fn new(
         robot: &RustCompiledRobot,
         dynamics_order: usize,

@@ -329,6 +329,15 @@ impl RustCompiledRobot {
 
 #[pymethods]
 impl RustCompiledRobot {
+    fn create_selected_workspace(&self, order: usize) -> PyResult<crate::types::RustSelectedWorkspace> {
+        if order == 0 { return Err(PyValueError::new_err("selected workspace order must be positive")); }
+        Ok(crate::types::RustSelectedWorkspace {
+            robot: self.clone(), order, primal: Vec::new(), tangent: None, motion: Vec::new(),
+            gravity: [0.0;3], dynamic: false, ready: false,
+            kinematics_evaluations: 0, dynamics_evaluations: 0,
+        })
+    }
+
     #[pyo3(signature = (model_data, allow_prismatic = false))]
     #[staticmethod]
     fn from_model_data(model_data: &Bound<'_, PyDict>, allow_prismatic: bool) -> PyResult<Self> {
@@ -3893,4 +3902,77 @@ fn mat4_from_slice(slice: &[f64]) -> [[f64; 4]; 4] {
         [slice[8], slice[9], slice[10], slice[11]],
         [slice[12], slice[13], slice[14], slice[15]],
     ]
+}
+
+
+#[pymethods]
+impl crate::types::RustSelectedWorkspace {
+    /// Number of actual primal evaluations (kinematics-only, dynamics, cached samples).
+    fn cache_info(&self) -> (usize, usize, usize) {
+        (self.kinematics_evaluations, self.dynamics_evaluations, self.primal.len())
+    }
+
+    #[pyo3(signature = (motions, rhs, outputs, gravity = None, transpose = false))]
+    fn apply<'py>(
+        &mut self, py: Python<'py>, motions: PyReadonlyArray2<'py, f64>,
+        rhs: PyReadonlyArray3<'py, f64>, outputs: Vec<DynamicsOutput>,
+        gravity: Option<PyReadonlyArray1<'py, f64>>, transpose: bool,
+    ) -> PyResult<Bound<'py, PyArray3<f64>>> {
+        let rows = self.robot.check_selected_outputs(&outputs, self.order)?;
+        let input_len = self.robot.dof * self.order;
+        let batch = motions.shape()[0];
+        let cols = rhs.shape()[2];
+        let rhs_rows = if transpose { rows } else { input_len };
+        let out_rows = if transpose { input_len } else { rows };
+        if motions.shape()[1] != input_len || rhs.shape()[..2] != [batch, rhs_rows] {
+            return Err(PyValueError::new_err("selected workspace motion or RHS shape is invalid"));
+        }
+        let motion = motions.as_slice()?;
+        let rhs = rhs.as_slice()?;
+        let gravity = gravity_vec3(gravity)?;
+        for i in 0..batch {
+            self.robot.check_cmtm_motion(&motion[i*input_len..(i+1)*input_len], self.order)?;
+        }
+        let dynamic = outputs.iter().any(|x| x.2 < 3);
+        let replace = self.primal.len() != batch || self.dynamic != dynamic;
+        if replace {
+            self.primal = (0..batch).map(|_| if dynamic {
+                DynamicsCmtmWorkspace::new(&self.robot, self.order-2)
+            } else { DynamicsCmtmWorkspace::kinematics_only(&self.robot, self.order) }).collect();
+            self.tangent = None;
+            self.ready = false;
+        }
+        let changed_gravity = dynamic && self.gravity != gravity;
+        for i in 0..batch {
+            let sample = &motion[i*input_len..(i+1)*input_len];
+            if !self.ready || changed_gravity || self.motion[i*input_len..(i+1)*input_len] != *sample {
+                if dynamic {
+                    self.robot.dynamics_cmtm_into(sample, self.order-2, gravity, &mut self.primal[i]);
+                    self.dynamics_evaluations += 1;
+                } else {
+                    self.robot.kinematics_cmtm_into(sample, self.order, &mut self.primal[i].cmtm);
+                    self.kinematics_evaluations += 1;
+                }
+            }
+        }
+        self.motion.clear(); self.motion.extend_from_slice(motion);
+        self.gravity = gravity; self.dynamic = dynamic; self.ready = true;
+        if !transpose && self.tangent.as_ref().map(|x| x.rhs_cols) != Some(cols) {
+            self.tangent = Some(if dynamic {
+                DynamicsCmtmTangentWorkspace::new(&self.robot, self.order-2, cols)
+            } else { DynamicsCmtmTangentWorkspace::kinematics_only(&self.robot, self.order, cols) });
+        }
+        let mut out = vec![0.0; batch*out_rows*cols];
+        for i in 0..batch {
+            let sample = &motion[i*input_len..(i+1)*input_len];
+            let directions = &rhs[i*rhs_rows*cols..(i+1)*rhs_rows*cols];
+            let result = &mut out[i*out_rows*cols..(i+1)*out_rows*cols];
+            if transpose {
+                self.robot.selected_reverse_from_state_into(sample, directions, &outputs, self.order, gravity, cols, &mut self.primal[i], result);
+            } else {
+                self.robot.selected_tangent_from_state_into(sample, directions, &outputs, self.order, gravity, &mut self.primal[i], self.tangent.as_mut().unwrap(), result);
+            }
+        }
+        Ok(out.into_pyarray(py).reshape([batch, out_rows, cols])?)
+    }
 }

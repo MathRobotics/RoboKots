@@ -105,4 +105,4 @@ def test_selected_dispatch_keeps_existing_boundaries():
         assert (specs is None) == (state.data_type == 'jerk')
     for state in (StateType('link', 'a_tip', 'acc'),
                   StateType('joint', 'a_shoulder', 'torque')):
-        assert k._rust_selected_dynamics_specs([state], 4) is None
+        assert (k._rust_selected_dynamics_specs([state], 4) is None) == (state.data_type == 'torque')

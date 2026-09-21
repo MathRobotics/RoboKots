@@ -74,3 +74,20 @@ pub struct RustBatchOutwardData {
     pub(crate) has_dynamics: bool,
     pub(crate) has_cached_order1_dynamics: bool,
 }
+
+
+/// Bounded latest-batch cache of derivative primals and a reusable tangent buffer.
+/// Independent of semantic Python StateCache; owned by one compiled model.
+#[pyclass(name = "RustSelectedWorkspace")]
+pub struct RustSelectedWorkspace {
+    pub(crate) robot: RustCompiledRobot,
+    pub(crate) order: usize,
+    pub(crate) primal: Vec<DynamicsCmtmWorkspace>,
+    pub(crate) tangent: Option<crate::workspace::DynamicsCmtmTangentWorkspace>,
+    pub(crate) motion: Vec<f64>,
+    pub(crate) gravity: [f64;3],
+    pub(crate) dynamic: bool,
+    pub(crate) ready: bool,
+    pub(crate) kinematics_evaluations: usize,
+    pub(crate) dynamics_evaluations: usize,
+}

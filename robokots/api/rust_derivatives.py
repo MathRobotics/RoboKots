@@ -15,15 +15,14 @@ class RustDerivativesMixin:
   def _rust_selected_dynamics_specs(self, states, max_order):
     """Select dynamics, spatial motion and pose tangents in public output order.
 
-    Keep homogeneous kinematics and pure implicit-local torque on their
-    dedicated paths. Joint motion coordinates are not spatial CMTM entries.
+    Keep pure implicit-local torque on its dedicated path. Joint motion
+    coordinates are not spatial CMTM entries.
     """
-    if not hasattr(self.outward_state_, "raw_data") or self.dim_ != 3 or max_order < 3:
+    if not hasattr(self.outward_state_, "raw_data") or self.dim_ != 3 or max_order < 1:
       return None
     if not states or all(st.data_type in keys_torque and st.frame_name is None for st in states):
       return None
     specs, widths = [], []
-    has_dynamics = False
     families = {"momentum": 0, "force": 1, "torque": 2, "spatial": 3, "pos": 4, "rot": 5, "frame": 6}
     for st in states:
       try:
@@ -33,12 +32,12 @@ class RustDerivativesMixin:
       if spec.family not in families or (spec.family == "torque" and spec.width != 1):
         return None
       family, time = families[spec.family], spec.derivative
-      if time < 0 or time >= max_order - (1 if family in (0, 3) else 2):
+      count = 1 if family >= 4 else max_order - (1 if family in (0, 3) else 2)
+      if time < 0 or time >= count:
         return None
-      has_dynamics |= family < 3
       specs.append((0 if spec.owner_type == "link" else 1, spec.owner_id, family, time, spec.frame == "world"))
       widths.append(spec.width)
-    return (specs, widths) if has_dynamics else None
+    return specs, widths
 
   def _rust_selected_dynamics_apply(self, states, max_order, rhs, batch_shape, *, rhs_is_matrix, transpose=False, list_output=False):
     spec = self._rust_selected_dynamics_specs(states, max_order)
@@ -54,8 +53,11 @@ class RustDerivativesMixin:
     flat_motion = np.ascontiguousarray(motion.reshape(batch_size, input_dim))
     flat_rhs = np.ascontiguousarray(rhs.reshape(batch_size, rows, cols))
     robot = self._rust_compiled_robot()
-    kernel = robot.dynamics_selected_transpose_batch if transpose else robot.dynamics_selected_tangent_batch
-    result = np.asarray(kernel(flat_motion, flat_rhs, specs, max_order - 2, gravity=self.gravity_))
+    cached = getattr(self, "_rust_selected_workspace_", None)
+    if cached is None or cached[0] is not robot or cached[1] != max_order:
+      cached = (robot, max_order, robot.create_selected_workspace(max_order))
+      self._rust_selected_workspace_ = cached
+    result = np.asarray(cached[2].apply(flat_motion, flat_rhs, specs, gravity=self.gravity_, transpose=transpose))
     result = result.reshape(tuple(batch_shape) + (input_dim if transpose else sum(widths), cols))
     if not rhs_is_matrix:
       result = result[..., 0]

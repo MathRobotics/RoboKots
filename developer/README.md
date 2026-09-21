@@ -331,16 +331,38 @@ paths remain in use. Python still validates selections and converts arrays;
 these mixed derivative requests no longer assemble Python analytic kernels.
 
 The Python adapter is in `robokots/api/rust_derivatives.py`, and the batched PyO3
-entry points are `dynamics_selected_tangent_batch` and
-`dynamics_selected_transpose_batch`. Each call computes its own primal state;
-workspaces are reused across samples within the call, not cached across calls.
+stateless entry points remain `dynamics_selected_tangent_batch` and
+`dynamics_selected_transpose_batch`. The public adapter now uses
+`RustSelectedWorkspace.apply`, created by `create_selected_workspace(order)`.
+Pure kinematics (including orders 1 and 2) skips dynamics allocation and
+computation; pose-only derivatives need just order 1.
+
+The derivative workspace is bound to a compiled model and motion order and
+holds only the latest batch, plus one tangent RHS-width allocation. It compares
+motion values exactly per sample and gravity for dynamics; unchanged samples
+reuse their primals across dense/JVP/VJP calls. Changing model/order replaces
+the workspace, batch size or kinematics/dynamics mode replaces primal storage,
+and changing RHS width replaces only the tangent storage. Returned arrays own
+their memory. Invalid shapes/descriptors are rejected before cache mutation.
+`cache_info()` exposes evaluation counts for regression tests and benchmarks.
+This numerical workspace stays outside `StateCache`. The first derivative
+call still prepares its own primal rather than borrowing a mutable outward
+state; reverse scratch arrays are still allocated per invocation.
 The supported model set remains the Rust CMTM fixed/revolute rigid-link subset.
 Requests outside the selected-output contract retain their existing dispatch,
 including joint coordinate outputs. This change does not extend model support.
 
 See the [mixed-output before/after benchmark](benchmarks/README.md#mixed-rust-outputs).
 NumPy spatial selection now uses the shared output operators in
-`outward/diff/spatial_outputs.py` for dense, JVP and VJP requests. Joint spatial
+`outward/diff/spatial_outputs.py` for dense, JVP and VJP requests.
+`core/state/spec.py:StateOutput` defines owner, family, derivative index, width
+and frame for NumPy and Rust; numeric Rust family codes stay in the adapter.
+Spatial operators and route products broadcast over native batch axes rather
+than slicing each sample. Matrix VJPs reuse computed states, including zero
+and nonzero gravity. World-force-only selections now use direct products too.
+The existing scalar dynamics reverse subroutine still handles individual batch
+samples internally; it no longer forces spatial selections or state building
+into that loop. Joint spatial
 outputs select relative joint motion; a fixed joint therefore has zero relative
 velocity even when its child link moves. This corrects the previous mixed
 assembly's use of the preceding link's rows. Independent central differences

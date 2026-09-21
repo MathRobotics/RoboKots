@@ -505,10 +505,22 @@ impl RustCompiledRobot {
         primal: &mut DynamicsCmtmWorkspace,
         tangent: &mut DynamicsCmtmTangentWorkspace,
     ) {
+        self.dynamics_cmtm_into(motion, dynamics_order, gravity, primal);
+        self.dynamics_cmtm_link_tangent_from_state_into(motion, motion_tangent, dynamics_order, gravity, primal, tangent);
+    }
+
+    pub(crate) fn dynamics_cmtm_link_tangent_from_state_into(
+        &self,
+        motion: &[f64],
+        motion_tangent: &[f64],
+        dynamics_order: usize,
+        gravity: [f64; 3],
+        primal: &mut DynamicsCmtmWorkspace,
+        tangent: &mut DynamicsCmtmTangentWorkspace,
+    ) {
         let kin_order = dynamics_order + 2;
         let momentum_order = dynamics_order + 1;
-        self.dynamics_cmtm_into(motion, dynamics_order, gravity, primal);
-        self.kinematics_cmtm_tangent_into(
+        self.kinematics_cmtm_tangent_from_state_into(
             motion,
             motion_tangent,
             kin_order,
