@@ -296,8 +296,8 @@ def test_rust_dynamics_outward_cmtm_matches_split_outputs():
 def test_rust_backend_array_state_exposes_cmtm_and_cmvector():
     pytest.importorskip("robokots._rust")
     from mathrobo import CMTM, CMVector
-    from robokots.core.outward_state import ArrayOutwardState
-    from robokots.core.state_access import state_cmvec, state_cmtm
+    from robokots.outward.data import ArrayOutwardState
+    from robokots.outward.access import state_cmvec, state_cmtm
     from robokots.outward.rust import build_dynamics_outward_state_rust
 
     order = 5
@@ -1270,7 +1270,7 @@ def test_update_rust_data_cmtm_view_matches_array_state_without_materializing_ma
 
 def test_update_rust_data_cmvector_view_and_cmtm_var_jacob_match_array_state():
     pytest.importorskip("robokots._rust")
-    from robokots.core.state_access import state_cmvec
+    from robokots.outward.access import state_cmvec
 
     order = 5
     dynamics_order = order - 2

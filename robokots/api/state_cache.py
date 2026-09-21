@@ -1,3 +1,5 @@
+"""State freshness, invalidation, and cached computation orchestration."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -99,3 +101,29 @@ class StateCache:
 
     def set_memo(self, key: StateKey, value: Any) -> None:
         self._memo[key] = value
+
+
+def update_outward_state(
+  robot,
+  motion_pack,
+  state_cache : StateCache,
+  is_dynamics : bool,
+  order = 3,
+  gravity=(0.0, 0.0, 0.0),
+):
+  from ..outward.state import build_kinematics_outward_state, build_dynamics_outward_state
+  if state_cache is None:
+    if not is_dynamics:
+      state_cache = StateCache(
+        build_state=lambda x_all, time=None, required=None: build_kinematics_outward_state(robot, x_all, order)
+      )
+    else:
+      state_cache = StateCache(
+        build_state=lambda x_all, time=None, required=None: build_dynamics_outward_state(
+          robot, x_all, order-2, gravity=gravity
+        )
+      )
+
+  state_cache.update_if_needed(motion_pack)
+
+  return state_cache.state

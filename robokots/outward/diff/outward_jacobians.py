@@ -4,9 +4,9 @@ from mathrobo import SE3, CMTM, numerical_grad
 
 from robokots.core.robot import RobotStruct, LinkStruct, JointStruct
 from robokots.core.motion import RobotMotions
-from robokots.core.state_spec import data_type_to_sub_func, StateType
+from robokots.core.state.spec import data_type_to_sub_func, StateType
 
-from robokots.core.state_access import state_rel_frame, state_rel_cmtm, state_cmtm
+from robokots.outward.access import state_rel_frame, state_rel_cmtm, state_cmtm
 from robokots.core.models.kinematics.base import convert_joint_to_data, convert_link_to_data
 from robokots.core.models.kinematics.kinematics import part_link_jacob, part_link_cmtm_tan_jacob
 from robokots.core.models.kinematics.kinematics_soft_link import part_soft_link_jacob, part_soft_link_cmtm_tan_jacob, calc_local_tan_mat

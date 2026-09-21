@@ -8,7 +8,7 @@ from typing import Callable
 
 import numpy as np
 
-from robokots.core.state_spec import StateType
+from robokots.core.state.spec import StateType
 from robokots.kots import Kots
 
 

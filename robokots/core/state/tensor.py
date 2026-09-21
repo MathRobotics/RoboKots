@@ -5,7 +5,7 @@ from typing import Any
 
 import numpy as np
 
-from .axis_tensor import AxisTensor
+from ..axis_tensor import AxisTensor
 
 
 def _batch_axes(batch_shape: tuple[int, ...]) -> tuple[str, ...]:

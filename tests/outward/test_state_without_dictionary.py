@@ -5,8 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from robokots.core.outward_state import OutwardState, ArrayOutwardState
-from robokots.core.state_spec import StateType
+from robokots.outward.data import OutwardState, ArrayOutwardState
+from robokots.core.state.spec import StateType
 from robokots.kots import Kots
 from robokots.state_io import dictionary
 

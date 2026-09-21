@@ -1,7 +1,7 @@
 from typing import List
 import numpy as np
 
-from .core.state_spec import keys_order, keys_time_order, data_type_dof, dim_to_dof
+from .core.state.spec import keys_order, keys_time_order, data_type_dof, dim_to_dof
 
 def check_valid_str_list(str_list : List[str]):
     if not str_list:

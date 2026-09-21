@@ -5,7 +5,7 @@ import logging
 import numpy as np
 
 from ..core import batch_shape as batch_shapes
-from ..core.state_spec import StateType, keys_force, keys_kinematics, keys_momentum, keys_torque
+from ..core.state.spec import StateType, keys_force, keys_kinematics, keys_momentum, keys_torque
 
 
 _logger = logging.getLogger(__name__)

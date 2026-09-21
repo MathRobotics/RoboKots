@@ -22,9 +22,9 @@ from unittest.mock import patch
 import numpy as np
 
 from robokots.kots import Kots, StateType
-from robokots.core.outward_protocol import OutwardDataView
-from robokots.core.state_cache import StateCache
-from robokots.core.state_batch import StateBatch
+from robokots.core.state.protocol import OutwardDataView
+from robokots.api.state_cache import StateCache
+from robokots.core.state.batch import StateBatch
 from robokots.state_io.dictionary import export_state_dict
 from robokots.state_io.jsonl import iter_jsonl_rows, make_jsonl_row
 from developer.benchmarks.common import build_model
@@ -217,7 +217,7 @@ def timings():
             name = k.joint_name_list()[-1]
             full = k.to_state_dict()
             # Obtain the canonical key rather than assuming the serialized layout.
-            from robokots.core.state_spec import state_dict_key
+            from robokots.core.state.spec import state_dict_key
             key = state_dict_key("joint", name, "torque")
             def selected():
                 return {key: k.outward_state_.quantity_series("joint", name, "torque")[...,0,:].copy()}

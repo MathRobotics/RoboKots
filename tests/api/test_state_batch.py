@@ -1,6 +1,7 @@
 import numpy as np
 
-from robokots.core.state_batch import StateBatch
+from robokots.core.state.batch import StateBatch
+from robokots.api.state import _batch_state_info, _batch_state_info_list
 
 
 def _get_value(_robot, state, state_type):
@@ -22,9 +23,9 @@ def test_state_batch_from_state_objects_restores_state_info_shape():
     ]
     batch = StateBatch.from_states(states, (2,))
 
-    np.testing.assert_allclose(batch.state_info(None, "vel", _get_value), np.array([[1, 2], [5, 6]]))
+    np.testing.assert_allclose(_batch_state_info(batch, None, "vel", _get_value), np.array([[1, 2], [5, 6]]))
     np.testing.assert_allclose(
-        batch.state_info_list(None, ["vel", "acc"], _get_value),
+        _batch_state_info_list(batch, None, ["vel", "acc"], _get_value),
         np.array([[1, 2, 3, 4], [5, 6, 7, 8]]),
     )
 
@@ -39,6 +40,6 @@ def test_state_batch_from_outward_like_states_keeps_outward_states():
     assert batch.outward_states == states
     np.testing.assert_allclose(batch.outward_states[0].vel, np.array([1, 2]))
     np.testing.assert_allclose(batch.outward_states[1].vel, np.array([3, 4]))
-    parts = batch.state_info_list(None, ["vel"], _get_value, list_output=True)
+    parts = _batch_state_info_list(batch, None, ["vel"], _get_value, list_output=True)
     assert len(parts) == 1
     np.testing.assert_allclose(parts[0], np.array([[1, 2], [3, 4]]))

@@ -8,10 +8,11 @@ import pytest
 
 from robokots.kots import Kots, StateType
 from robokots import outward
-from robokots.core.outward_protocol import OutwardDataView, StateValueProvider
-from robokots.core.state_batch import StateBatch
-from robokots.core.state_cache import StateCache
-from robokots.core.state_spec import state_dict_key
+from robokots.core.state.protocol import OutwardDataView, StateValueProvider
+from robokots.core.state.batch import StateBatch
+from robokots.api.state_cache import StateCache
+from robokots.api.state import _batch_state_info_list
+from robokots.core.state.spec import state_dict_key
 from robokots.outward.rust.state import build_kinematics_outward_state_rust
 
 
@@ -78,8 +79,8 @@ def test_state_batch_rejects_invalid_shape_and_count(shape, count):
 
 def test_state_batch_empty_selection_and_matrix_values():
     batch = StateBatch.from_states([object(), object()], (np.int64(2), 1))
-    assert batch.state_info_list(None, [], lambda *args: None).shape == (2, 1, 0)
-    assert batch.state_info_list(None, [], lambda *args: None, list_output=True) == []
+    assert _batch_state_info_list(batch, None, [], lambda *args: None).shape == (2, 1, 0)
+    assert _batch_state_info_list(batch, None, [], lambda *args: None, list_output=True) == []
 
 
 def test_soft_batch_mixes_joint_motion_and_link_values():

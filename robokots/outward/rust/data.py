@@ -5,7 +5,7 @@ from mathrobo import SE3
 
 from ...core import batch_shape as batch_shapes
 from ...core.robot import RobotStruct
-from ...core.state_spec import keys_force, keys_kinematics, keys_momentum, keys_torque
+from ...core.state.spec import keys_force, keys_kinematics, keys_momentum, keys_torque
 from .model import _rust_compiled_robot
 
 def _skew(v: np.ndarray) -> np.ndarray:

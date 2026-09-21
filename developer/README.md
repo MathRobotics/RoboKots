@@ -79,9 +79,13 @@ Use these implementation paths for new code:
 
 | Implementation module | Responsibility | Removed path |
 | --- | --- | --- |
-| `robokots.core.state_spec` | State selection, quantity definitions, orders and dimensions | `robokots.core.state` |
-| `robokots.core.outward_protocol` | Shared read-only backend protocol | `robokots.core.outward_data` |
-| `robokots.core.state_access` | Direct computational state access | Dictionary helpers in computational code |
+| `robokots.core.state.spec` | State selection, quantity definitions, orders and dimensions | `robokots.core.state_spec` |
+| `robokots.core.state.protocol` | Shared read-only backend protocol | `robokots.core.outward_protocol`, `robokots.core.outward_data` |
+| `robokots.core.state.tensor` | Backend-independent state/Jacobian array views | `robokots.core.state_tensor` |
+| `robokots.core.state.batch` | State collection, batch shape, and validation | `robokots.core.state_batch` |
+| `robokots.api.state_cache` | Freshness checks, invalidation, and cached computation | `robokots.core.state_cache` |
+| `robokots.outward.data` | NumPy/mathrobo computational state storage | `robokots.core.outward_state` |
+| `robokots.outward.access` | Direct computational state access | `robokots.core.state_access` |
 | `robokots.state_io.dictionary` | Dictionary export and serialized-state extraction | `robokots.core.state_dict`, `robokots.core.state_dict_utils` |
 | `robokots.state_io.jsonl` | JSON Lines serialization | `robokots.core.state_json`, `robokots.core.state_jsonl` |
 
@@ -94,16 +98,44 @@ Polars table helpers are available through
 modules `robokots.core.state_table` and `robokots.core.dataframe`, as well as
 the `RobotDF` and `RobotState` exports from `robokots.core`, have been removed.
 
-Pickles containing the removed module paths no longer load by default. Migrate
-trusted existing pickles using the compatibility release (commit `32fa548`):
-load them and save them again so class/function references use the new paths.
-Reading these new pickles with an older RoboKots release is not guaranteed.
-Array layouts and JSONL formats are unchanged.
+Pickles containing removed module paths no longer load by default. Export trusted
+data with the version that wrote it and reconstruct it using the current types.
+The historical compatibility release (commit `32fa548`) covers earlier migrations,
+not the state-package moves above. Array layouts and JSONL formats are unchanged.
+
+### State containers and execution management
+
+`core/state/` groups specifications, reader protocols, typed output arrays, and
+the `StateBatch` collection. It does not import outward implementations or API
+orchestration. The package lazily exports `StateType`, `OutwardDataView`,
+`StateValueProvider`, `StateTensor`, `JacobianTensor`, and `StateBatch`.
+
+`StateBatch` stores scalar state objects and their batch shape, validates the
+sample count, and copies the input list. Its former `state_info()` and
+`state_info_list()` methods now live as internal helpers in `api/state.py`;
+callers use the corresponding `Kots` methods. `state_io` can still export the
+container directly without depending on the API layer. Native batched states
+continue to use their existing vectorized paths.
+
+`outward/data.py` owns concrete NumPy/mathrobo storage, including its local
+derived-value memoization. Read helpers remain separate in `outward/access.py`.
+Rust storage and workspaces remain under `outward/rust/`. `api/state_cache.py`
+owns revision-based recomputation and the `update_outward_state()` helper,
+which is no longer exported by `outward` or `outward.values`.
+
+`robokots.core` lazily exports only types owned by core. Import `OutwardState`
+and `ArrayOutwardState` from `robokots.outward.data`, and `StateCache` from
+`robokots.api.state_cache`; their former `robokots.core` exports are removed.
+`core/models/`, `target.py`, `time_grid.py`, and `viz.py` retain their existing
+responsibilities in this change. Only imports within the models are updated.
+
+Before/after timings and numerical comparisons are documented in the
+[state layout benchmark](benchmarks/README.md#core-state-layout).
 
 ### Computational state and export
 
 Computation reads `OutwardState`, `ArrayOutwardState`, or Rust state views through
-`core.state_access` and backend methods. JAX kinematics also returns an
+`outward.access` and backend methods. JAX kinematics also returns an
 `OutwardState`. Jacobians and numerical reference calculations do not reconstruct
 computational state from flat dictionaries. Low-level computational functions
 expect state objects; dictionary inputs are no longer supported.

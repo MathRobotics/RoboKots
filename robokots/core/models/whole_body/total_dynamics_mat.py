@@ -1,9 +1,9 @@
 import numpy as np
 
 from robokots.core import RobotStruct
-from robokots.core.state_spec import dim_to_dof
-from robokots.core.state_access import state_cmtm
-from robokots.core.state_access import state_cmtm_wrench, state_rel_cmtm_wrench
+from robokots.core.state.spec import dim_to_dof
+from robokots.outward.access import state_cmtm
+from robokots.outward.access import state_cmtm_wrench, state_rel_cmtm_wrench
 from robokots.core.models.cmtm_apply import apply_mat_adj, apply_mat_inv_adj
 
 from ..kinematics.kinematics_matrix import joint_select_diag_mat

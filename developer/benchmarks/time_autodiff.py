@@ -9,7 +9,7 @@ import jax
 import jax.numpy as jnp
 
 from robokots.core.models.dynamics.base import spatial_inertia
-from robokots.core.state_spec import keys_momentum, keys_force, keys_torque
+from robokots.core.state.spec import keys_momentum, keys_force, keys_torque
 from robokots.outward.diff.dynamics_jax import _ad, _hat
 
 

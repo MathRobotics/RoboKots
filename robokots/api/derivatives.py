@@ -6,8 +6,8 @@ import numpy as np
 
 from .. import outward as outward_api
 from ..core import batch_shape as batch_shapes
-from ..core.state_spec import StateType, data_type_dof, dim_to_dof, keys_force, keys_kinematics, keys_momentum, keys_torque
-from ..core.state_tensor import JacobianTensor
+from ..core.state.spec import StateType, data_type_dof, dim_to_dof, keys_force, keys_kinematics, keys_momentum, keys_torque
+from ..core.state.tensor import JacobianTensor
 
 
 _logger = logging.getLogger(__name__)

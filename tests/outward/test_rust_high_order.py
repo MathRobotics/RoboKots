@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from robokots.kots import Kots, StateType
-from robokots.core.state_spec import keys_kinematics
+from robokots.core.state.spec import keys_kinematics
 
 MODEL = Path(__file__).resolve().parents[1] / 'test_model/branched_fixed.urdf'
 

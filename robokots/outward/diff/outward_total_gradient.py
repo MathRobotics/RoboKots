@@ -7,9 +7,9 @@ import numpy as np
 from mathrobo import CMTM, CMVector, Factorial, SE3wrench
 
 from robokots.core import RobotStruct
-from robokots.core.state_spec import StateType, dim_to_dof, data_type_dof, data_type_offset
-from robokots.core.state_spec import keys_kinematics, keys_momentum, keys_force, keys_torque
-from robokots.core.state_access import total_link_cmvec, state_cmtm, state_cmtm_wrench, state_cmvec, state_rel_cmtm
+from robokots.core.state.spec import StateType, dim_to_dof, data_type_dof, data_type_offset
+from robokots.core.state.spec import keys_kinematics, keys_momentum, keys_force, keys_torque
+from robokots.outward.access import total_link_cmvec, state_cmtm, state_cmtm_wrench, state_cmvec, state_rel_cmtm
 from robokots.core.models.kinematics.kinematics_matrix import joint_select_diag_mat
 
 from robokots.core.models.whole_body.total_kinematics_grad_mat import (

@@ -1,7 +1,7 @@
 import numpy as np
 
 from mathrobo import SE3, CMTM
-from robokots.core.state_spec import StateType, state_dict_key
+from robokots.core.state.spec import StateType, state_dict_key
 from robokots.state_io.dictionary import *
 from robokots.state_io.jsonl import make_jsonl_row
 

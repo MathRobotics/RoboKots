@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from ...core import batch_shape as batch_shapes
-from ...core.outward_state import ArrayOutwardState
+from ...outward.data import ArrayOutwardState
 from ...core.robot import RobotStruct
 from .model import _rust_compiled_robot
 

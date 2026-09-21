@@ -3,6 +3,27 @@
 These scripts are for local performance investigation and are not part of the
 normal RoboKots runtime path.
 
+## Core State Layout
+
+Measure once before reorganizing the source, then again after the change:
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 .venv/bin/python -m developer.benchmarks.core_state_layout --output developer/benchmarks/results/core_state_layout_before.json
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 .venv/bin/python -m developer.benchmarks.core_state_layout --output developer/benchmarks/results/core_state_layout_after.json --compare developer/benchmarks/results/core_state_layout_before.json
+```
+
+The unchanged public-API workload measures NumPy/Rust dynamics including motion
+import, reads and exports of computed states, NumPy cache hits, and reads/exports
+of an explicitly assembled list-of-states batch. It uses motion order 4,
+float64, seed 71, nonzero world gravity, 5 warmups, and 30 samples of 5 calls.
+There are no JAX/JIT or Jacobian timings in this focused refactor benchmark.
+Do not run other tests or benchmarks concurrently with timing measurements.
+The script records first calls, individual samples, medians, environment, and
+maximum absolute/relative Frobenius output differences. See the
+[report](results/core_state_layout_after.md),
+[before JSON](results/core_state_layout_before.json), and
+[after JSON](results/core_state_layout_after.json).
+
 ## Shared Kinematics / Lazy Dynamics Allocation
 
 ```bash

@@ -6,7 +6,7 @@ The FK-based experiment in time_autodiff.py is intentionally left unchanged.
 """
 import jax.numpy as jnp
 
-from robokots.core.state_spec import StateType, keys_torque
+from robokots.core.state.spec import StateType, keys_torque
 from robokots.outward.diff.dynamics_jax import dynamics_state_vector_jax
 from .time_autodiff import _flat_function, _validate_robot, total_time_derivative
 

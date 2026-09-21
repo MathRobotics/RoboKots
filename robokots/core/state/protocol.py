@@ -6,7 +6,7 @@ from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
 
-from .state_spec import StateType
+from .spec import StateType
 
 
 @runtime_checkable

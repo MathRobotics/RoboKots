@@ -2,7 +2,7 @@ import numpy as np
 from mathrobo import numerical_difference, build_integrator, SO3
 
 from robokots.core import RobotStruct
-from robokots.core.state_spec import StateType, data_type_dof, data_type_to_sub_func
+from robokots.core.state.spec import StateType, data_type_dof, data_type_to_sub_func
 
 from robokots.outward.state import build_kinematics_outward_state, get_value
 from robokots.outward.values import compute_outward_value

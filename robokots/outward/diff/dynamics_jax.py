@@ -9,7 +9,7 @@ from math import comb
 import jax.numpy as jnp
 
 from ...core.models.dynamics.base import spatial_inertia
-from ...core.state_spec import keys_force, keys_momentum, keys_torque
+from ...core.state.spec import keys_force, keys_momentum, keys_torque
 
 
 def _hat(v):

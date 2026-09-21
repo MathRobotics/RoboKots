@@ -3,13 +3,14 @@ from __future__ import annotations
 
 from copy import deepcopy
 import logging
+from typing import Callable
 
 import numpy as np
 
 from .. import outward as outward_api
-from ..core.state_batch import StateBatch
-from ..core.state_cache import StateCache
-from ..core.state_tensor import StateTensor
+from ..core.state.batch import StateBatch
+from .state_cache import StateCache, update_outward_state
+from ..core.state.tensor import StateTensor
 from ..core import batch_shape as batch_shapes
 
 
@@ -21,6 +22,30 @@ def _copy_public_state_value(value):
 
 
 _logger = logging.getLogger(__name__)
+
+
+def _batch_state_info(batch, robot, state_type, get_value: Callable):
+  states = batch.outward_states
+  values = [get_value(robot, state, state_type) for state in states]
+  return batch_shapes.stack_batch_values(values, batch.batch_shape)
+
+
+def _batch_state_info_list(batch, robot, state_type_list, get_value: Callable, list_output: bool = False):
+  states = batch.outward_states
+  values = []
+  for state in states:
+    state_list = [get_value(robot, state, st) for st in state_type_list]
+    if list_output:
+      values.append(state_list)
+    else:
+      values.append(batch_shapes.concatenate_state_values(state_list))
+
+  if list_output:
+    return [
+      batch_shapes.stack_batch_values([sample[i] for sample in values], batch.batch_shape)
+      for i in range(len(state_type_list))
+    ]
+  return batch_shapes.stack_sample_results(values, batch.batch_shape)
 
 
 class StateManagementMixin:
@@ -79,7 +104,7 @@ class StateManagementMixin:
       values = self.state_info_list(self._state_type_list(state_type))
       return values if self.batch_shape_ else np.asarray(values).reshape(-1)
     if isinstance(self.state_batch_, StateBatch):
-      return self.state_batch_.state_info(self.robot_, state_type, outward_api.get_value)
+      return _batch_state_info(self.state_batch_, self.robot_, state_type, outward_api.get_value)
     value = outward_api.get_value(self.robot_, self._state_for_direct_read(), state_type)
     return value.mat() if self.batch_shape_ and hasattr(value, "mat") else value
 
@@ -91,7 +116,7 @@ class StateManagementMixin:
       values = self._joint_motion_state_info_list(state_type_list)
       if values is None:
         if isinstance(self.state_batch_, StateBatch):
-          return self.state_batch_.state_info_list(self.robot_, state_type_list, outward_api.get_value, list_output=list_output)
+          return _batch_state_info_list(self.state_batch_, self.robot_, state_type_list, outward_api.get_value, list_output=list_output)
         values = [outward_api.get_value(self.robot_, self._state_for_direct_read(), st) for st in state_type_list]
     if list_output:
       return [_copy_public_state_value(value) for value in values]
@@ -182,7 +207,7 @@ class StateManagementMixin:
       def get(self):
         return self._x
 
-    state = outward_api.update_outward_state(
+    state = update_outward_state(
       self.robot_, MotionPack(motion, revision), self.state_cache_, is_dynamics, order, gravity=self.gravity_)
     return self._set_current_state(state, materialize_dict=False)
 

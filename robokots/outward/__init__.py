@@ -20,7 +20,6 @@ _LAZY_API = {
     "kinematics_jax": "kinematics_jax",
     "get_value": "get_value",
     "compute_outward_value": "compute_outward_value",
-    "update_outward_state": "update_outward_state",
     "link_diff_kinematics_numerical": "link_diff_kinematics_numerical",
     "diff_outward_numerical": "diff_outward_numerical",
     "outward_jacobian": "outward_jacobian",

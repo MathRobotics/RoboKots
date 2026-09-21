@@ -2,8 +2,8 @@ import numpy as np
 from mathrobo import CMVector, Factorial
 
 from robokots.core import RobotStruct
-from robokots.core.state_spec import dim_to_dof
-from robokots.core.state_access import state_cmtm, state_cmtm_wrench
+from robokots.core.state.spec import dim_to_dof
+from robokots.outward.access import state_cmtm, state_cmtm_wrench
 
 from ..cmtm_apply import apply_mat_inv_adj
 from ..dynamics.base import spatial_inertia

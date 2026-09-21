@@ -3,7 +3,7 @@
 Submodules are intentionally not imported automatically so that optional
 heavy dependencies are only loaded when requested. Import the specific
 modules you need, for example ``from robokots.core import robot`` or
-``from robokots.core.state_spec import StateType``.
+``from robokots.core.state.spec import StateType``.
 """
 
 from importlib import import_module
@@ -15,23 +15,19 @@ _lazy_attributes: Dict[str, str] = {
     "RobotStruct": "robokots.core.robot",
     "JointStruct": "robokots.core.robot",
     "LinkStruct": "robokots.core.robot",
-    "OutwardDataView": "robokots.core.outward_protocol",
-    "StateValueProvider": "robokots.core.outward_protocol",
-    "OutwardState": "robokots.core.outward_state",
-    "ArrayOutwardState": "robokots.core.outward_state",
+    "OutwardDataView": "robokots.core.state.protocol",
+    "StateValueProvider": "robokots.core.state.protocol",
     "MotionLayoutOwner": "robokots.core.motion",
     "MotionTensor": "robokots.core.motion",
     "RobotMotions": "robokots.core.motion",
-    # State cache utility
-    "StateCache": "robokots.core.state_cache",
     # Axis-aware tensor adapters
     "AlgorithmSpec": "robokots.core.axis_tensor",
     "AxisTensor": "robokots.core.axis_tensor",
     "LayoutPolicy": "robokots.core.axis_tensor",
     "PhysicalLayout": "robokots.core.axis_tensor",
-    "JacobianTensor": "robokots.core.state_tensor",
-    "StateBatch": "robokots.core.state_batch",
-    "StateTensor": "robokots.core.state_tensor",
+    "JacobianTensor": "robokots.core.state.tensor",
+    "StateBatch": "robokots.core.state.batch",
+    "StateTensor": "robokots.core.state.tensor",
 }
 
 __all__ = sorted(_lazy_attributes)
@@ -40,8 +36,7 @@ __all__ = sorted(_lazy_attributes)
 def __getattr__(name):
     """Lazily import attributes from submodules on first access.
 
-    This keeps the initial import of :mod:`robokots.core` lightweight while
-    preserving the previous attribute-based API for commonly used symbols.
+    This keeps the initial import of :mod:`robokots.core` lightweight.
     """
 
     module_name = _lazy_attributes.get(name)

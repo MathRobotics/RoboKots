@@ -3,7 +3,7 @@
 import numpy as np
 from mathrobo import CMVector, CMTM, SE3
 
-from .outward_state import OutwardState
+from .data import OutwardState
 
 
 def state_sample(robot, state, index):
