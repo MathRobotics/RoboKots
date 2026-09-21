@@ -4,8 +4,8 @@ import numpy as np
 
 from robokots.kots import Kots
 from robokots.outward.state import build_kinematics_outward_state
-from robokots.outward.kernels.whole_body.kinematics import total_world_joint_cmtm
-from robokots.outward.kernels.whole_body.kinematics_derivatives import (
+from robokots.core.kernels.whole_body.kinematics import total_world_joint_cmtm
+from robokots.core.kernels.whole_body.kinematics_derivatives import (
     total_coord_to_joint_tan_vel_grad_mat,
     total_coord_to_joint_tan_vel_grad_matvec,
     total_coord_to_link_tan_vel_grad_mat,
@@ -15,7 +15,7 @@ from robokots.outward.kernels.whole_body.kinematics_derivatives import (
     total_joint_tan_vel_to_link_sp_vel_grad_mat,
     total_joint_tan_vel_to_link_sp_vel_grad_matvec,
 )
-from robokots.outward.kernels.whole_body.dynamics_derivatives import (
+from robokots.core.kernels.whole_body.dynamics_derivatives import (
     total_coord_to_link_momentum_grad_mat,
     total_coord_to_link_momentum_grad_matvec,
 )

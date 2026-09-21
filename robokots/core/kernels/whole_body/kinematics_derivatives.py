@@ -1,12 +1,13 @@
 import numpy as np
 
 from robokots.core import RobotStruct
+from robokots.core.state.protocol import OutwardDataView
 from robokots.core.state.spec import dim_to_dof
-from robokots.outward.access import state_cmtm, state_rel_cmtm
-from robokots.outward.kernels.cmtm_apply import apply_mat_adj, apply_tangent_mat
-from robokots.outward.kernels.joint import joint_select_diag_mat
+from robokots.core.state.access import state_cmtm, state_rel_cmtm
+from robokots.core.kernels.cmtm_apply import apply_mat_adj, apply_tangent_mat
+from robokots.core.kernels.joint import joint_select_diag_mat
 
-from robokots.outward.kernels.whole_body.kinematics import total_coord_arrange
+from robokots.core.kernels.whole_body.kinematics import total_coord_arrange
 
 def total_coord_arrange_vec(r : RobotStruct, vec : np.ndarray, out_order : int = 3, in_order : int = 3) -> np.ndarray:
     arranged = np.zeros(r.joint_dof * out_order)
@@ -18,7 +19,7 @@ def total_coord_arrange_vec(r : RobotStruct, vec : np.ndarray, out_order : int =
         arranged[out_start:out_start + joint.dof*out_order] = vec[in_start:in_start + joint.dof*out_order]
     return arranged
 
-def total_joint_tan_vel_to_link_tan_vel_grad_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 3) -> np.ndarray:
+def total_joint_tan_vel_to_link_tan_vel_grad_mat(r : RobotStruct, state : OutwardDataView, order : int = 1, dim : int = 3) -> np.ndarray:
     n_ = dim_to_dof(dim) * order
     mat = np.zeros((r.link_num * n_, r.joint_num * n_))
 
@@ -32,7 +33,7 @@ def total_joint_tan_vel_to_link_tan_vel_grad_mat(r : RobotStruct, state : dict, 
             mat[i*n_:(i+1)*n_, j*n_:(j+1)*n_] = rel_cmtm.mat_adj()
     return mat
 
-def total_joint_tan_vel_to_link_tan_vel_grad_matvec(r : RobotStruct, state : dict, vec : np.ndarray, order : int = 1, dim : int = 3) -> np.ndarray:
+def total_joint_tan_vel_to_link_tan_vel_grad_matvec(r : RobotStruct, state : OutwardDataView, vec : np.ndarray, order : int = 1, dim : int = 3) -> np.ndarray:
     n_ = dim_to_dof(dim) * order
     result = np.zeros(r.link_num * n_)
 
@@ -47,7 +48,7 @@ def total_joint_tan_vel_to_link_tan_vel_grad_matvec(r : RobotStruct, state : dic
             result[out_start:out_start+n_] += apply_mat_adj(rel_cmtm, vec[j*n_:(j+1)*n_])
     return result
 
-def total_joint_tan_vel_to_link_vel_grad_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 3) -> np.ndarray:
+def total_joint_tan_vel_to_link_vel_grad_mat(r : RobotStruct, state : OutwardDataView, order : int = 1, dim : int = 3) -> np.ndarray:
     n_ = dim_to_dof(dim) * order
     mat = np.zeros((r.link_num * n_, r.joint_num * n_))
 
@@ -62,7 +63,7 @@ def total_joint_tan_vel_to_link_vel_grad_mat(r : RobotStruct, state : dict, orde
             mat[i*n_:(i+1)*n_, j*n_:(j+1)*n_] = link_tan_inv @ rel_cmtm.mat_adj()
     return mat
 
-def total_joint_tan_vel_to_link_vel_grad_matvec(r : RobotStruct, state : dict, vec : np.ndarray, order : int = 1, dim : int = 3) -> np.ndarray:
+def total_joint_tan_vel_to_link_vel_grad_matvec(r : RobotStruct, state : OutwardDataView, vec : np.ndarray, order : int = 1, dim : int = 3) -> np.ndarray:
     n_ = dim_to_dof(dim) * order
     result = np.zeros(r.link_num * n_)
 
@@ -79,7 +80,7 @@ def total_joint_tan_vel_to_link_vel_grad_matvec(r : RobotStruct, state : dict, v
             result[out_start:out_start+n_] += tangent_mat_inv @ apply_mat_adj(rel_cmtm, vec[j*n_:(j+1)*n_])
     return result
 
-def total_joint_tan_vel_to_link_sp_vel_grad_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 3) -> np.ndarray:
+def total_joint_tan_vel_to_link_sp_vel_grad_mat(r : RobotStruct, state : OutwardDataView, order : int = 1, dim : int = 3) -> np.ndarray:
     n_j = dim_to_dof(dim) * order
     n_l = dim_to_dof(dim) * (order-1)
     mat = np.zeros((r.link_num * n_l, r.joint_num * n_j))
@@ -95,7 +96,7 @@ def total_joint_tan_vel_to_link_sp_vel_grad_mat(r : RobotStruct, state : dict, o
             mat[i*n_l:(i+1)*n_l, j*n_j:(j+1)*n_j] = link_sp_tan_inv @ rel_cmtm.mat_adj()
     return mat
 
-def total_joint_tan_vel_to_link_sp_vel_grad_matvec(r : RobotStruct, state : dict, vec : np.ndarray, order : int = 1, dim : int = 3) -> np.ndarray:
+def total_joint_tan_vel_to_link_sp_vel_grad_matvec(r : RobotStruct, state : OutwardDataView, vec : np.ndarray, order : int = 1, dim : int = 3) -> np.ndarray:
     dof = dim_to_dof(dim)
     n_j = dof * order
     n_l = dof * (order-1)
@@ -114,7 +115,7 @@ def total_joint_tan_vel_to_link_sp_vel_grad_matvec(r : RobotStruct, state : dict
             result[out_start:out_start+n_l] += tangent_mat_inv_sp @ apply_mat_adj(rel_cmtm, vec[j*n_j:(j+1)*n_j])
     return result
 
-def total_coord_to_joint_tan_vel_grad_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 3) -> np.ndarray:
+def total_coord_to_joint_tan_vel_grad_mat(r : RobotStruct, state : OutwardDataView, order : int = 3, dim : int = 3) -> np.ndarray:
     n_ = dim_to_dof(dim) * order
     mat = np.zeros((r.joint_num * n_, r.joint_dof * order))
 
@@ -127,7 +128,7 @@ def total_coord_to_joint_tan_vel_grad_mat(r : RobotStruct, state : dict, order :
 
     return mat
 
-def total_coord_to_joint_tan_vel_grad_matvec(r : RobotStruct, state : dict, vec : np.ndarray, order : int = 3, dim : int = 3) -> np.ndarray:
+def total_coord_to_joint_tan_vel_grad_matvec(r : RobotStruct, state : OutwardDataView, vec : np.ndarray, order : int = 3, dim : int = 3) -> np.ndarray:
     n_ = dim_to_dof(dim) * order
     result = np.zeros(r.joint_num * n_)
 
@@ -142,7 +143,7 @@ def total_coord_to_joint_tan_vel_grad_matvec(r : RobotStruct, state : dict, vec 
 
     return result
 
-# def total_coord_to_joint_tan_vel_grad_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 3) -> np.ndarray:
+# def total_coord_to_joint_tan_vel_grad_mat(r : RobotStruct, state : OutwardDataView, order : int = 3, dim : int = 3) -> np.ndarray:
 #     n_ = dim_to_dof(dim) * (order-1)
 #     mat = np.zeros((r.joint_num * n_, r.joint_dof * order))
 
@@ -155,14 +156,14 @@ def total_coord_to_joint_tan_vel_grad_matvec(r : RobotStruct, state : dict, vec 
 
 #     return mat
 
-def total_coord_to_link_tan_vel_grad_mat(r : RobotStruct, state : dict, out_order : int = 3, in_order = None, dim : int = 3) -> np.ndarray:
+def total_coord_to_link_tan_vel_grad_mat(r : RobotStruct, state : OutwardDataView, out_order : int = 3, in_order = None, dim : int = 3) -> np.ndarray:
     if in_order is None:
         return total_joint_tan_vel_to_link_tan_vel_grad_mat(r, state, out_order, dim) @ total_coord_to_joint_tan_vel_grad_mat(r, state, out_order, dim)
     else:
         return total_joint_tan_vel_to_link_tan_vel_grad_mat(r, state, out_order, dim) @ total_coord_to_joint_tan_vel_grad_mat(r, state, out_order, dim) \
                @ total_coord_arrange(r, out_order=out_order, in_order=in_order)
 
-def total_coord_to_link_tan_vel_grad_matvec(r : RobotStruct, state : dict, vec : np.ndarray, out_order : int = 3, in_order = None, dim : int = 3) -> np.ndarray:
+def total_coord_to_link_tan_vel_grad_matvec(r : RobotStruct, state : OutwardDataView, vec : np.ndarray, out_order : int = 3, in_order = None, dim : int = 3) -> np.ndarray:
     if in_order is None:
         coord_vec = vec
     else:
@@ -170,13 +171,13 @@ def total_coord_to_link_tan_vel_grad_matvec(r : RobotStruct, state : dict, vec :
     joint_tan_vec = total_coord_to_joint_tan_vel_grad_matvec(r, state, coord_vec, out_order, dim)
     return total_joint_tan_vel_to_link_tan_vel_grad_matvec(r, state, joint_tan_vec, out_order, dim)
 
-def total_coord_to_link_vel_grad_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 3) -> np.ndarray:
+def total_coord_to_link_vel_grad_mat(r : RobotStruct, state : OutwardDataView, order : int = 3, dim : int = 3) -> np.ndarray:
     return total_joint_tan_vel_to_link_vel_grad_mat(r, state, order, dim) @ total_coord_to_joint_tan_vel_grad_mat(r, state, order, dim)
 
-def total_coord_to_link_vel_grad_matvec(r : RobotStruct, state : dict, vec : np.ndarray, order : int = 3, dim : int = 3) -> np.ndarray:
+def total_coord_to_link_vel_grad_matvec(r : RobotStruct, state : OutwardDataView, vec : np.ndarray, order : int = 3, dim : int = 3) -> np.ndarray:
     joint_tan_vec = total_coord_to_joint_tan_vel_grad_matvec(r, state, vec, order, dim)
     return total_joint_tan_vel_to_link_vel_grad_matvec(r, state, joint_tan_vec, order, dim)
 
-def total_coord_to_link_sp_vel_grad_matvec(r : RobotStruct, state : dict, vec : np.ndarray, order : int = 3, dim : int = 3) -> np.ndarray:
+def total_coord_to_link_sp_vel_grad_matvec(r : RobotStruct, state : OutwardDataView, vec : np.ndarray, order : int = 3, dim : int = 3) -> np.ndarray:
     joint_tan_vec = total_coord_to_joint_tan_vel_grad_matvec(r, state, vec, order, dim)
     return total_joint_tan_vel_to_link_sp_vel_grad_matvec(r, state, joint_tan_vec, order, dim)

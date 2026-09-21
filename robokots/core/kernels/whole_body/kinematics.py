@@ -2,10 +2,11 @@ import numpy as np
 from mathrobo import CMTM
 
 from robokots.core import RobotStruct
+from robokots.core.state.protocol import OutwardDataView
 from robokots.core.state.spec import dim_to_dof
-from robokots.outward.access import state_cmtm, state_rel_cmtm
+from robokots.core.state.access import state_cmtm, state_rel_cmtm
 
-from robokots.outward.kernels.joint import joint_select_diag_mat
+from robokots.core.kernels.joint import joint_select_diag_mat
 
 def total_coord_arrange(r : RobotStruct, out_order : int = 3, in_order : int = 3) -> np.ndarray:
     mat = np.zeros((r.joint_dof * out_order, r.joint_dof * in_order))
@@ -56,7 +57,7 @@ def total_cmtm_hat_commute(vec : np.ndarray, mat_type, num : int, order : int, v
         mat[start:start+n_, start:start+n_] = CMTM.hat_commute_adj(mat_type, vec[start:start+n_].reshape(order, vec_dim))
     return mat
 
-def total_world_link_cmtm(r : RobotStruct, state : dict, order : int = 1, dim : int = 3) -> np.ndarray:
+def total_world_link_cmtm(r : RobotStruct, state : OutwardDataView, order : int = 1, dim : int = 3) -> np.ndarray:
     n_ = dim_to_dof(dim) * order
     mat = np.zeros((r.link_num * n_, r.link_num * n_))
 
@@ -65,7 +66,7 @@ def total_world_link_cmtm(r : RobotStruct, state : dict, order : int = 1, dim : 
         mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = cmtm.mat_adj()
     return mat
 
-def total_world_link_cmtm_inv(r : RobotStruct, state : dict, order : int = 1, dim : int = 3) -> np.ndarray:
+def total_world_link_cmtm_inv(r : RobotStruct, state : OutwardDataView, order : int = 1, dim : int = 3) -> np.ndarray:
     n_ = dim_to_dof(dim) * order
     mat = np.zeros((r.link_num * n_, r.link_num * n_))
 
@@ -74,7 +75,7 @@ def total_world_link_cmtm_inv(r : RobotStruct, state : dict, order : int = 1, di
         mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = cmtm.mat_inv_adj()
     return mat
 
-def total_world_joint_cmtm(r : RobotStruct, state : dict, order : int = 1, dim : int = 3) -> np.ndarray:
+def total_world_joint_cmtm(r : RobotStruct, state : OutwardDataView, order : int = 1, dim : int = 3) -> np.ndarray:
     n_ = dim_to_dof(dim) * order
     mat = np.zeros((r.joint_num * n_, r.joint_num * n_))
 
@@ -83,7 +84,7 @@ def total_world_joint_cmtm(r : RobotStruct, state : dict, order : int = 1, dim :
         mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = cmtm.mat_adj()
     return mat
 
-def total_world_joint_cmtm_inv(r : RobotStruct, state : dict, order : int = 1, dim : int = 3) -> np.ndarray:
+def total_world_joint_cmtm_inv(r : RobotStruct, state : OutwardDataView, order : int = 1, dim : int = 3) -> np.ndarray:
     n_ = dim_to_dof(dim) * order
     mat = np.zeros((r.joint_num * n_, r.joint_num * n_))
 
@@ -92,7 +93,7 @@ def total_world_joint_cmtm_inv(r : RobotStruct, state : dict, order : int = 1, d
         mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = cmtm.mat_inv_adj()
     return mat
 
-def total_link_vel_to_joint_vel_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 3) -> np.ndarray:
+def total_link_vel_to_joint_vel_mat(r : RobotStruct, state : OutwardDataView, order : int = 1, dim : int = 3) -> np.ndarray:
     n_ = dim_to_dof(dim) * order
     mat = np.zeros((r.joint_num * n_, r.link_num * n_))
 
@@ -104,7 +105,7 @@ def total_link_vel_to_joint_vel_mat(r : RobotStruct, state : dict, order : int =
         mat[i*n_:(i+1)*n_, c_id*n_:(c_id+1)*n_] = np.eye(n_)
     return mat
 
-def total_joint_vel_to_link_vel_mat(r : RobotStruct, state : dict, order : int = 1, dim : int = 3) -> np.ndarray:
+def total_joint_vel_to_link_vel_mat(r : RobotStruct, state : OutwardDataView, order : int = 1, dim : int = 3) -> np.ndarray:
     n_ = dim_to_dof(dim) * order
     mat = np.zeros((r.link_num * n_, r.joint_num * n_))
 
@@ -118,7 +119,7 @@ def total_joint_vel_to_link_vel_mat(r : RobotStruct, state : dict, order : int =
             mat[i*n_:(i+1)*n_, j*n_:(j+1)*n_] = rel_cmtm.mat_adj()
     return mat
 
-def total_coord_to_joint_vel_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 3) -> np.ndarray:
+def total_coord_to_joint_vel_mat(r : RobotStruct, state : OutwardDataView, order : int = 3, dim : int = 3) -> np.ndarray:
     n_ = dim_to_dof(dim) * order
     mat = np.zeros((r.joint_num * n_, r.joint_dof * order))
 
@@ -130,5 +131,5 @@ def total_coord_to_joint_vel_mat(r : RobotStruct, state : dict, order : int = 3,
 
     return mat
 
-def total_coord_to_link_vel_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 3) -> np.ndarray:
+def total_coord_to_link_vel_mat(r : RobotStruct, state : OutwardDataView, order : int = 3, dim : int = 3) -> np.ndarray:
     return total_joint_vel_to_link_vel_mat(r, state, order, dim) @ total_coord_to_joint_vel_mat(r, state, order, dim)

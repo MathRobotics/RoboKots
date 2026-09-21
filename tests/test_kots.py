@@ -6,7 +6,7 @@ from pathlib import Path
 import mathrobo as mr
 from robokots.kots import *
 from robokots.core.target import TargetList, RobotNames
-from robokots.outward.kernels.kinematics_jax import *
+from robokots.core.kernels.kinematics_jax import *
 from robokots.outward.diff.outward_jax import kinematics_jax as outward_kinematics_jax
 
 METHOD = "poly"
@@ -297,7 +297,7 @@ def test_rust_backend_array_state_exposes_cmtm_and_cmvector():
     pytest.importorskip("robokots._rust")
     from mathrobo import CMTM, CMVector
     from robokots.outward.data import ArrayOutwardState
-    from robokots.outward.access import state_cmvec, state_cmtm
+    from robokots.core.state.access import state_cmvec, state_cmtm
     from robokots.outward.rust import build_dynamics_outward_state_rust
 
     order = 5
@@ -1270,7 +1270,7 @@ def test_update_rust_data_cmtm_view_matches_array_state_without_materializing_ma
 
 def test_update_rust_data_cmvector_view_and_cmtm_var_jacob_match_array_state():
     pytest.importorskip("robokots._rust")
-    from robokots.outward.access import state_cmvec
+    from robokots.core.state.access import state_cmvec
 
     order = 5
     dynamics_order = order - 2
@@ -2215,7 +2215,7 @@ def test_numpy_gravity_aware_torque_jacobian_matches_full_numerical(monkeypatch)
 
 
 def test_numpy_cmtm_gravity_force_jacobians_match_full_numerical():
-    from robokots.outward.kernels.whole_body import (
+    from robokots.core.kernels.whole_body import (
         total_coord_to_joint_torque_grad_mat,
     )
 

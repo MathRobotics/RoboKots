@@ -11,7 +11,7 @@ from ..core.robot import RobotStruct
 from ..core.motion import RobotMotions
 from ..outward.data import OutwardState
 from ..core.state.protocol import OutwardDataView, StateValueProvider
-from ..outward.access import (
+from ..core.state.access import (
     state_cmtm,
     state_cmtm_wrench,
     state_cmvec,
@@ -19,18 +19,18 @@ from ..outward.access import (
 )
 from ..core.state.spec import data_type_dof, StateType
 
-from robokots.outward.kernels.joint import convert_joint_to_data
-from robokots.outward.kernels.soft_link import convert_link_to_data
-from robokots.outward.kernels.joint import joint_local_cmtm
-from robokots.outward.kernels.soft_link import soft_link_local_cmtm, calc_link_local_point_frame
+from robokots.core.kernels.joint import convert_joint_to_data
+from robokots.core.kernels.soft_link import convert_link_to_data
+from robokots.core.kernels.joint import joint_local_cmtm
+from robokots.core.kernels.soft_link import soft_link_local_cmtm, calc_link_local_point_frame
 
-from robokots.outward.kernels.inertia import spatial_inertia
-from robokots.outward.kernels.dynamics import (
+from robokots.core.kernels.inertia import spatial_inertia
+from robokots.core.kernels.dynamics import (
     joint_project_wrench,
     link_force_cmvec,
     link_momentum_cmvec,
 )
-from robokots.outward.kernels.cmtm_apply import apply_mat_adj, apply_mat_inv_adj
+from robokots.core.kernels.cmtm_apply import apply_mat_adj, apply_mat_inv_adj
 
 
 def _batch_eye_cmtm(batch_shape: tuple[int, ...], order: int) -> CMTM:

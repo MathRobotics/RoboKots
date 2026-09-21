@@ -4,31 +4,31 @@ from mathrobo import CMVector, Factorial
 from robokots.core import RobotStruct
 from robokots.core.state.spec import StateType, dim_to_dof, data_type_dof, data_type_offset
 from robokots.core.state.spec import keys_kinematics, keys_momentum, keys_force, keys_torque
-from robokots.outward.access import (
+from robokots.core.state.access import (
     total_link_cmvec,
     state_cmtm,
     state_cmtm_wrench,
     state_cmvec,
     state_rel_cmtm,
-    state_sample,
 )
 from robokots.core import batch_shape as batch_shapes
-from robokots.outward.kernels.joint import joint_select_diag_mat
-from robokots.outward.kernels.inertia import spatial_inertia
-from robokots.outward.kernels.dynamics_derivatives import (
+from robokots.outward.data import state_sample
+from robokots.core.kernels.joint import joint_select_diag_mat
+from robokots.core.kernels.inertia import spatial_inertia
+from robokots.core.kernels.dynamics_derivatives import (
     inertia_diag_mat,
     partial_link_sp_vel_to_force_grad_mat,
     partial_momentum_to_force_grad_mat,
 )
-from robokots.outward.kernels.whole_body.dynamics import (
+from robokots.core.kernels.whole_body.dynamics import (
     total_world_link_cmtm_wrench_matvec,
     total_world_link_wrench_to_world_joint_wrench_matvec,
 )
-from robokots.outward.kernels.whole_body.gravity_derivatives import (
+from robokots.core.kernels.whole_body.gravity_derivatives import (
     state_gravity,
     total_link_gravity_force,
 )
-from robokots.outward.kernels.whole_body.topology import scatter_joint_child_link_blocks
+from robokots.core.kernels.whole_body.topology import scatter_joint_child_link_blocks
 from .outward_total_gradient import (
     _batch_selected_coord_to_link_vel_grad_mat,
     _is_batched_kinematics_state,

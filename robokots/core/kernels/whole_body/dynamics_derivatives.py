@@ -1,16 +1,17 @@
 import numpy as np
 
 from robokots.core import RobotStruct
+from robokots.core.state.protocol import OutwardDataView
 from robokots.core.state.spec import dim_to_dof
 
-from robokots.outward.kernels.whole_body.dynamics import total_link_inertia_mat, total_joint_wrench_to_joint_torque_mat
-from robokots.outward.kernels.whole_body.dynamics import total_world_link_wrench_to_world_joint_wrench_mat
-from robokots.outward.kernels.whole_body.dynamics import total_link_inertia_matvec
-from robokots.outward.kernels.whole_body.kinematics_derivatives import total_coord_to_joint_tan_vel_grad_mat, total_joint_tan_vel_to_link_sp_vel_grad_mat
-from robokots.outward.kernels.whole_body.kinematics_derivatives import total_coord_to_link_tan_vel_grad_mat, total_coord_to_link_vel_grad_mat
-from robokots.outward.kernels.whole_body.kinematics_derivatives import total_coord_to_link_sp_vel_grad_matvec
+from robokots.core.kernels.whole_body.dynamics import total_link_inertia_mat, total_joint_wrench_to_joint_torque_mat
+from robokots.core.kernels.whole_body.dynamics import total_world_link_wrench_to_world_joint_wrench_mat
+from robokots.core.kernels.whole_body.dynamics import total_link_inertia_matvec
+from robokots.core.kernels.whole_body.kinematics_derivatives import total_coord_to_joint_tan_vel_grad_mat, total_joint_tan_vel_to_link_sp_vel_grad_mat
+from robokots.core.kernels.whole_body.kinematics_derivatives import total_coord_to_link_tan_vel_grad_mat, total_coord_to_link_vel_grad_mat
+from robokots.core.kernels.whole_body.kinematics_derivatives import total_coord_to_link_sp_vel_grad_matvec
 
-from robokots.outward.kernels.whole_body.partial_dynamics import (
+from robokots.core.kernels.whole_body.partial_dynamics import (
     total_partial_link_momentum_to_world_link_momentum_grad_mat,
     total_partial_link_sp_vel_to_joint_force_grad_mat,
     total_partial_link_sp_vel_to_link_force_grad_mat,
@@ -19,23 +20,23 @@ from robokots.outward.kernels.whole_body.partial_dynamics import (
     total_partial_momentum_to_force_grad_mat,
     total_partial_world_joint_momentum_to_joint_momentum_grad_mat,
 )
-from robokots.outward.kernels.whole_body.gravity_derivatives import (
+from robokots.core.kernels.whole_body.gravity_derivatives import (
     state_gravity,
     total_coord_to_joint_gravity_force_grad_mat,
     total_coord_to_link_gravity_force_grad_mat,
 )
-from robokots.outward.kernels.whole_body.topology import (
+from robokots.core.kernels.whole_body.topology import (
     take_joint_child_link_blocks,
     take_joint_child_link_matrix_blocks,
 )
 
-def total_coord_to_link_momentum_grad_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 3) -> np.ndarray:
+def total_coord_to_link_momentum_grad_mat(r : RobotStruct, state : OutwardDataView, order : int = 3, dim : int = 3) -> np.ndarray:
     return total_link_inertia_mat(r, order=order-1, dim=dim) @ total_joint_tan_vel_to_link_sp_vel_grad_mat(r, state, order, dim) @ total_coord_to_joint_tan_vel_grad_mat(r, state, order, dim)
 
-def total_coord_to_link_momentum_grad_matvec(r : RobotStruct, state : dict, vec : np.ndarray, order : int = 3, dim : int = 3) -> np.ndarray:
+def total_coord_to_link_momentum_grad_matvec(r : RobotStruct, state : OutwardDataView, vec : np.ndarray, order : int = 3, dim : int = 3) -> np.ndarray:
     return total_link_inertia_matvec(r, total_coord_to_link_sp_vel_grad_matvec(r, state, vec, order, dim), order=order-1, dim=dim)
 
-def total_coord_to_world_link_momentum_grad_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 3) -> np.ndarray:
+def total_coord_to_world_link_momentum_grad_mat(r : RobotStruct, state : OutwardDataView, order : int = 3, dim : int = 3) -> np.ndarray:
     # dof = dim_to_dof(dim)
     # total_local_link_momentum = total_link_cmvec(state, r.link_names, "momentum", order-1)
     # j1 = total_world_link_cmtm_wrench(r, state, order-1, dim) @ total_factorial_mat_inv(r.link_num, order-1, dof) @ total_coord_to_link_momentum_grad_mat(r, state, order, dim)
@@ -47,7 +48,7 @@ def total_coord_to_world_link_momentum_grad_mat(r : RobotStruct, state : dict, o
 
 def total_coord_to_link_force_grad_mat(
     r : RobotStruct,
-    state : dict,
+    state : OutwardDataView,
     force_order : int = 1,
     dim : int = 3,
     gravity=None,
@@ -62,10 +63,10 @@ def total_coord_to_link_force_grad_mat(
     return result
 
 
-def total_coord_to_world_joint_momentum_grad_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 3) -> np.ndarray:
+def total_coord_to_world_joint_momentum_grad_mat(r : RobotStruct, state : OutwardDataView, order : int = 3, dim : int = 3) -> np.ndarray:
     return total_world_link_wrench_to_world_joint_wrench_mat(r, order=order-1, dim=dim) @ total_coord_to_world_link_momentum_grad_mat(r, state, order=order, dim=dim)
 
-def total_coord_to_joint_momentum_grad_mat(r : RobotStruct, state : dict, order : int = 3, dim : int = 3) -> np.ndarray:
+def total_coord_to_joint_momentum_grad_mat(r : RobotStruct, state : OutwardDataView, order : int = 3, dim : int = 3) -> np.ndarray:
     dof = dim_to_dof(dim)
     j1 = total_partial_world_joint_momentum_to_joint_momentum_grad_mat(r, state, order, dim) @ total_coord_to_world_joint_momentum_grad_mat(r, state, order, dim)
     link_tan_grad = total_coord_to_link_tan_vel_grad_mat(
@@ -79,7 +80,7 @@ def total_coord_to_joint_momentum_grad_mat(r : RobotStruct, state : dict, order 
 
 def total_coord_to_joint_force_grad_mat(
     r : RobotStruct,
-    state : dict,
+    state : OutwardDataView,
     force_order : int = 1,
     dim : int = 3,
     gravity=None,
@@ -108,7 +109,7 @@ def total_coord_to_joint_force_grad_mat(
 
 def total_coord_to_joint_torque_grad_mat(
     r : RobotStruct,
-    state : dict,
+    state : OutwardDataView,
     torque_order : int = 1,
     dim : int = 3,
     gravity=None,

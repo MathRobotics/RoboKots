@@ -2,18 +2,24 @@ import numpy as np
 from mathrobo import CMVector, Factorial
 
 from robokots.core import RobotStruct
+from robokots.core.state.protocol import OutwardDataView
 from robokots.core.state.spec import dim_to_dof
-from robokots.outward.access import state_cmtm, state_cmtm_wrench
+from robokots.core.state.access import state_cmtm, state_cmtm_wrench
 
-from robokots.outward.kernels.cmtm_apply import apply_mat_inv_adj
-from robokots.outward.kernels.inertia import spatial_inertia
-from robokots.outward.kernels.dynamics_derivatives import inertia_diag_mat
-from robokots.outward.kernels.whole_body.topology import take_joint_child_link_blocks
-from robokots.outward.kernels.whole_body.kinematics_derivatives import total_coord_to_link_tan_vel_grad_mat
+from robokots.core.kernels.cmtm_apply import apply_mat_inv_adj
+from robokots.core.kernels.inertia import spatial_inertia
+from robokots.core.kernels.dynamics_derivatives import inertia_diag_mat
+from robokots.core.kernels.whole_body.topology import take_joint_child_link_blocks
+from robokots.core.kernels.whole_body.kinematics_derivatives import total_coord_to_link_tan_vel_grad_mat
 
 
-def state_gravity(state, gravity=None) -> np.ndarray:
-    """Return a validated world-frame gravity vector for an outward state."""
+def state_gravity(state: OutwardDataView, gravity=None) -> np.ndarray:
+    """Resolve world-frame gravity without requiring concrete state storage.
+
+    An explicit gravity argument takes precedence. If omitted, read the optional
+    ``state.gravity`` attribute, falling back to zero when absent. Gravity is
+    not required by OutwardDataView, so readers without it remain valid inputs.
+    """
     if gravity is None:
         gravity = getattr(state, "gravity", np.zeros(3))
     gravity = np.asarray(gravity, dtype=float)

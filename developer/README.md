@@ -85,7 +85,7 @@ Use these implementation paths for new code:
 | `robokots.core.state.batch` | State collection, batch shape, and validation | `robokots.core.state_batch` |
 | `robokots.api.state_cache` | Freshness checks, invalidation, and cached computation | `robokots.core.state_cache` |
 | `robokots.outward.data` | NumPy/mathrobo computational state storage | `robokots.core.outward_state` |
-| `robokots.outward.access` | Direct computational state access | `robokots.core.state_access` |
+| `robokots.core.state.access` | Protocol-based state reads and value transformations | `robokots.core.state_access`, `robokots.outward.access` |
 | `robokots.state_io.dictionary` | Dictionary export and serialized-state extraction | `robokots.core.state_dict`, `robokots.core.state_dict_utils` |
 | `robokots.state_io.jsonl` | JSON Lines serialization | `robokots.core.state_json`, `robokots.core.state_jsonl` |
 
@@ -118,7 +118,11 @@ container directly without depending on the API layer. Native batched states
 continue to use their existing vectorized paths.
 
 `outward/data.py` owns concrete NumPy/mathrobo storage, including its local
-derived-value memoization. Read helpers remain separate in `outward/access.py`.
+derived-value memoization and `state_sample()`, which extracts a batch sample
+into an `OutwardState`. Shared read and value-transformation helpers live in
+`core/state/access.py`; they depend on `OutwardDataView` and mathrobo value types,
+not on concrete outward containers. Import `state_sample` directly from
+`robokots.outward.data`; the old `outward.access` module has been removed.
 Rust storage and workspaces remain under `outward/rust/`. `api/state_cache.py`
 owns revision-based recomputation and the `update_outward_state()` helper,
 which is no longer exported by `outward` or `outward.values`.
@@ -131,14 +135,16 @@ and `ArrayOutwardState` from `robokots.outward.data`, and `StateCache` from
 Before/after timings and numerical comparisons are documented in the
 [state layout benchmark](benchmarks/README.md#core-state-layout).
 
-### Outward computation kernels
+### Shared computation kernels
 
-The former `core/models/` implementations now live in `outward/kernels/`.
-They compute local joint/link quantities and assemble whole-body operators;
-they are not backend-independent data definitions. This also removes the
-former dependency from core models back into `outward/access.py`.
+The former `core/models/` implementations are organized under `core/kernels/`.
+Core contains both shared data definitions and foundational computation kernels.
+Kernels compute local joint/link quantities and assemble whole-body operators;
+they read states through `core/state/access.py` and `OutwardDataView`, without
+importing concrete outward storage or API orchestration. The intermediate
+`outward/kernels/` location is removed, with no compatibility exports.
 
-| Former module under `core.models` | Module under `outward.kernels` |
+| Former module under `core.models` | Module under `core.kernels` |
 | --- | --- |
 | `kinematics.kinematics`, `kinematics.kinematics_matrix` | `joint` |
 | `kinematics.base` joint adapters | `joint` |
@@ -165,17 +171,25 @@ paths are not replaced by dense matrix construction. The numerical definitions,
 factorial normalization, gravity conventions, and CMTM apply selection are unchanged.
 
 There are no old-path compatibility modules or re-exports. Import local kernels
-explicitly, for example `from robokots.outward.kernels.joint import JointData`.
-`outward.kernels.whole_body` retains lazy exports of its own operator functions.
+explicitly, for example `from robokots.core.kernels.joint import JointData`.
+`core.kernels.whole_body` retains lazy exports of its own operator functions.
 Importing NumPy kernels does not select the JAX implementation. Existing public
-`Kots` methods are unchanged. Kernel tests live under `tests/outward/kernels/`.
+`Kots` methods are unchanged. Kernel tests live under `tests/core/kernels/`.
 See the [kernel layout benchmark](benchmarks/README.md#kernel-layout) for
-separate state-building, dense Jacobian, JVP, and VJP measurements.
+separate state-building, dense Jacobian, JVP, and VJP measurements. The subsequent
+[move into core](benchmarks/README.md#move-into-core) is measured separately.
+
+Whole-body state annotations use `OutwardDataView` rather than `dict`.
+Pass world-frame gravity explicitly when selecting calculation conditions.
+For existing callers that omit it, gravity helpers use the optional
+`state.gravity` attribute, or zero when absent; gravity is not a required
+attribute of the common reader protocol. Concrete state creation and sample
+extraction remain in `outward/data.py`.
 
 ### Computational state and export
 
 Computation reads `OutwardState`, `ArrayOutwardState`, or Rust state views through
-`outward.access` and backend methods. JAX kinematics also returns an
+`core.state.access` and backend methods. JAX kinematics also returns an
 `OutwardState`. Jacobians and numerical reference calculations do not reconstruct
 computational state from flat dictionaries. Low-level computational functions
 expect state objects; dictionary inputs are no longer supported.

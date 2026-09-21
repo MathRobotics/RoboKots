@@ -1,7 +1,7 @@
 """Whole-body matrix and gradient helpers.
 
 The heavy submodules are loaded lazily so importing
-``robokots.outward.kernels.whole_body`` does not pull in the entire dynamics stack.
+``robokots.core.kernels.whole_body`` does not pull in the entire dynamics stack.
 """
 
 from importlib import import_module

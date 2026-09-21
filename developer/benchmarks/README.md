@@ -36,6 +36,21 @@ pre-refactor commit into a temporary directory and used the same Rust extension;
 the after package was loaded from the working tree. Source locations and commit
 identity are recorded in the JSON environment fields.
 
+### Move into Core
+
+The later relocation from `outward/kernels/` to `core/kernels/` and shared
+access separation preserve calculation bodies. Compare with the saved
+post-consolidation baseline using the same workload:
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 .venv/bin/python -m developer.benchmarks.kernel_layout --output developer/benchmarks/results/kernel_core_layout_after.json --compare developer/benchmarks/results/kernel_layout_after.json
+```
+
+See the [core relocation report](results/kernel_core_layout_after.md) and
+[JSON](results/kernel_core_layout_after.json). The baseline comes from a
+previous session, so timing differences may also reflect machine conditions
+between sessions; numerical agreement is checked independently of timings.
+
 ## Core State Layout
 
 Measure once before reorganizing the source, then again after the change:

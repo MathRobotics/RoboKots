@@ -387,7 +387,7 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
 
   def show_robot(self, save = False, ax = None, color : RobotColor = None):
     self._ensure_not_batched("show_robot")
-    from .outward.access import state_link_positions
+    from .core.state.access import state_link_positions
 
     conectivity = np.zeros((self.robot_.joint_num, 2), dtype='int64')
     for i in range(self.robot_.joint_num):
@@ -413,13 +413,13 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
 
   def show_link_points(self):
     self._ensure_not_batched("show_link_points")
-    from .outward.access import state_link_positions
+    from .core.state.access import state_link_positions
 
     show_link_points(state_link_positions(self._state_for_direct_read(), self.robot_.link_names))
 
   def show_target_link_points(self, plt = None, dimension=3):
     self._ensure_not_batched("show_target_link_points")
-    from .outward.access import state_link_positions
+    from .core.state.access import state_link_positions
 
     if not self.target_:
       raise ValueError("target_ is not set")

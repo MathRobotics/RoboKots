@@ -6,7 +6,7 @@ import jax
 jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 import numpy as np
-import robokots.outward.kernels.kinematics_jax as kinematics_jax
+import robokots.core.kernels.kinematics_jax as kinematics_jax
 
 from robokots.core.state.spec import StateType
 from robokots.kots import Kots

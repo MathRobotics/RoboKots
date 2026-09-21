@@ -1,8 +1,9 @@
 import numpy as np
 from mathrobo import Factorial, CMVector
 from robokots.core import RobotStruct
+from robokots.core.state.protocol import OutwardDataView
 from robokots.core.state.spec import dim_to_dof
-from robokots.outward.access import state_cmtm, state_cmtm_wrench
+from robokots.core.state.access import state_cmtm, state_cmtm_wrench
 
 def total_factorial_mat(num : int, order : int, submat_dim : int = 6) -> np.ndarray:
     '''
@@ -52,7 +53,7 @@ def total_factorial_mat_inv_vec(num : int, vec : np.ndarray, order : int, submat
         result[start:start+n] = mat @ vec[start:start+n]
     return result
 
-def total_link_cmtm_var_x_arb_vec(r : RobotStruct, state : dict, total_cm_vec : np.ndarray, order : int = 1, dim : int = 3) -> np.ndarray:
+def total_link_cmtm_var_x_arb_vec(r : RobotStruct, state : OutwardDataView, total_cm_vec : np.ndarray, order : int = 1, dim : int = 3) -> np.ndarray:
     n_ = dim_to_dof(dim) * order
     mat = np.zeros((r.link_num * n_, r.link_num * n_))
     total_cm_vecs = total_cm_vec.reshape(r.link_num, n_)
@@ -62,7 +63,7 @@ def total_link_cmtm_var_x_arb_vec(r : RobotStruct, state : dict, total_cm_vec : 
         mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = m
     return mat
 
-def total_joint_cmtm_var_x_arb_vec(r : RobotStruct, state : dict, total_cm_vec : np.ndarray, order : int = 1, dim : int = 3) -> np.ndarray:
+def total_joint_cmtm_var_x_arb_vec(r : RobotStruct, state : OutwardDataView, total_cm_vec : np.ndarray, order : int = 1, dim : int = 3) -> np.ndarray:
     n_ = dim_to_dof(dim) * order
     mat = np.zeros((r.joint_num * n_, r.joint_num * n_))
     total_cm_vecs = total_cm_vec.reshape(r.joint_num, n_)
@@ -73,7 +74,7 @@ def total_joint_cmtm_var_x_arb_vec(r : RobotStruct, state : dict, total_cm_vec :
         mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = m
     return mat
 
-def total_link_cmtm_wrench_var_x_arb_vec(r : RobotStruct, state : dict, total_cm_vec : np.ndarray, order : int = 1, dim : int = 3) -> np.ndarray:
+def total_link_cmtm_wrench_var_x_arb_vec(r : RobotStruct, state : OutwardDataView, total_cm_vec : np.ndarray, order : int = 1, dim : int = 3) -> np.ndarray:
     n_ = dim_to_dof(dim) * order
     mat = np.zeros((r.link_num * n_, r.link_num * n_))
     total_cm_vecs = total_cm_vec.reshape(r.link_num, n_)
@@ -83,7 +84,7 @@ def total_link_cmtm_wrench_var_x_arb_vec(r : RobotStruct, state : dict, total_cm
         mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = m
     return mat
 
-def total_link_cmtm_wrench_var_x_arb_vec_matvec(r : RobotStruct, state : dict, total_cm_vec : np.ndarray, vec : np.ndarray, order : int = 1, dim : int = 3) -> np.ndarray:
+def total_link_cmtm_wrench_var_x_arb_vec_matvec(r : RobotStruct, state : OutwardDataView, total_cm_vec : np.ndarray, vec : np.ndarray, order : int = 1, dim : int = 3) -> np.ndarray:
     n_ = dim_to_dof(dim) * order
     result = np.zeros(r.link_num * n_)
     total_cm_vecs = total_cm_vec.reshape(r.link_num, n_)
@@ -94,7 +95,7 @@ def total_link_cmtm_wrench_var_x_arb_vec_matvec(r : RobotStruct, state : dict, t
         result[start:start+n_] = m @ vec[start:start+n_]
     return result
 
-def total_joint_cmtm_wrench_var_x_arb_vec(r : RobotStruct, state : dict, total_cm_vec : np.ndarray, order : int = 1, dim : int = 3) -> np.ndarray:
+def total_joint_cmtm_wrench_var_x_arb_vec(r : RobotStruct, state : OutwardDataView, total_cm_vec : np.ndarray, order : int = 1, dim : int = 3) -> np.ndarray:
     n_ = dim_to_dof(dim) * order
     mat = np.zeros((r.joint_num * n_, r.joint_num * n_))
     total_cm_vecs = total_cm_vec.reshape(r.joint_num, n_)
@@ -105,7 +106,7 @@ def total_joint_cmtm_wrench_var_x_arb_vec(r : RobotStruct, state : dict, total_c
         mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = m
     return mat
 
-def total_joint_cmtm_wrench_inv_var_x_arb_vec(r : RobotStruct, state : dict, total_cm_vec : np.ndarray, order : int = 1, dim : int = 3) -> np.ndarray:
+def total_joint_cmtm_wrench_inv_var_x_arb_vec(r : RobotStruct, state : OutwardDataView, total_cm_vec : np.ndarray, order : int = 1, dim : int = 3) -> np.ndarray:
     n_ = dim_to_dof(dim) * order
     mat = np.zeros((r.joint_num * n_, r.joint_num * n_))
     total_cm_vecs = total_cm_vec.reshape(r.joint_num, n_)
@@ -117,7 +118,7 @@ def total_joint_cmtm_wrench_inv_var_x_arb_vec(r : RobotStruct, state : dict, tot
         mat[i*n_:(i+1)*n_, i*n_:(i+1)*n_] = m
     return mat
 
-def total_joint_cmtm_wrench_inv_var_x_arb_vec_matvec(r : RobotStruct, state : dict, total_cm_vec : np.ndarray, vec : np.ndarray, order : int = 1, dim : int = 3) -> np.ndarray:
+def total_joint_cmtm_wrench_inv_var_x_arb_vec_matvec(r : RobotStruct, state : OutwardDataView, total_cm_vec : np.ndarray, vec : np.ndarray, order : int = 1, dim : int = 3) -> np.ndarray:
     n_ = dim_to_dof(dim) * order
     result = np.zeros(r.joint_num * n_)
     total_cm_vecs = total_cm_vec.reshape(r.joint_num, n_)

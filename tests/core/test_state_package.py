@@ -19,6 +19,9 @@ for name in core.__all__:
     getattr(core, name)
 assert not any(name.startswith(('robokots.api', 'robokots.outward'))
                for name in sys.modules)
+from robokots.core.state import access
+assert not any(name.startswith(('robokots.api', 'robokots.outward'))
+               for name in sys.modules)
 from robokots.state_io.dictionary import export_state_dict
 from robokots.outward.data import OutwardState, ArrayOutwardState
 assert not any(name.startswith('robokots.api') for name in sys.modules)

@@ -8,7 +8,7 @@ polynomial trajectory, finite difference or custom derivative rule is used.
 import jax
 import jax.numpy as jnp
 
-from robokots.outward.kernels.inertia import spatial_inertia
+from robokots.core.kernels.inertia import spatial_inertia
 from robokots.core.state.spec import keys_momentum, keys_force, keys_torque
 from robokots.outward.diff.dynamics_jax import _ad, _hat
 

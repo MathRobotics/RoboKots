@@ -23,8 +23,8 @@ NumPyによる解析計算、JAXによる自動微分、PyO3経由のRust実装�
 |---|---|
 | `robokots/kots.py` | 公開ファサード `Kots`、モデル・運動データの操作 |
 | `robokots/api/` | 状態、微分、inward/outward、バックエンドの振り分け |
-| `robokots/core/` | ロボット構造、運動データ、軸・状態の仕様と共通容器 |
-| `robokots/outward/kernels/` | 関節・リンク・全身の計算部品、行列・直接積・微分 |
+| `robokots/core/` | ロボット構造、運動データ、軸・状態の仕様・共通容器と基礎計算 |
+| `robokots/core/kernels/` | 関節・リンク・全身の計算部品、行列・直接積・微分 |
 | `robokots/outward/state.py` | NumPyの運動学・動力学状態計算 |
 | `robokots/outward/diff/` | 解析微分、数値微分、JAXの計算 |
 | `robokots/outward/rust/` | Rustモデル・状態へのアダプター |

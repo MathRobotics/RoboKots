@@ -2,9 +2,9 @@ import numpy as np
 from types import SimpleNamespace
 
 from mathrobo import CMVector, SO3, SE3
-from robokots.outward.kernels.inertia import inertia, spatial_inertia
-from robokots.outward.kernels.dynamics import *
-from robokots.outward.kernels.joint import local_tangent_mat
+from robokots.core.kernels.inertia import inertia, spatial_inertia
+from robokots.core.kernels.dynamics import *
+from robokots.core.kernels.joint import local_tangent_mat
 
 '''
 Test dynamics function

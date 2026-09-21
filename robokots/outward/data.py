@@ -292,3 +292,34 @@ class ArrayOutwardState:
                 for name in names
             }
         return self._cache[cache_key]
+
+
+def state_sample(robot, state, index):
+    """Select one computational batch sample, without dictionary serialization.
+
+    Used by scalar-only analytic kernels; arrays may share storage with state.
+    """
+    def cmtms(owner_type, owners):
+        result = {}
+        for owner in owners:
+            value = state.cmtm(owner_type, owner.name)
+            result[owner.name] = CMTM[SE3](
+                SE3.set_mat(np.asarray(value.elem_mat())[index]),
+                np.asarray(value.vecs())[index],
+            )
+        return result
+
+    sample = OutwardState(state.order, cmtms("link", robot.links),
+                          cmtms("joint", robot.joints), gravity=np.array(state.gravity, copy=True))
+    for owner_type, owners in (("link", robot.links), ("joint", robot.joints)):
+        for owner in owners:
+            families = ("momentum", "force", "torque") if owner_type == "joint" and owner.dof else ("momentum", "force")
+            for family in families:
+                try:
+                    series = state.quantity_series(owner_type, owner.name, family)[index]
+                except KeyError:
+                    continue
+                if series.shape[-2]:
+                    getattr(sample, f"{owner_type}_{family}")[owner.name] = (
+                        series if family == "torque" else CMVector(series))
+    return sample
