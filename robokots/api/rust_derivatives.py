@@ -5,7 +5,7 @@ import logging
 import numpy as np
 
 from ..core import batch_shape as batch_shapes
-from ..core.state.spec import StateType, keys_force, keys_kinematics, keys_momentum, keys_torque
+from ..core.state.spec import StateType, keys_force, keys_kinematics, keys_momentum, keys_torque, state_output
 
 
 _logger = logging.getLogger(__name__)
@@ -22,36 +22,22 @@ class RustDerivativesMixin:
       return None
     if not states or all(st.data_type in keys_torque and st.frame_name is None for st in states):
       return None
-    link_ids = {link.name: i for i, link in enumerate(self.robot_.links)}
-    joint_ids = {joint.name: i for i, joint in enumerate(self.robot_.joints)}
     specs, widths = [], []
     has_dynamics = False
+    families = {"momentum": 0, "force": 1, "torque": 2, "spatial": 3, "pos": 4, "rot": 5, "frame": 6}
     for st in states:
-      ids = link_ids if st.owner_type == "link" else joint_ids if st.owner_type == "joint" else None
-      if ids is None or st.owner_name not in ids or st.frame_name not in (None, "local", "world"):
+      try:
+        spec = state_output(self.robot_, st)
+      except ValueError:
         return None
-      if st.data_type in keys_momentum:
-        family, width = 0, 6
-      elif st.data_type in keys_force:
-        family, width = 1, 6
-      elif st.data_type in keys_torque:
-        if st.owner_type != "joint" or st.frame_name == "world" or self.robot_.joint(st.owner_name).dof != 1:
-          return None
-        family, width = 2, 1
-      elif st.data_type in keys_kinematics and not self._is_joint_motion_state(st):
-        if st.data_type in ("pos", "rot", "frame"):
-          family = {"pos": 4, "rot": 5, "frame": 6}[st.data_type]
-          width = 6 if family == 6 else 3
-        else:
-          family, width = 3, 6
-      else:
+      if spec.family not in families or (spec.family == "torque" and spec.width != 1):
         return None
-      time = st.key_order - (2 if family == 3 else 1)
+      family, time = families[spec.family], spec.derivative
       if time < 0 or time >= max_order - (1 if family in (0, 3) else 2):
         return None
       has_dynamics |= family < 3
-      specs.append((0 if st.owner_type == "link" else 1, ids[st.owner_name], family, time, st.frame_name == "world"))
-      widths.append(width)
+      specs.append((0 if spec.owner_type == "link" else 1, spec.owner_id, family, time, spec.frame == "world"))
+      widths.append(spec.width)
     return (specs, widths) if has_dynamics else None
 
   def _rust_selected_dynamics_apply(self, states, max_order, rhs, batch_shape, *, rhs_is_matrix, transpose=False, list_output=False):

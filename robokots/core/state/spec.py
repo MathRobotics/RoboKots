@@ -1,6 +1,7 @@
 """State selection specifications, quantity names, orders, and dimensions."""
 
 from typing import List
+from dataclasses import dataclass
 
 frame_names = ("world","local")
 
@@ -348,3 +349,52 @@ def state_type_list_condition(state_type_list : list[StateType]) -> int:
         if is_in_keys_dynamics([st.data_type]):
             is_dynamics = True
     return max_order, is_dynamics
+
+
+@dataclass(frozen=True)
+class StateOutput:
+    """Backend-independent layout for an expanded link/joint selection.
+
+    Spatial derivative zero is velocity; dynamics derivative zero is the
+    quantity itself. Pose widths describe tangents, not matrix storage.
+    """
+    owner_type: str
+    owner_id: int
+    family: str
+    derivative: int
+    width: int
+    frame: str
+
+
+def state_output(robot, state: StateType, dim: int = 3) -> StateOutput:
+    if state.owner_type not in ('link', 'joint'):
+        raise ValueError('state output requires expanded link/joint owners')
+    owner = robot.link(state.owner_name) if state.owner_type == 'link' else robot.joint(state.owner_name)
+    if owner is None:
+        raise ValueError(f'Invalid {state.owner_type} name: {state.owner_name}')
+    frame = state.frame_name or 'local'
+    if frame not in frame_names:
+        raise ValueError(f'Invalid frame: {frame}')
+    key = state.data_type
+    derivative = state.key_order - 1
+    if state.owner_type == 'joint' and key in keys_joint_motion:
+        family, width = 'coordinate', owner.dof
+    elif key in keys_momentum:
+        family, width = 'momentum', dim_to_dof(dim)
+    elif key in keys_force:
+        family, width = 'force', dim_to_dof(dim)
+    elif key in keys_torque:
+        if state.owner_type != 'joint' or frame != 'local':
+            raise ValueError('torque requires a joint in its local frame')
+        family, width = 'torque', owner.dof
+    elif key in ('pos','rot','frame'):
+        family, width = key, data_type_dof(key, dim=dim)
+    elif key in keys_kinematics:
+        family, width, derivative = 'spatial', dim_to_dof(dim), state.key_order-2
+    else:
+        raise ValueError(f'Unsupported state output: {key}')
+    return StateOutput(state.owner_type, owner.id, family, derivative, width, frame)
+
+
+def state_output_width(robot, state: StateType, dim: int = 3) -> int:
+    return state_output(robot, state, dim).width

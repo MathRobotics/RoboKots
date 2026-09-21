@@ -10,14 +10,13 @@ import numpy as np
 from mathrobo import CMVector
 
 from robokots.core.state.access import state_cmtm, state_cmtm_wrench, state_cmvec, state_rel_cmtm
-from robokots.core.state.spec import keys_kinematics, keys_joint_motion, keys_force, data_type_dof, StateType
+from robokots.core.state.spec import keys_kinematics, keys_joint_motion, keys_force, data_type_dof, StateType, state_output, state_output_width
 from robokots.core.kernels.joint import joint_select_diag_mat
-from robokots.outward.data import state_sample
 
 
 def needs_spatial_selection(states):
     mixed = any(s.is_dynamics for s in states)
-    return any((s.data_type in keys_kinematics or s.data_type in keys_joint_motion)
+    return any(s.data_type in keys_force and s.frame_name == 'world' for s in states) or any((s.data_type in keys_kinematics or s.data_type in keys_joint_motion)
                and (s.owner_type == 'joint' or s.frame_name == 'world'
                     or (mixed and s.data_type in ('pos', 'rot', 'frame'))) for s in states)
 
@@ -30,36 +29,38 @@ def _operators(robot, state, s, order):
     owner = (s.owner_type, s.owner_name)
     c = state_cmtm(state, s.owner_name, s.owner_type, order)
     result = {}
-    width = data_type_dof(s.data_type)
+    spec = state_output(robot, s)
+    width = spec.width
+    batch = np.asarray(c.elem_mat()).shape[:-2]
     if s.key_order == 1:
-        op = np.zeros((width, 6*order))
+        op = np.zeros(batch + (width, 6*order))
         transform = np.eye(6)
         if s.frame_name == 'world':
             # Pose values retain their owner transform. World selects a spatial
             # tangent, while None/local selects the established body tangent.
-            transform = np.asarray(c.mat_adj())[:6, :6]
+            transform = np.asarray(c.mat_adj())[..., :6, :6]
             if s.data_type == 'pos':
-                transform = np.zeros((6, 6))
-                transform[3:, 3:] = np.asarray(c.elem_mat())[:3, :3]
+                transform = np.zeros(batch + (6, 6))
+                transform[..., 3:, 3:] = np.asarray(c.elem_mat())[..., :3, :3]
         rows = slice(3, 6) if s.data_type == 'pos' else slice(0, 3) if s.data_type == 'rot' else slice(0, 6)
-        op[:, :6] = transform[rows]
+        op[..., :, :6] = transform[..., rows, :]
         return {owner: op}
-    n = s.key_order - 1
-    op = np.zeros((6, 6*order))
+    n = spec.derivative + 1
+    op = np.zeros(batch + (6, 6*order))
     if s.frame_name != 'world':
-        op[:, 6*n:6*(n+1)] = np.eye(6)
+        op[..., :, 6*n:6*(n+1)] = np.eye(6)
         return {owner: op}
     frame_name = s.owner_name if s.owner_type == 'link' else robot.links[robot.joint(s.owner_name).child_link_id].name
     frame_owner = ('link', frame_name)
     frame = state_cmtm(state, frame_name, 'link', n)
-    vectors = np.asarray(c.vecs())[:n]
+    vectors = np.asarray(c.vecs())[..., :n, :]
     arb = CMVector(vectors)
     factors = np.repeat([factorial(i) for i in range(n)], 6)
     adj = np.asarray(frame.mat_adj()) * factors[:, None] / factors[None, :]
-    op[:, 6:6*(n+1)] = adj[-6:]
+    op[..., :, 6:6*(n+1)] = adj[..., -6:, :]
     result[owner] = op
     transform_op = np.zeros_like(op)
-    transform_op[:, :6*n] = (factors[:, None] * np.asarray(frame.mat_var_x_arb_vec_jacob(arb, frame='bframe')) @ np.asarray(frame.tangent_mat()))[-6:]
+    transform_op[..., :, :6*n] = (factors[:, None] * np.asarray(frame.mat_var_x_arb_vec_jacob(arb, frame='bframe')) @ np.asarray(frame.tangent_mat()))[..., -6:, :]
     result[frame_owner] = result.get(frame_owner, 0) + transform_op
     return result
 
@@ -92,13 +93,9 @@ def spatial_apply(robot, state, states, order, rhs, *, transpose=False):
     """Matrix RHS, scalar or native batched state; outputs preserve selection order."""
     rhs = np.asarray(rhs)
     batch = np.asarray(state_cmtm(state, robot.links[0].name, 'link', order).elem_mat()).shape[:-2]
-    if batch:
-        rhs = np.broadcast_to(rhs, batch + rhs.shape[-2:])
-        return np.stack([spatial_apply(robot, state_sample(robot, state, i), states, order, rhs[i], transpose=transpose)
-                         for i in np.ndindex(batch)]).reshape(batch + (-1, rhs.shape[-1]))
-    widths = [robot.joint(s.owner_name).dof if s.owner_type == 'joint' and s.data_type in keys_joint_motion
-              else data_type_dof(s.data_type) for s in states]
-    out = np.zeros((robot.dof*order if transpose else sum(widths), rhs.shape[-1]))
+    rhs = np.broadcast_to(rhs, batch + rhs.shape[-2:])
+    widths = [state_output_width(robot, s) for s in states]
+    out = np.zeros(batch + (robot.dof*order if transpose else sum(widths), rhs.shape[-1]))
     row = 0
     routes = {}
     for s, width in zip(states, widths):
@@ -106,9 +103,9 @@ def spatial_apply(robot, state, states, order, rhs, *, transpose=False):
             joint = robot.joint(s.owner_name)
             cols = (joint.dof_index + np.arange(joint.dof))*order + s.key_order-1
             if transpose:
-                out[cols] += rhs[row:row+width]
+                out[..., cols, :] += rhs[..., row:row+width, :]
             else:
-                out[row:row+width] = rhs[cols]
+                out[..., row:row+width, :] = rhs[..., cols, :]
         else:
             for owner, op in _operators(robot, state, s, order).items():
                 if owner not in routes:
@@ -116,9 +113,9 @@ def spatial_apply(robot, state, states, order, rhs, *, transpose=False):
                 for joint, local in routes[owner]:
                     cols = slice(joint.dof_index*order, (joint.dof_index+joint.dof)*order)
                     if transpose:
-                        out[cols] += local.T @ (op.T @ rhs[row:row+width])
+                        out[..., cols, :] += np.swapaxes(local,-1,-2) @ (np.swapaxes(op,-1,-2) @ rhs[..., row:row+width, :])
                     else:
-                        out[row:row+width] += op @ (local @ rhs[cols])
+                        out[..., row:row+width, :] += op @ (local @ rhs[..., cols, :])
         row += width
     return out
 
@@ -128,8 +125,7 @@ def selected_apply(robot, state, states, order, rhs, *, transpose=False, dynamic
     rhs = np.broadcast_to(rhs, batch + rhs.shape[-2:])
     if any(s.data_type in keys_force and s.frame_name == 'world' for s in states):
         return _world_force_apply(robot, state, states, order, rhs, transpose, dynamics_apply)
-    widths = [robot.joint(s.owner_name).dof if s.owner_type == 'joint' and (s.data_type in keys_joint_motion or s.data_type.startswith('torque'))
-              else data_type_dof(s.data_type) for s in states]
+    widths = [state_output_width(robot, s) for s in states]
     offsets = np.cumsum([0] + widths)
     kin = [i for i,s in enumerate(states) if is_spatial(s)]
     dyn = [i for i,s in enumerate(states) if not is_spatial(s)]
@@ -152,8 +148,7 @@ def split_outputs(robot, states, result, *, vector=False, list_output=False):
         result = result[..., 0]
     if not list_output:
         return result
-    widths = [robot.joint(s.owner_name).dof if s.owner_type == 'joint' and (s.data_type in keys_joint_motion or s.data_type.startswith('torque'))
-              else data_type_dof(s.data_type) for s in states]
+    widths = [state_output_width(robot, s) for s in states]
     offsets = np.cumsum([0] + widths)
     return [result[..., offsets[i]:offsets[i+1]] if vector else result[..., offsets[i]:offsets[i+1], :]
             for i in range(len(states))]
@@ -165,7 +160,7 @@ def _world_force_apply(robot, state, states, order, rhs, transpose, dynamics_app
     spatial = ('frame','vel','acc','jerk','snap','crackle','pop','lock','drop','shot','put')
     for s in states:
         if s.data_type not in keys_force or s.frame_name != 'world':
-            width = robot.joint(s.owner_name).dof if s.owner_type == 'joint' and (s.data_type in keys_joint_motion or s.data_type.startswith('torque')) else data_type_dof(s.data_type)
+            width = state_output_width(robot, s)
             expanded.append(s)
             blocks.append(np.eye(width))
             continue
