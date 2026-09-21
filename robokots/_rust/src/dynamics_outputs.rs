@@ -1,5 +1,5 @@
-//! Selected local/world dynamics outputs share the torque primal and tangent
-//! recurrence. No dense motion Jacobian is formed by either product kernel.
+//! Selected dynamics and local spatial kinematics share one primal and
+//! derivative recurrence. Neither product kernel forms a dense motion Jacobian.
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
@@ -7,8 +7,10 @@ use crate::spatial::*;
 use crate::types::RustCompiledRobot;
 use crate::workspace::{DynamicsCmtmTangentWorkspace, DynamicsCmtmWorkspace};
 
-/// (owner: link=0/joint=1, owner index, momentum=0/force=1/torque=2,
+/// (owner: link=0/joint=1, owner index, momentum=0/force=1/torque=2/kinematics=3,
 /// ordinary time derivative index, world frame).
+/// Kinematics index zero denotes velocity. Kinematic world/pose outputs are
+/// not supported by this selector; dynamics keeps its existing world support.
 pub(crate) type DynamicsOutput = (usize, usize, usize, usize, bool);
 
 impl RustCompiledRobot {
@@ -28,9 +30,11 @@ impl RustCompiledRobot {
             let count = match family {
                 0 => dynamics_order + 1,
                 1 | 2 => dynamics_order,
+                3 => dynamics_order + 1,
                 _ => return Err(PyValueError::new_err("invalid dynamics output family")),
             };
-            if id >= owners || time >= count || (family == 2 && (owner != 1 || world)) {
+            if id >= owners || time >= count || (family == 2 && (owner != 1 || world))
+                || (family == 3 && world) {
                 return Err(PyValueError::new_err("invalid dynamics output index, order or frame"));
             }
             rows += if family == 2 { 1 } else { 6 };
@@ -52,6 +56,14 @@ impl RustCompiledRobot {
         let cols = tangent.rhs_cols;
         let mut row = 0;
         for &(owner, id, family, time, world) in outputs {
+            if family == 3 {
+                let derivatives = if owner == 0 { &tangent.link_vecs } else { &tangent.joint_vecs };
+                for c in 0..6 { for col in 0..cols {
+                    out[(row + c) * cols + col] = derivatives[((id * (kin_order - 1) + time) * 6 + c) * cols + col];
+                }}
+                row += 6;
+                continue;
+            }
             if family == 2 {
                 for col in 0..cols {
                     out[row * cols + col] = tangent.joint_torque[(id * dynamics_order + time) * cols + col];
@@ -115,8 +127,17 @@ impl RustCompiledRobot {
         let mut jt = vec![0.0; self.joint_num * dynamics_order * cols];
         let mut mat_bar = vec![0.0; self.link_num * 16 * cols];
         let mut vec_bar = vec![0.0; self.link_num * vec_len * cols];
+        let mut joint_vec_bar = vec![0.0; self.joint_num * vec_len * cols];
         let mut row = 0;
         for &(owner, id, family, time, world) in outputs {
+            if family == 3 {
+                let target = if owner == 0 { &mut vec_bar } else { &mut joint_vec_bar };
+                for c in 0..6 { for col in 0..cols {
+                    target[((id * (kin_order - 1) + time) * 6 + c) * cols + col] += rhs[(row + c) * cols + col];
+                }}
+                row += 6;
+                continue;
+            }
             if family == 2 {
                 for col in 0..cols {
                     jt[(id * dynamics_order + time) * cols + col] += rhs[row * cols + col];
@@ -174,7 +195,7 @@ impl RustCompiledRobot {
         }
         self.dynamics_cmtm_reverse_from_state_into(
             motion, &lm, &lf, &jm, &jf, &jt, dynamics_order, gravity, cols,
-            None, Some((&mat_bar, &vec_bar)), primal, out,
+            None, Some((&mat_bar, &vec_bar)), Some(&joint_vec_bar), primal, out,
         );
     }
 }

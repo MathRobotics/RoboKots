@@ -492,3 +492,29 @@ It checks that the sum of four separate VJPs (`torque`, `torque_diff1`,
 `jacobian_transpose_mul_many` result, then reports both timings.  State
 construction is outside the timed region.  Use `--rhs-cols 8` to model a
 multi-column parameter VJP.
+
+## Mixed Rust outputs
+
+Compare the mixed local velocity/force/torque derivative workload before and
+after the unified Rust selected-output implementation:
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 .venv/bin/python -m developer.benchmarks.mixed_rust_outputs --output developer/benchmarks/results/mixed_rust_outputs_before.json
+# Update Python sources and rebuild the release Rust extension, then:
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 .venv/bin/python -m developer.benchmarks.mixed_rust_outputs --output developer/benchmarks/results/mixed_rust_outputs_after.json --compare developer/benchmarks/results/mixed_rust_outputs_before.json
+```
+
+The recorded baseline uses the preceding implementation. Re-running both commands
+on the same revision is only a repeatability check. Model, seed, gravity, output
+selection and measurement settings are shared with `kernel_layout`; extension
+hashes identify the builds. Timed derivative calls start from computed states,
+including any internal recurrence recomputation and Python boundary conversions.
+State construction is measured separately. Do not run tests concurrently.
+The baseline uses Python dense/JVP assembly over Rust states and composed Rust
+VJP calls; the updated mixed derivatives run in one selected Rust call. NumPy
+remains an unchanged timing and accuracy reference for this link-kinematics
+workload. No JAX/JIT measurements are included.
+
+See [comparison](results/mixed_rust_outputs_after.md),
+[baseline JSON](results/mixed_rust_outputs_before.json), and
+[updated JSON](results/mixed_rust_outputs_after.json).

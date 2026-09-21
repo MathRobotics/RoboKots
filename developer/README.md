@@ -312,9 +312,10 @@ algorithm-specific numerical storage and must not be inserted into that cache.
 
 For dynamics requests with motion order at least 3, the Rust derivative adapter
 can select link/joint momentum and force in local or world coordinates together
-with joint torque. `None` and `"local"` denote local spatial outputs. Mixed
-owners, frames, derivative orders, repeated selections, `total_joint` expansion,
-and leading batch axes retain the public output ordering.
+with joint torque and local spatial velocity and its higher time derivatives.
+`None` and `"local"` denote local spatial outputs. Mixed owners, frames,
+derivative orders, repeated selections, `total_joint` expansion, and leading
+batch axes retain the public output ordering.
 
 `robokots/_rust/src/dynamics_outputs.rs` selects results from the same primal
 and tangent recurrence used by the torque-series API. World JVPs include both
@@ -322,14 +323,26 @@ wrench and moving-transform derivatives. World VJP seeds are accumulated with
 local force/momentum/torque seeds before the common dynamics and kinematics
 reverse pass. `jacobian_mul()` and `jacobian_transpose_mul()` use direct products;
 only `jacobian()` supplies a full input basis to materialize a dense Jacobian.
-The existing pure-torque fast paths remain in use.
+Local spatial outputs use the same tangent buffers; their VJP seeds join the
+same reverse pass. Joint spatial motion uses relative joint CMTM vectors,
+not child-link motion. The existing pure-torque and pure-kinematics dispatch
+paths remain in use. Python still validates selections and converts arrays;
+these mixed derivative requests no longer assemble Python analytic kernels.
 
 The Python adapter is in `robokots/api/rust_derivatives.py`, and the batched PyO3
 entry points are `dynamics_selected_tangent_batch` and
 `dynamics_selected_transpose_batch`. Each call computes its own primal state;
 workspaces are reused across samples within the call, not cached across calls.
 The supported model set remains the Rust CMTM fixed/revolute rigid-link subset.
-Requests outside the selected-output contract retain their existing dispatch.
+Requests outside the selected-output contract retain their existing dispatch,
+including mixed pose/world spatial-kinematics requests and joint coordinate
+outputs. This change does not extend model support.
+
+See the [mixed-output before/after benchmark](benchmarks/README.md#mixed-rust-outputs).
+The mixed joint-spatial tests use NumPy state central differences: the existing
+NumPy mixed analytic assembly incorrectly selects link rows for joint spatial
+outputs, and is not used as a reference for those rows. That separate NumPy
+limitation is not changed here.
 
 Run the fixed Rust comparison used for optimization work:
 

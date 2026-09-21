@@ -13,7 +13,11 @@ _logger = logging.getLogger(__name__)
 
 class RustDerivativesMixin:
   def _rust_selected_dynamics_specs(self, states, max_order):
-    """Describe complete dynamics requests; leave pure torque to its fast path."""
+    """Select dynamics and local spatial derivatives in public output order.
+
+    Keep homogeneous kinematics and pure implicit-local torque on their
+    dedicated paths. Joint motion coordinates are not spatial CMTM entries.
+    """
     if not hasattr(self.outward_state_, "raw_data") or self.dim_ != 3 or max_order < 3:
       return None
     if not states or all(st.data_type in keys_torque and st.frame_name is None for st in states):
@@ -21,6 +25,7 @@ class RustDerivativesMixin:
     link_ids = {link.name: i for i, link in enumerate(self.robot_.links)}
     joint_ids = {joint.name: i for i, joint in enumerate(self.robot_.joints)}
     specs, widths = [], []
+    has_dynamics = False
     for st in states:
       ids = link_ids if st.owner_type == "link" else joint_ids if st.owner_type == "joint" else None
       if ids is None or st.owner_name not in ids or st.frame_name not in (None, "local", "world"):
@@ -33,14 +38,19 @@ class RustDerivativesMixin:
         if st.owner_type != "joint" or st.frame_name == "world" or self.robot_.joint(st.owner_name).dof != 1:
           return None
         family, width = 2, 1
+      elif st.data_type in keys_kinematics and not self._is_joint_motion_state(st):
+        if st.frame_name not in (None, "local") or st.key_order < 2:
+          return None
+        family, width = 3, 6
       else:
         return None
-      time = st.key_order - 1
-      if time < 0 or time >= max_order - (1 if family == 0 else 2):
+      time = st.key_order - (2 if family == 3 else 1)
+      if time < 0 or time >= max_order - (1 if family in (0, 3) else 2):
         return None
+      has_dynamics |= family != 3
       specs.append((0 if st.owner_type == "link" else 1, ids[st.owner_name], family, time, st.frame_name == "world"))
       widths.append(width)
-    return specs, widths
+    return (specs, widths) if has_dynamics else None
 
   def _rust_selected_dynamics_apply(self, states, max_order, rhs, batch_shape, *, rhs_is_matrix, transpose=False, list_output=False):
     spec = self._rust_selected_dynamics_specs(states, max_order)

@@ -1449,7 +1449,7 @@ impl RustCompiledRobot {
         ))
     }
 
-    /// Selected local/world momentum, force and torque products. A scalar
+    /// Selected momentum/force/torque and local spatial-kinematics products. A scalar
     /// sample uses a leading batch dimension of one. Output order is preserved.
     #[pyo3(signature = (motions, rhs, outputs, dynamics_order, gravity = None))]
     fn dynamics_selected_tangent_batch<'py>(

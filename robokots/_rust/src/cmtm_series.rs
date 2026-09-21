@@ -225,7 +225,7 @@ impl RustCompiledRobot {
         self.dynamics_cmtm_reverse_from_state_into(
             motion, link_momentum_cotangent, link_force_cotangent,
             joint_momentum_cotangent, joint_force_cotangent, torque_cotangent,
-            dynamics_order, gravity, rhs_cols, kinetic_energy_cotangent, None, primal, out,
+            dynamics_order, gravity, rhs_cols, kinetic_energy_cotangent, None, None, primal, out,
         );
     }
 
@@ -245,6 +245,7 @@ impl RustCompiledRobot {
         rhs_cols: usize,
         kinetic_energy_cotangent: Option<&[f64]>,
         link_kinematics_cotangent: Option<(&[f64], &[f64])>,
+        joint_kinematics_cotangent: Option<&[f64]>,
         primal: &mut DynamicsCmtmWorkspace,
         out: &mut [f64],
     ) {
@@ -275,6 +276,14 @@ impl RustCompiledRobot {
                     }}
                     for i in 0..vec_len {
                         link_vec_bar[link * vec_len + i] += vec_seed[(link * vec_len + i) * rhs_cols + rhs];
+                    }
+                }
+            }
+
+            if let Some(vec_seed) = joint_kinematics_cotangent {
+                for joint in 0..self.joint_num {
+                    for i in 0..vec_len {
+                        joint_vec_bar[joint * vec_len + i] += vec_seed[(joint * vec_len + i) * rhs_cols + rhs];
                     }
                 }
             }
