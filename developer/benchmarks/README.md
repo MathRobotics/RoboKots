@@ -543,3 +543,32 @@ OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 .venv/bin/pyth
 Both local runs already use the unified Rust recurrence from commit `3f2673d`.
 The baseline dispatch description was corrected after measurement; numerical
 outputs and timings were not changed.
+
+## Selected-output optimization
+
+The five follow-up items are implemented: shared `StateOutput` specifications,
+direct NumPy world-force-only products, native NumPy spatial batching, pure Rust
+kinematics, and latest-batch Rust derivative primal reuse. Matrix VJPs no longer
+rebuild states for selected outputs. Existing specialised torque/local paths
+remain available; reverse dynamics scratch arrays and the older scalar NumPy
+dynamics reverse subroutine are not fully allocation-free/vectorized.
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 .venv/bin/python -m developer.benchmarks.spatial_selected_outputs --output developer/benchmarks/results/selected_optimization.json --compare developer/benchmarks/results/spatial_selected_outputs.json
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 .venv/bin/python -m developer.benchmarks.spatial_selected_outputs --kinematics-only --output developer/benchmarks/results/selected_kinematics.json
+```
+
+[Same-workload before/after](results/selected_optimization.md),
+[raw results](results/selected_optimization.json),
+[kinematics-only](results/selected_kinematics.md),
+[kinematics raw results](results/selected_kinematics.json).
+
+The baseline is the corrected spatial implementation subsequently committed as
+`5550b59`, measured before this follow-up optimization. Both runs measure the
+same output contract; small timing differences may be noise. Warm repeated
+calls reuse Rust derivative primals; the initial primal preparation occurs
+during shape discovery and is not included in steady-state timing. State
+construction is separate. Counters show one primal per sample and zero dynamics
+primal evaluations for kinematics-only requests. Input mutation, gravity, batch
+size, model identity, order and RHS-width changes are covered by regression
+tests rather than inferred from the unchanged-input benchmark.
