@@ -88,3 +88,50 @@ def test_minimal_dynamics_allocates_on_first_use(batched):
     data.compute_dynamics(x)
     assert data._workspace_buffer_bytes() == allocated
     assert np.all(np.isfinite(data.joint_torque(0, 1)))
+
+
+@pytest.mark.parametrize('batched', [False, True])
+def test_native_validation_preserves_python_errors(batched):
+    """Native validation errors still cross the binding as unchanged ValueErrors."""
+    pytest.importorskip('robokots._rust')
+    k = Kots.from_urdf_file(str(MODEL), order=3)
+    robot = k._rust_compiled_robot()
+    data = robot.create_batch_outward_data(3, 2) if batched else robot.create_outward_data(3)
+
+    def check(call, message):
+        with pytest.raises(ValueError) as caught:
+            call()
+        assert type(caught.value) is ValueError
+        assert str(caught.value) == message
+
+    check(lambda: data.link_mat(0),
+          'compute_kinematics or compute_dynamics must be called before reading kinematics values')
+    check(lambda: data.joint_momentum(0, 1),
+          'compute_dynamics must be called before reading dynamics values')
+    check(lambda: data.link_mat(robot.link_num),
+          f'invalid link_id: {robot.link_num}. Must be < {robot.link_num}')
+    check(lambda: data.joint_mat(robot.joint_num),
+          f'invalid joint_id: {robot.joint_num}. Must be < {robot.joint_num}')
+    check(lambda: data.link_vec(0, 1),
+          'invalid kinematics key_order: 1. Must be in 2..=3')
+
+    size = k.dof() * 3
+    bad_motion = np.zeros((2, size + 1) if batched else size + 1)
+    check(lambda: data.compute_kinematics(bad_motion),
+          f'motions must have shape (2, {size}), got [2, {size + 1}]'
+          if batched else 'motion length must match robot dof * order')
+
+    motion = np.zeros((2, size) if batched else size)
+    data.compute_dynamics(motion)
+    check(lambda: data.link_momentum(0, 0),
+          'invalid momentum key_order: 0. Must be in 1..=2')
+    check(lambda: data.link_force(0, 2),
+          'invalid force key_order: 2. Must be in 1..=1')
+    assert np.all(np.isfinite(data.link_mat(0)))
+
+    q = np.zeros(k.dof())
+    check(lambda: robot.rnea(q[:-1], q, q),
+          'q/v/a length must match robot dof')
+    check(lambda: robot.dynamics_selected_tangent_batch(
+        np.zeros((1, size)), np.zeros((1, size, 1)), [(2, 0, 0, 0, False)], 1),
+        'invalid dynamics output owner')

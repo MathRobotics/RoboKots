@@ -1,7 +1,6 @@
 //! Selected dynamics, local/world spatial motion and pose share one primal and
 //! derivative recurrence. Neither product kernel forms a dense motion Jacobian.
-use pyo3::exceptions::PyValueError;
-use pyo3::prelude::*;
+use crate::error::{Error, CoreResult};
 
 use crate::spatial::*;
 use crate::types::RustCompiledRobot;
@@ -16,31 +15,31 @@ pub(crate) type DynamicsOutput = (usize, usize, usize, usize, bool);
 impl RustCompiledRobot {
     pub(crate) fn check_dynamics_outputs(
         &self, outputs: &[DynamicsOutput], dynamics_order: usize,
-    ) -> PyResult<usize> {
+    ) -> CoreResult<usize> {
         if dynamics_order == 0 {
-            return Err(PyValueError::new_err("selected dynamics requires dynamics_order >= 1"));
+            return Err(Error::new("selected dynamics requires dynamics_order >= 1"));
         }
         self.check_selected_outputs(outputs, dynamics_order + 2)
     }
 
-    pub(crate) fn check_selected_outputs(&self, outputs: &[DynamicsOutput], order: usize) -> PyResult<usize> {
-        if order == 0 { return Err(PyValueError::new_err("selected output order must be positive")); }
+    pub(crate) fn check_selected_outputs(&self, outputs: &[DynamicsOutput], order: usize) -> CoreResult<usize> {
+        if order == 0 { return Err(Error::new("selected output order must be positive")); }
         let mut rows = 0;
         for &(owner, id, family, time, world) in outputs {
             let owners = match owner {
                 0 => self.link_num,
                 1 => self.joint_num,
-                _ => return Err(PyValueError::new_err("invalid dynamics output owner")),
+                _ => return Err(Error::new("invalid dynamics output owner")),
             };
             let count = match family {
                 0 => order.saturating_sub(1),
                 1 | 2 => order.saturating_sub(2),
                 3 => order.saturating_sub(1),
                 4..=6 => 1,
-                _ => return Err(PyValueError::new_err("invalid dynamics output family")),
+                _ => return Err(Error::new("invalid dynamics output family")),
             };
             if id >= owners || time >= count || (family == 2 && (owner != 1 || world)) {
-                return Err(PyValueError::new_err("invalid dynamics output index, order or frame"));
+                return Err(Error::new("invalid dynamics output index, order or frame"));
             }
             rows += output_width(family);
         }

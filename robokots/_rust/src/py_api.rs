@@ -7,6 +7,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict, PyList};
 
+use crate::error::Error;
 use crate::model::*;
 use crate::dynamics_outputs::DynamicsOutput;
 use crate::pinocchio_like::PinocchioLikeWorkspace;
@@ -16,6 +17,13 @@ use crate::workspace::{
     AbaWorkspace, BulkDerivativeWorkspace, CmtmWorkspace, DynamicsCmtmTangentWorkspace, DynamicsCmtmWorkspace,
     Workspace,
 };
+
+// Keep Python exception construction at the binding boundary.
+impl From<Error> for PyErr {
+    fn from(error: Error) -> Self {
+        PyValueError::new_err(error.to_string())
+    }
+}
 
 /// Read-only NumPy input with a guaranteed row-major logical layout.
 ///

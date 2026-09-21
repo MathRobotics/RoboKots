@@ -1,5 +1,4 @@
-use pyo3::exceptions::PyValueError;
-use pyo3::prelude::*;
+use crate::error::{Error, CoreResult};
 
 use crate::spatial::*;
 use crate::types::RustCompiledRobot;
@@ -30,9 +29,9 @@ fn mat6_transpose(a: [[f64; 6]; 6]) -> [[f64; 6]; 6] {
 }
 
 impl RustCompiledRobot {
-    pub(crate) fn check_motion(&self, q: &[f64], v: &[f64], a: &[f64]) -> PyResult<()> {
+    pub(crate) fn check_motion(&self, q: &[f64], v: &[f64], a: &[f64]) -> CoreResult<()> {
         if q.len() != self.dof || v.len() != self.dof || a.len() != self.dof {
-            return Err(PyValueError::new_err("q/v/a length must match robot dof"));
+            return Err(Error::new("q/v/a length must match robot dof"));
         }
         Ok(())
     }
@@ -42,17 +41,17 @@ impl RustCompiledRobot {
         q_shape: &[usize],
         v_shape: &[usize],
         a_shape: &[usize],
-    ) -> PyResult<usize> {
+    ) -> CoreResult<usize> {
         if q_shape.len() != 2 || v_shape.len() != 2 || a_shape.len() != 2 {
-            return Err(PyValueError::new_err(
+            return Err(Error::new(
                 "q/v/a batch shapes must be (batch, robot dof)",
             ));
         }
         if q_shape != v_shape || q_shape != a_shape {
-            return Err(PyValueError::new_err("q/v/a batch shapes must match"));
+            return Err(Error::new("q/v/a batch shapes must match"));
         }
         if q_shape[1] != self.dof {
-            return Err(PyValueError::new_err(
+            return Err(Error::new(
                 "q/v/a batch last dimension must match robot dof",
             ));
         }

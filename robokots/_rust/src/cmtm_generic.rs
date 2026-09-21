@@ -1,5 +1,4 @@
-use pyo3::exceptions::PyValueError;
-use pyo3::prelude::*;
+use crate::error::{Error, CoreResult};
 
 use crate::spatial::*;
 use crate::types::RustCompiledRobot;
@@ -361,9 +360,9 @@ impl RustCompiledRobot {
         }
     }
 
-    pub(crate) fn check_cmtm_motion(&self, motion: &[f64], order: usize) -> PyResult<()> {
+    pub(crate) fn check_cmtm_motion(&self, motion: &[f64], order: usize) -> CoreResult<()> {
         if motion.len() != self.dof * order {
-            return Err(PyValueError::new_err(
+            return Err(Error::new(
                 "motion length must match robot dof * order",
             ));
         }

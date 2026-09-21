@@ -5,6 +5,7 @@ mod algorithms;
 mod cmtm_generic;
 mod cmtm_series;
 mod dynamics_outputs;
+mod error;
 mod model;
 mod pinocchio_like;
 mod py_api;
