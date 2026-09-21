@@ -312,7 +312,8 @@ algorithm-specific numerical storage and must not be inserted into that cache.
 
 For dynamics requests with motion order at least 3, the Rust derivative adapter
 can select link/joint momentum and force in local or world coordinates together
-with joint torque and local spatial velocity and its higher time derivatives.
+with joint torque, local/world spatial velocity and its higher time derivatives,
+and position/orientation/frame tangents.
 `None` and `"local"` denote local spatial outputs. Mixed owners, frames,
 derivative orders, repeated selections, `total_joint` expansion, and leading
 batch axes retain the public output ordering.
@@ -323,7 +324,7 @@ wrench and moving-transform derivatives. World VJP seeds are accumulated with
 local force/momentum/torque seeds before the common dynamics and kinematics
 reverse pass. `jacobian_mul()` and `jacobian_transpose_mul()` use direct products;
 only `jacobian()` supplies a full input basis to materialize a dense Jacobian.
-Local spatial outputs use the same tangent buffers; their VJP seeds join the
+Spatial outputs use the same tangent buffers; their VJP seeds join the
 same reverse pass. Joint spatial motion uses relative joint CMTM vectors,
 not child-link motion. The existing pure-torque and pure-kinematics dispatch
 paths remain in use. Python still validates selections and converts arrays;
@@ -335,14 +336,36 @@ entry points are `dynamics_selected_tangent_batch` and
 workspaces are reused across samples within the call, not cached across calls.
 The supported model set remains the Rust CMTM fixed/revolute rigid-link subset.
 Requests outside the selected-output contract retain their existing dispatch,
-including mixed pose/world spatial-kinematics requests and joint coordinate
-outputs. This change does not extend model support.
+including joint coordinate outputs. This change does not extend model support.
 
 See the [mixed-output before/after benchmark](benchmarks/README.md#mixed-rust-outputs).
-The mixed joint-spatial tests use NumPy state central differences: the existing
-NumPy mixed analytic assembly incorrectly selects link rows for joint spatial
-outputs, and is not used as a reference for those rows. That separate NumPy
-limitation is not changed here.
+NumPy spatial selection now uses the shared output operators in
+`outward/diff/spatial_outputs.py` for dense, JVP and VJP requests. Joint spatial
+outputs select relative joint motion; a fixed joint therefore has zero relative
+velocity even when its child link moves. This corrects the previous mixed
+assembly's use of the preceding link's rows. Independent central differences
+of state values cover selection order, duplicates, batch axes and higher orders.
+Selected joint spatial derivatives currently cover fixed and one-DoF joints;
+multidimensional relative joint derivatives raise `NotImplementedError`.
+When world force outputs accompany spatial selections, NumPy also transports
+local force variations and frame variations directly, including in reverse mode.
+
+World spatial motion is the ordinary derivative series of `Ad(T) v_local`,
+including derivatives of `T`. For a joint, `v_local` is relative joint motion
+and `T` is its child's world transform; it is not the child's absolute velocity.
+The same value conversion serves NumPy state reads and Rust state adapters.
+
+Pose state values keep their owner transform (absolute link, relative joint).
+The Jacobian uses tangent dimensions: `pos` and `rot` have 3 rows, `frame` 6.
+None/local uses `vee(T^-1 dT)`; world frame uses `vee(dT T^-1)` and world rotation
+uses its angular part. World position uses `dp`, while local position uses
+`R^T dp`, preserving the existing local convention. `numerical=True` now uses
+these same base-frame tangent conventions instead of differentiating flattened
+rotation matrices. Position/orientation values themselves do not change when
+the tangent frame is selected.
+
+See the [corrected spatial-output measurements](benchmarks/README.md#spatial-world-and-pose-outputs)
+for the new workload and the separate unchanged-local regression benchmark.
 
 Run the fixed Rust comparison used for optimization work:
 

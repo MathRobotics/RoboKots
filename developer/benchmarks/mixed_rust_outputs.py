@@ -21,6 +21,7 @@ def main():
     parser.add_argument('--warmup', type=int, default=5)
     parser.add_argument('--samples', type=int, default=30)
     parser.add_argument('--calls', type=int, default=5)
+    parser.add_argument('--dispatch-note', default='Before: Rust state, Python dense/JVP, composed Rust VJP. After: all mixed derivatives use the selected Rust recurrence.')
     args = parser.parse_args()
     report = run(args)
     report['rust_vs_numpy'] = {}
@@ -32,7 +33,7 @@ def main():
     report['workload']['note'] = (
         'Public dense/JVP/VJP start with computed states; any internal recurrence recomputation is timed. '
         'Import/conversion plus state building is measured separately. NumPy is a reference, not an exact solution. '
-        'Before: Rust state, Python dense/JVP, composed Rust VJP. After: all mixed derivatives use the selected Rust recurrence. '
+        f'{args.dispatch_note} '
         'No JAX/JIT timing. First calls follow shape discovery, not cold process startup.')
     report['environment']['extension_sha256'] = hashlib.sha256(Path(extension.__file__).read_bytes()).hexdigest()
     report['environment']['extension_path'] = extension.__file__

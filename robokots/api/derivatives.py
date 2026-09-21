@@ -5,6 +5,7 @@ import logging
 import numpy as np
 
 from .. import outward as outward_api
+from ..outward.diff.spatial_outputs import needs_spatial_selection
 from ..core import batch_shape as batch_shapes
 from ..core.state.spec import StateType, data_type_dof, dim_to_dof, keys_force, keys_kinematics, keys_momentum, keys_torque
 from ..core.state.tensor import JacobianTensor
@@ -172,7 +173,7 @@ class DerivativesMixin:
     )
     if fast is not None:
       return fast
-    if any(st.owner_type in ("link", "joint") and st.data_type in keys_force and st.frame_name == "world" for st in state_type_list):
+    if any(st.owner_type in ("link", "joint") and st.data_type in keys_force and st.frame_name == "world" for st in state_type_list) and not (self.dim_ == 3 and needs_spatial_selection(state_type_list)):
       jacob = self._jacobian_from_state(state, state_type_list, max_order, False)
       vec_part = vec.reshape(batch_shape + (vec.shape[-1],)) if batch_shape else vec
       applied = (jacob @ vec_part[..., None])[..., 0]
@@ -235,7 +236,7 @@ class DerivativesMixin:
     )
     if fast is not None:
       return fast
-    if any(st.owner_type in ("link", "joint") and st.data_type in keys_force and st.frame_name == "world" for st in state_type_list):
+    if any(st.owner_type in ("link", "joint") and st.data_type in keys_force and st.frame_name == "world" for st in state_type_list) and not (self.dim_ == 3 and needs_spatial_selection(state_type_list)):
       jacob = self._jacobian_from_state(state, state_type_list, max_order, False)
       rhs_part = rhs.reshape(batch_shape + rhs.shape[-2:]) if batch_shape else rhs
       applied = jacob @ rhs_part
@@ -386,7 +387,7 @@ class DerivativesMixin:
       fast = world_joint_vjp(state_type_list, max_order, vec, batch_shape, rhs_is_matrix=False)
       if fast is not None:
         return fast
-    if any(st.owner_type in ("link", "joint") and st.data_type in keys_force and st.frame_name == "world" for st in state_type_list):
+    if any(st.owner_type in ("link", "joint") and st.data_type in keys_force and st.frame_name == "world" for st in state_type_list) and not (self.dim_ == 3 and needs_spatial_selection(state_type_list)):
       jacob = self._jacobian_from_state(state, state_type_list, max_order, False)
       vec_part = vec.reshape(batch_shape + (vec.shape[-1],)) if batch_shape else vec
       return (np.swapaxes(jacob, -1, -2) @ vec_part[..., None])[..., 0]
@@ -506,7 +507,7 @@ class DerivativesMixin:
       if fast is not None:
         return fast
 
-    if any(st.owner_type in ("link", "joint") and st.data_type in keys_force and st.frame_name == "world" for st in state_type_list):
+    if any(st.owner_type in ("link", "joint") and st.data_type in keys_force and st.frame_name == "world" for st in state_type_list) and not (self.dim_ == 3 and needs_spatial_selection(state_type_list)):
       jacob = self._jacobian_from_state(state, state_type_list, max_order, False)
       rhs_part = rhs.reshape(batch_shape + rhs.shape[-2:]) if batch_shape else rhs
       return np.swapaxes(jacob, -1, -2) @ rhs_part

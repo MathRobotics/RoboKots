@@ -245,7 +245,7 @@ impl RustCompiledRobot {
         rhs_cols: usize,
         kinetic_energy_cotangent: Option<&[f64]>,
         link_kinematics_cotangent: Option<(&[f64], &[f64])>,
-        joint_kinematics_cotangent: Option<&[f64]>,
+        joint_kinematics_cotangent: Option<(&[f64], &[f64])>,
         primal: &mut DynamicsCmtmWorkspace,
         out: &mut [f64],
     ) {
@@ -280,8 +280,11 @@ impl RustCompiledRobot {
                 }
             }
 
-            if let Some(vec_seed) = joint_kinematics_cotangent {
+            if let Some((mat_seed, vec_seed)) = joint_kinematics_cotangent {
                 for joint in 0..self.joint_num {
+                    for r in 0..4 { for c in 0..4 {
+                        joint_mat_bar[joint][r][c] += mat_seed[(joint * 16 + r * 4 + c) * rhs_cols + rhs];
+                    }}
                     for i in 0..vec_len {
                         joint_vec_bar[joint * vec_len + i] += vec_seed[(joint * vec_len + i) * rhs_cols + rhs];
                     }

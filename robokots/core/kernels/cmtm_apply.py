@@ -44,3 +44,13 @@ def apply_tangent_mat(cmtm, rhs: np.ndarray) -> np.ndarray:
   if apply is not None and _use_direct_apply(cmtm):
     return apply(rhs)
   return _dense_apply(cmtm.tangent_mat(), rhs)
+
+
+def world_spatial_value(owner, frame, order: int) -> np.ndarray:
+  """Last ordinary derivative of Ad(frame) applied to a local motion series."""
+  from math import factorial
+  vectors = np.asarray(owner.vecs())[..., :order, :]
+  factors = np.asarray([factorial(i) for i in range(order)])
+  coefficients = (vectors / factors[:, None]).reshape(vectors.shape[:-2] + (-1,))
+  transformed = (np.asarray(frame.mat_adj()) @ coefficients[..., None])[..., 0]
+  return transformed[..., -6:] * factors[-1]

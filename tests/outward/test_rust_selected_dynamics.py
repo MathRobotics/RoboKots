@@ -121,7 +121,7 @@ def test_selected_dynamics_rejects_invalid_output_descriptors(kernel):
     method = getattr(robot, kernel)
     motion = np.zeros((1, kots.dof() * 3))
     rhs = np.zeros((1, kots.dof() * 3, 1))
-    for output in [(2, 0, 1, 0, False), (0, 999, 1, 0, False), (0, 0, 4, 0, False), (0, 0, 1, 1, False), (1, 0, 2, 0, True)]:
+    for output in [(2, 0, 1, 0, False), (0, 999, 1, 0, False), (0, 0, 7, 0, False), (0, 0, 1, 1, False), (1, 0, 2, 0, True)]:
         with pytest.raises(ValueError, match="invalid dynamics output"):
             method(motion, rhs, [output], 1)
     with pytest.raises(ValueError, match="shape"):

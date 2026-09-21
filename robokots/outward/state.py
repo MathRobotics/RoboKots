@@ -17,7 +17,7 @@ from ..core.state.access import (
     state_cmvec,
     state_frame,
 )
-from ..core.state.spec import data_type_dof, StateType
+from ..core.state.spec import data_type_dof, StateType, keys_kinematics
 
 from robokots.core.kernels.joint import convert_joint_to_data
 from robokots.core.kernels.soft_link import convert_link_to_data
@@ -30,7 +30,7 @@ from robokots.core.kernels.dynamics import (
     link_force_cmvec,
     link_momentum_cmvec,
 )
-from robokots.core.kernels.cmtm_apply import apply_mat_adj, apply_mat_inv_adj
+from robokots.core.kernels.cmtm_apply import apply_mat_adj, apply_mat_inv_adj, world_spatial_value
 
 
 def _batch_eye_cmtm(batch_shape: tuple[int, ...], order: int) -> CMTM:
@@ -136,6 +136,14 @@ def get_dof(robot : RobotStruct, state_type : StateType, dim : int = 3) -> int:
         return data_type_dof(state_type.data_type, dim = dim)
 
 def get_value(robot : RobotStruct, state : OutwardDataView, state_type : StateType):
+    if state_type.frame_name == 'world' and state_type.data_type in keys_kinematics and state_type.key_order >= 2:
+        # Ordinary derivatives of Ad(T_world) v_local, including frame motion.
+        n = state_type.key_order - 1
+        owner = state_cmtm(state, state_type.owner_name, state_type.owner_type, n + 1)
+        link_name = state_type.owner_name if state_type.owner_type == 'link' else robot.links[robot.joint(state_type.owner_name).child_link_id].name
+        frame = state_cmtm(state, link_name, 'link', n)
+        return world_spatial_value(owner, frame, n)
+
     if isinstance(state, StateValueProvider):
         try:
             return state.state_value(state_type)

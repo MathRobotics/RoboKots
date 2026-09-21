@@ -518,3 +518,28 @@ workload. No JAX/JIT measurements are included.
 See [comparison](results/mixed_rust_outputs_after.md),
 [baseline JSON](results/mixed_rust_outputs_before.json), and
 [updated JSON](results/mixed_rust_outputs_after.json).
+
+## Spatial world and pose outputs
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 .venv/bin/python -m developer.benchmarks.spatial_selected_outputs --output developer/benchmarks/results/spatial_selected_outputs.json
+```
+
+[Report](results/spatial_selected_outputs.md) and [raw data](results/spatial_selected_outputs.json).
+This compares NumPy/Rust dense, JVP and VJP for the corrected mixed world/pose
+contract, with central differences (step 1e-8) as an independent accuracy
+reference. Tests also use step 1e-6 and an independent time-derivative check.
+The old world/pose implementation was not semantically equivalent, so its
+runtime is not used to claim a speedup for the corrected contract.
+
+The unchanged local workload is measured separately before and after this change:
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 .venv/bin/python -m developer.benchmarks.mixed_rust_outputs --output developer/benchmarks/results/spatial_outputs_after.json --compare developer/benchmarks/results/spatial_outputs_before.json --dispatch-note "Local regression: both runs use the unified selected Rust recurrence."
+```
+
+[Local regression report](results/spatial_outputs_after.md),
+[baseline](results/spatial_outputs_before.json), [updated](results/spatial_outputs_after.json).
+Both local runs already use the unified Rust recurrence from commit `3f2673d`.
+The baseline dispatch description was corrected after measurement; numerical
+outputs and timings were not changed.

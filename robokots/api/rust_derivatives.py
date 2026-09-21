@@ -13,7 +13,7 @@ _logger = logging.getLogger(__name__)
 
 class RustDerivativesMixin:
   def _rust_selected_dynamics_specs(self, states, max_order):
-    """Select dynamics and local spatial derivatives in public output order.
+    """Select dynamics, spatial motion and pose tangents in public output order.
 
     Keep homogeneous kinematics and pure implicit-local torque on their
     dedicated paths. Joint motion coordinates are not spatial CMTM entries.
@@ -39,15 +39,17 @@ class RustDerivativesMixin:
           return None
         family, width = 2, 1
       elif st.data_type in keys_kinematics and not self._is_joint_motion_state(st):
-        if st.frame_name not in (None, "local") or st.key_order < 2:
-          return None
-        family, width = 3, 6
+        if st.data_type in ("pos", "rot", "frame"):
+          family = {"pos": 4, "rot": 5, "frame": 6}[st.data_type]
+          width = 6 if family == 6 else 3
+        else:
+          family, width = 3, 6
       else:
         return None
       time = st.key_order - (2 if family == 3 else 1)
       if time < 0 or time >= max_order - (1 if family in (0, 3) else 2):
         return None
-      has_dynamics |= family != 3
+      has_dynamics |= family < 3
       specs.append((0 if st.owner_type == "link" else 1, ids[st.owner_name], family, time, st.frame_name == "world"))
       widths.append(width)
     return (specs, widths) if has_dynamics else None

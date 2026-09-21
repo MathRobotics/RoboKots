@@ -4,6 +4,7 @@
 # outward computation module from motion and robot_model to state by matrix formulation
 
 import numpy as np
+from .spatial_outputs import needs_spatial_selection, selected_apply, split_outputs
 from mathrobo import CMTM, CMVector, Factorial, SE3wrench
 
 from robokots.core import RobotStruct
@@ -2015,6 +2016,9 @@ def joint_torque_jacobian(robot : RobotStruct, state : dict, joint_name_list : l
     return _selected_coord_to_joint_torque_grad_mat(robot, state, joints, torque_order=torque_order, dim=dim)
 
 def outward_kinematics_jacobian(robot : RobotStruct, state : dict, state_type_list : list[StateType], max_time_order = None, dim : int = 3, list_output : bool = False) -> np.ndarray:
+    if dim == 3 and needs_spatial_selection(state_type_list):
+        return outward_jacobian(robot, state, state_type_list, max_time_order, dim=dim, list_output=list_output)
+
     kine_state_type_list = StateType.filter_list_by_kinematics(state_type_list)
     if max_time_order is None:
         max_time_order = StateType.max_time_order(kine_state_type_list)
@@ -2044,6 +2048,9 @@ def outward_kinematics_jacobian(robot : RobotStruct, state : dict, state_type_li
         return np.concatenate(jacob_list, axis=-2)
 
 def outward_kinematics_jacobian_matvec(robot : RobotStruct, state : dict, state_type_list : list[StateType], vec : np.ndarray, max_time_order = None, dim : int = 3, list_output : bool = False) -> np.ndarray:
+    if dim == 3 and needs_spatial_selection(state_type_list):
+        return outward_jacobian_matvec(robot, state, state_type_list, vec, max_time_order, dim=dim, list_output=list_output)
+
     kine_state_type_list = StateType.filter_list_by_kinematics(state_type_list)
     if max_time_order is None:
         max_time_order = StateType.max_time_order(kine_state_type_list)
@@ -2077,6 +2084,9 @@ def outward_kinematics_jacobian_matvec(robot : RobotStruct, state : dict, state_
 
 
 def outward_kinematics_jacobian_matmul_rhs(robot : RobotStruct, state : dict, state_type_list : list[StateType], rhs : np.ndarray, max_time_order = None, dim : int = 3, list_output : bool = False) -> np.ndarray:
+    if dim == 3 and needs_spatial_selection(state_type_list):
+        return outward_jacobian_matmul_rhs(robot, state, state_type_list, rhs, max_time_order, dim=dim, list_output=list_output)
+
     kine_state_type_list = StateType.filter_list_by_kinematics(state_type_list)
     if max_time_order is None:
         max_time_order = StateType.max_time_order(kine_state_type_list)
@@ -2543,6 +2553,13 @@ def _outward_joint_only_jacobian(
     return np.concatenate(jacob_list, axis=-2)
 
 def outward_jacobian(robot : RobotStruct, state : dict, state_type_list : list[StateType], max_time_order = None, dim : int = 3, list_output : bool = False) -> np.ndarray:
+    if dim == 3 and needs_spatial_selection(state_type_list):
+        selected_order = max_time_order or StateType.max_time_order(state_type_list)
+        result = selected_apply(robot, state, state_type_list, selected_order, np.eye(robot.dof * selected_order),
+            dynamics_apply=lambda states, directions: outward_jacobian_matmul_rhs(
+                robot, state, states, directions, selected_order, dim=dim))
+        return split_outputs(robot, state_type_list, result, vector=False, list_output=list_output)
+
     if StateType.is_list_all_in_kinematics(state_type_list):
         return outward_kinematics_jacobian(robot, state, state_type_list, max_time_order, dim=dim, list_output=list_output)
     
@@ -2776,6 +2793,13 @@ def outward_jacobian(robot : RobotStruct, state : dict, state_type_list : list[S
 
 
 def outward_jacobian_matvec(robot : RobotStruct, state : dict, state_type_list : list[StateType], vec : np.ndarray, max_time_order = None, dim : int = 3, list_output : bool = False) -> np.ndarray:
+    if dim == 3 and needs_spatial_selection(state_type_list):
+        selected_order = max_time_order or StateType.max_time_order(state_type_list)
+        result = selected_apply(robot, state, state_type_list, selected_order, np.asarray(vec)[..., None],
+            dynamics_apply=lambda states, directions: outward_jacobian_matmul_rhs(
+                robot, state, states, directions, selected_order, dim=dim))
+        return split_outputs(robot, state_type_list, result, vector=True, list_output=list_output)
+
     if StateType.is_list_all_in_kinematics(state_type_list):
         return outward_kinematics_jacobian_matvec(robot, state, state_type_list, vec, max_time_order, dim=dim, list_output=list_output)
 
@@ -2912,6 +2936,13 @@ def outward_jacobian_matvec(robot : RobotStruct, state : dict, state_type_list :
 
 
 def outward_jacobian_matmul_rhs(robot : RobotStruct, state : dict, state_type_list : list[StateType], rhs : np.ndarray, max_time_order = None, dim : int = 3, list_output : bool = False) -> np.ndarray:
+    if dim == 3 and needs_spatial_selection(state_type_list):
+        selected_order = max_time_order or StateType.max_time_order(state_type_list)
+        result = selected_apply(robot, state, state_type_list, selected_order, np.asarray(rhs),
+            dynamics_apply=lambda states, directions: outward_jacobian_matmul_rhs(
+                robot, state, states, directions, selected_order, dim=dim))
+        return split_outputs(robot, state_type_list, result, vector=False, list_output=list_output)
+
     if StateType.is_list_all_in_kinematics(state_type_list):
         return outward_kinematics_jacobian_matmul_rhs(robot, state, state_type_list, rhs, max_time_order, dim=dim, list_output=list_output)
 

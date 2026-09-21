@@ -50,8 +50,7 @@ def test_mixed_rust_dense_and_products(monkeypatch, order, shape, zero_pose, gra
                                for s in reference._state_type_list(states)], axis=-1)
     h = 1e-6
     basis = np.eye(x.shape[-1])
-    # Joint spatial selections are relative CMTM motion. The existing mixed
-    # NumPy analytic assembly selects link rows for these, so use state values.
+    # Independent reference from state values, including relative joint motion.
     expected = np.stack([(value(x+h*e)-value(x-h*e))/(2*h) for e in basis], axis=-1)
     reference.import_motions(x)
     reference.dynamics(backend='numpy', gravity=gravity)
@@ -85,11 +84,11 @@ def test_mixed_rust_dense_and_products(monkeypatch, order, shape, zero_pose, gra
 
 
 @pytest.mark.parametrize('method', ['dynamics_selected_tangent_batch', 'dynamics_selected_transpose_batch'])
-def test_spatial_descriptors_reject_world_and_excess_order(method):
+def test_spatial_descriptors_reject_excess_order(method):
     pytest.importorskip('robokots._rust')
     k = Kots.from_urdf_file(str(MODEL), order=3)
     fn = getattr(k._rust_compiled_robot(), method)
-    for descriptor in [(0, 0, 3, 0, True), (1, 0, 3, 2, False)]:
+    for descriptor in [(0, 0, 4, 1, True), (1, 0, 3, 2, False)]:
         with pytest.raises(ValueError, match='invalid dynamics output'):
             fn(np.zeros((1, k.dof()*3)), np.zeros((1, k.dof()*3, 1)), [descriptor], 1)
 
@@ -102,7 +101,8 @@ def test_selected_dispatch_keeps_existing_boundaries():
     for state in (StateType('link', 'a_tip', 'vel', 'world'),
                   StateType('link', 'a_tip', 'frame'),
                   StateType('joint', 'a_shoulder', 'jerk')):
-        assert k._rust_selected_dynamics_specs([state, force], 4) is None
+        specs = k._rust_selected_dynamics_specs([state, force], 4)
+        assert (specs is None) == (state.data_type == 'jerk')
     for state in (StateType('link', 'a_tip', 'acc'),
                   StateType('joint', 'a_shoulder', 'torque')):
         assert k._rust_selected_dynamics_specs([state], 4) is None

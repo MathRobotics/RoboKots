@@ -1,4 +1,5 @@
 import numpy as np
+from .spatial_outputs import needs_spatial_selection, selected_apply
 from mathrobo import CMVector, Factorial
 
 from robokots.core import RobotStruct
@@ -662,6 +663,9 @@ def outward_kinematics_jacobian_transpose_matvec(
     max_time_order=None,
     dim: int = 3,
 ) -> np.ndarray:
+    if dim == 3 and needs_spatial_selection(state_type_list):
+        return outward_jacobian_transpose_matvec(robot, state, state_type_list, vec, max_time_order, dim)
+
     kine_state_type_list = StateType.filter_list_by_kinematics(state_type_list)
     if max_time_order is None:
         max_time_order = StateType.max_time_order(kine_state_type_list)
@@ -721,6 +725,21 @@ def outward_jacobian_transpose_matvec(
     max_time_order=None,
     dim: int = 3,
 ) -> np.ndarray:
+    if dim == 3 and needs_spatial_selection(state_type_list):
+        selected_order = max_time_order or StateType.max_time_order(state_type_list)
+        def dynamic_transpose(states, directions):
+            return np.stack([outward_jacobian_transpose_matvec(
+                robot, state, states, directions[..., i], selected_order, dim)
+                for i in range(directions.shape[-1])], axis=-1)
+        batch = _state_batch_shape(state, robot.links[0].name, "link", selected_order)
+        vec = np.asarray(vec)
+        if not batch and vec.ndim > 1:
+            result = selected_apply(robot, state, state_type_list, selected_order,
+                vec.reshape(-1, vec.shape[-1]).T, transpose=True, dynamics_apply=dynamic_transpose)
+            return result.T.reshape(vec.shape[:-1] + (robot.dof*selected_order,))
+        return selected_apply(robot, state, state_type_list, selected_order,
+            vec[..., None], transpose=True, dynamics_apply=dynamic_transpose)[..., 0]
+
     if StateType.is_list_all_in_kinematics(state_type_list):
         return outward_kinematics_jacobian_transpose_matvec(
             robot, state, state_type_list, vec, max_time_order, dim=dim

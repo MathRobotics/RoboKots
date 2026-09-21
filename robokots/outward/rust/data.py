@@ -788,6 +788,11 @@ class RustOutwardState:
       mat = self._mat(owner_type, name)
       return mat[..., :3, :3].reshape(mat.shape[:-2] + (9,))
     if data_type in keys_kinematics:
+      if state_type.frame_name == "world" and key_order >= 2:
+        from robokots.core.kernels.cmtm_apply import world_spatial_value
+        n = key_order - 1
+        link_name = name if owner_type == "link" else self.robot.links[self.robot.joint(name).child_link_id].name
+        return world_spatial_value(self.cmtm(owner_type, name, n+1), self.cmtm("link", link_name, n), n)
       if key_order < 2:
         raise NotImplementedError(f"Unsupported kinematics data_type={data_type!r}")
       return self._vec(owner_type, name, key_order)

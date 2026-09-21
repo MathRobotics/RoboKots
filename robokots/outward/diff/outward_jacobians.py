@@ -175,6 +175,26 @@ def jacobian_numerical(
       m = motions.link_motions(link.dof, link.dof_index, order)
       motion[link.dof_index*order:link.dof_index*order+link.dof*order] = m.flatten()
 
+  if state_type.data_type in ("pos", "rot", "frame"):
+    # Pose Jacobians use 3/6 tangent rows, not flattened matrix entries.
+    # Keep the base frame fixed while differencing, as in the analytic API.
+    from robokots.outward.state import build_kinematics_outward_state
+    def pose(x):
+      state = build_kinematics_outward_state(robot, x, order)
+      return np.asarray(state.cmtm(state_type.owner_type, state_type.owner_name, 1).elem_mat())
+    base = pose(motion)
+    inv = np.linalg.inv(base)
+    def pose_coordinates(x):
+      value = pose(x)
+      tangent = value @ inv if state_type.frame_name == "world" else inv @ value
+      angular = np.array([tangent[2,1]-tangent[1,2], tangent[0,2]-tangent[2,0], tangent[1,0]-tangent[0,1]]) / 2
+      if state_type.data_type == "pos":
+        return value[:3,3] if state_type.frame_name == "world" else tangent[:3,3]
+      if state_type.data_type == "rot":
+        return angular
+      return np.concatenate([angular, tangent[:3,3]])
+    return numerical_grad(x=motion, func=pose_coordinates)
+
   return numerical_grad(
             x = motion, 
             func = func, 
