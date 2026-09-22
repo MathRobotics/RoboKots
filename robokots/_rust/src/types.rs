@@ -1,10 +1,7 @@
-use pyo3::prelude::*;
-
 use crate::pinocchio_like::PinocchioLikeWorkspace;
 use crate::workspace::{AbaWorkspace, DynamicsCmtmWorkspace};
 
 #[derive(Clone)]
-#[pyclass(name = "RustCompiledRobot")]
 pub struct RustCompiledRobot {
     pub(crate) link_num: usize,
     pub(crate) joint_num: usize,
@@ -26,7 +23,6 @@ pub struct RustCompiledRobot {
     pub(crate) link_child_joints: Vec<Vec<usize>>,
 }
 
-#[pyclass(name = "RustFastData")]
 pub struct RustFastData {
     pub(crate) robot: RustCompiledRobot,
     pub(crate) workspace: PinocchioLikeWorkspace,
@@ -41,7 +37,6 @@ pub struct RustFastData {
 /// buffers.  A future CMTM ABA data object will have series-valued articulated
 /// quantities and can share topology/spatial primitives without making the
 /// scalar hot path pay for those buffers.
-#[pyclass(name = "RustAbaData")]
 pub struct RustAbaData {
     pub(crate) robot: RustCompiledRobot,
     pub(crate) workspace: AbaWorkspace,
@@ -52,7 +47,6 @@ pub struct RustAbaData {
     pub(crate) prepared: bool,
 }
 
-#[pyclass(name = "RustOutwardData")]
 pub struct RustOutwardData {
     pub(crate) robot: RustCompiledRobot,
     pub(crate) order: usize,
@@ -63,7 +57,6 @@ pub struct RustOutwardData {
     pub(crate) has_cached_order1_dynamics: bool,
 }
 
-#[pyclass(name = "RustBatchOutwardData")]
 pub struct RustBatchOutwardData {
     pub(crate) robot: RustCompiledRobot,
     pub(crate) order: usize,
@@ -78,7 +71,6 @@ pub struct RustBatchOutwardData {
 
 /// Bounded latest-batch cache of derivative primals and a reusable tangent buffer.
 /// Independent of semantic Python StateCache; owned by one compiled model.
-#[pyclass(name = "RustSelectedWorkspace")]
 pub struct RustSelectedWorkspace {
     pub(crate) robot: RustCompiledRobot,
     pub(crate) order: usize,
@@ -90,4 +82,80 @@ pub struct RustSelectedWorkspace {
     pub(crate) ready: bool,
     pub(crate) kinematics_evaluations: usize,
     pub(crate) dynamics_evaluations: usize,
+}
+
+use crate::error::{CoreResult, Error};
+
+impl RustCompiledRobot {
+    pub fn create_selected_workspace(&self, order: usize) -> CoreResult<crate::types::RustSelectedWorkspace> {
+        if order == 0 { return Err(Error::new("selected workspace order must be positive")); }
+        Ok(crate::types::RustSelectedWorkspace {
+            robot: self.clone(), order, primal: Vec::new(), tangent: None, motion: Vec::new(),
+            gravity: [0.0;3], dynamic: false, ready: false,
+            kinematics_evaluations: 0, dynamics_evaluations: 0,
+        })
+    }
+
+    pub fn create_outward_data(&self, order: usize) -> CoreResult<RustOutwardData> {
+        if order < 1 {
+            return Err(Error::new("order must be >= 1"));
+        }
+        let dynamics_order = order.saturating_sub(2);
+        Ok(RustOutwardData {
+            robot: self.clone(),
+            order,
+            dynamics_order,
+            dynamics: DynamicsCmtmWorkspace::kinematics_only(self, order),
+            has_kinematics: false,
+            has_dynamics: false,
+            has_cached_order1_dynamics: false,
+        })
+    }
+
+    pub fn create_fast_data(&self) -> RustFastData {
+        self.create_pinocchio_like_data()
+    }
+
+    pub fn create_aba_data(&self) -> RustAbaData {
+        RustAbaData {
+            robot: self.clone(), workspace: AbaWorkspace::new(self),
+            factor_q: Vec::new(), bias_q: Vec::new(), bias_v: Vec::new(),
+            bias_gravity: [0.0; 3], prepared: false,
+        }
+    }
+
+    pub fn create_pinocchio_like_data(&self) -> RustFastData {
+        RustFastData {
+            robot: self.clone(),
+            workspace: PinocchioLikeWorkspace::new(self),
+            has_kinematics: false,
+            has_dynamics: false,
+            has_joint_jacobians: false,
+        }
+    }
+
+    pub fn create_batch_outward_data(
+        &self,
+        order: usize,
+        batch: usize,
+    ) -> CoreResult<RustBatchOutwardData> {
+        if order < 1 {
+            return Err(Error::new("order must be >= 1"));
+        }
+        let dynamics_order = order.saturating_sub(2);
+        let mut dynamics = Vec::with_capacity(batch);
+        for _ in 0..batch {
+            dynamics.push(DynamicsCmtmWorkspace::kinematics_only(self, order));
+        }
+        Ok(RustBatchOutwardData {
+            robot: self.clone(),
+            order,
+            dynamics_order,
+            batch,
+            dynamics,
+            has_kinematics: false,
+            has_dynamics: false,
+            has_cached_order1_dynamics: false,
+        })
+    }
 }

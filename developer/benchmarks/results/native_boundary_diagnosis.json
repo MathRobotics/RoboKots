@@ -1,0 +1,411 @@
+{
+  "sequence": [
+    "before",
+    "after",
+    "after",
+    "before",
+    "before",
+    "after",
+    "after",
+    "before"
+  ],
+  "sessions": [
+    {
+      "label": "before",
+      "file": "native_boundary_diagnosis_0_before.json",
+      "extension_sha256": "9ab1270e7ce7d8a1cd5dd4a2f4149169299be8e25a3dd474152bc2edd45f9f28"
+    },
+    {
+      "label": "after",
+      "file": "native_boundary_diagnosis_1_after.json",
+      "extension_sha256": "919b778cef5b1754a5235a368e5bdd2f7f9f905932dbe7c519dd2e71749bde7a"
+    },
+    {
+      "label": "after",
+      "file": "native_boundary_diagnosis_2_after.json",
+      "extension_sha256": "919b778cef5b1754a5235a368e5bdd2f7f9f905932dbe7c519dd2e71749bde7a"
+    },
+    {
+      "label": "before",
+      "file": "native_boundary_diagnosis_3_before.json",
+      "extension_sha256": "9ab1270e7ce7d8a1cd5dd4a2f4149169299be8e25a3dd474152bc2edd45f9f28"
+    },
+    {
+      "label": "before",
+      "file": "native_boundary_diagnosis_4_before.json",
+      "extension_sha256": "9ab1270e7ce7d8a1cd5dd4a2f4149169299be8e25a3dd474152bc2edd45f9f28"
+    },
+    {
+      "label": "after",
+      "file": "native_boundary_diagnosis_5_after.json",
+      "extension_sha256": "919b778cef5b1754a5235a368e5bdd2f7f9f905932dbe7c519dd2e71749bde7a"
+    },
+    {
+      "label": "after",
+      "file": "native_boundary_diagnosis_6_after.json",
+      "extension_sha256": "919b778cef5b1754a5235a368e5bdd2f7f9f905932dbe7c519dd2e71749bde7a"
+    },
+    {
+      "label": "before",
+      "file": "native_boundary_diagnosis_7_before.json",
+      "extension_sha256": "9ab1270e7ce7d8a1cd5dd4a2f4149169299be8e25a3dd474152bc2edd45f9f28"
+    }
+  ],
+  "workload": {
+    "model": "tests/test_model/branched_fixed.urdf",
+    "model_sha256": "e23f402da022ecc8181e72cb0fe62a252ac85bf76a635c0d247d59cec4123f87",
+    "seed": 812,
+    "order": 4,
+    "gravity": [
+      0.2,
+      -0.3,
+      -9.81
+    ],
+    "dtype": "float64",
+    "warmup": 20,
+    "samples": 30,
+    "calls": 50,
+    "notes": "Single sample; cached derivative primals; raw includes PyO3 and NumPy conversion. No JIT."
+  },
+  "environment": {
+    "platform": "macOS-15.7.4-arm64-arm-64bit-Mach-O",
+    "python": "3.13.1",
+    "numpy": "2.4.6",
+    "threads": {
+      "OPENBLAS_NUM_THREADS": null,
+      "OMP_NUM_THREADS": null,
+      "VECLIB_MAXIMUM_THREADS": null
+    }
+  },
+  "summary": {
+    "control/serialize_only": {
+      "before": {
+        "session_medians_ms": [
+          0.047437080000000006,
+          0.08995666,
+          0.08168833,
+          0.04577083999999999
+        ],
+        "median_ms": 0.064562705,
+        "min_ms": 0.04577083999999999,
+        "max_ms": 0.08995666
+      },
+      "after": {
+        "session_medians_ms": [
+          0.08927458999999999,
+          0.046918760000000004,
+          0.04618208,
+          0.04588792
+        ],
+        "median_ms": 0.04655042,
+        "min_ms": 0.04588792,
+        "max_ms": 0.08927458999999999
+      },
+      "change_percent": -27.898900766317013
+    },
+    "model/compile_dict": {
+      "before": {
+        "session_medians_ms": [
+          0.01139584,
+          0.01954459,
+          0.01544709,
+          0.01128541
+        ],
+        "median_ms": 0.013421465,
+        "min_ms": 0.01128541,
+        "max_ms": 0.01954459
+      },
+      "after": {
+        "session_medians_ms": [
+          0.02105667,
+          0.011767090000000001,
+          0.01166166,
+          0.012098339999999999
+        ],
+        "median_ms": 0.011932715,
+        "min_ms": 0.01166166,
+        "max_ms": 0.02105667
+      },
+      "change_percent": -11.092306242276829
+    },
+    "model/serialize_and_compile": {
+      "before": {
+        "session_medians_ms": [
+          0.06164667,
+          0.11609333999999999,
+          0.08511625,
+          0.059997919999999996
+        ],
+        "median_ms": 0.07338146000000001,
+        "min_ms": 0.059997919999999996,
+        "max_ms": 0.11609333999999999
+      },
+      "after": {
+        "session_medians_ms": [
+          0.08974083,
+          0.06122084,
+          0.060052919999999996,
+          0.059141240000000005
+        ],
+        "median_ms": 0.06063688,
+        "min_ms": 0.059141240000000005,
+        "max_ms": 0.08974083
+      },
+      "change_percent": -17.36757486155224
+    },
+    "raw/model_dof_getter": {
+      "before": {
+        "session_medians_ms": [
+          5.168e-05,
+          7.291e-05,
+          6.041e-05,
+          5.167e-05
+        ],
+        "median_ms": 5.6044999999999996e-05,
+        "min_ms": 5.167e-05,
+        "max_ms": 7.291e-05
+      },
+      "after": {
+        "session_medians_ms": [
+          5.918e-05,
+          5.334e-05,
+          5.084e-05,
+          5.25e-05
+        ],
+        "median_ms": 5.292e-05,
+        "min_ms": 5.084e-05,
+        "max_ms": 5.918e-05
+      },
+      "change_percent": -5.575876527790157
+    },
+    "raw/rnea": {
+      "before": {
+        "session_medians_ms": [
+          0.00189416,
+          0.00257417,
+          0.00211624,
+          0.00183667
+        ],
+        "median_ms": 0.0020052,
+        "min_ms": 0.00183667,
+        "max_ms": 0.00257417
+      },
+      "after": {
+        "session_medians_ms": [
+          0.0021366700000000002,
+          0.00185917,
+          0.00186584,
+          0.00186542
+        ],
+        "median_ms": 0.00186563,
+        "min_ms": 0.00185917,
+        "max_ms": 0.0021366700000000002
+      },
+      "change_percent": -6.9604029523239515
+    },
+    "raw/compute_dynamics": {
+      "before": {
+        "session_medians_ms": [
+          0.00267666,
+          0.00371708,
+          0.00306708,
+          0.0026575
+        ],
+        "median_ms": 0.00287187,
+        "min_ms": 0.0026575,
+        "max_ms": 0.00371708
+      },
+      "after": {
+        "session_medians_ms": [
+          0.0031775,
+          0.00267083,
+          0.0026583400000000004,
+          0.0026975000000000002
+        ],
+        "median_ms": 0.002684165,
+        "min_ms": 0.0026583400000000004,
+        "max_ms": 0.0031775
+      },
+      "change_percent": -6.535985263956922
+    },
+    "public/import_and_dynamics": {
+      "before": {
+        "session_medians_ms": [
+          0.01570791,
+          0.02105875,
+          0.01795,
+          0.015604159999999999
+        ],
+        "median_ms": 0.016828955,
+        "min_ms": 0.015604159999999999,
+        "max_ms": 0.02105875
+      },
+      "after": {
+        "session_medians_ms": [
+          0.018027500000000002,
+          0.01590917,
+          0.01566708,
+          0.0155925
+        ],
+        "median_ms": 0.015788125,
+        "min_ms": 0.0155925,
+        "max_ms": 0.018027500000000002
+      },
+      "change_percent": -6.184757164066335
+    },
+    "raw/dense_cached": {
+      "before": {
+        "session_medians_ms": [
+          0.25697542,
+          0.25841000000000003,
+          0.29703583,
+          0.24353291
+        ],
+        "median_ms": 0.25769271000000005,
+        "min_ms": 0.24353291,
+        "max_ms": 0.29703583
+      },
+      "after": {
+        "session_medians_ms": [
+          0.25668250000000004,
+          0.24984541,
+          0.25366125,
+          0.24375584
+        ],
+        "median_ms": 0.25175333,
+        "min_ms": 0.24375584,
+        "max_ms": 0.25668250000000004
+      },
+      "change_percent": -2.304830431563254
+    },
+    "raw/jvp_cached": {
+      "before": {
+        "session_medians_ms": [
+          0.025189589999999998,
+          0.02633833,
+          0.03430959,
+          0.02181417
+        ],
+        "median_ms": 0.02576396,
+        "min_ms": 0.02181417,
+        "max_ms": 0.03430959
+      },
+      "after": {
+        "session_medians_ms": [
+          0.02316042,
+          0.02199375,
+          0.022143749999999997,
+          0.02210624
+        ],
+        "median_ms": 0.022124994999999998,
+        "min_ms": 0.02199375,
+        "max_ms": 0.02316042
+      },
+      "change_percent": -14.12424565167777
+    },
+    "raw/vjp_cached": {
+      "before": {
+        "session_medians_ms": [
+          0.02363167,
+          0.02411916,
+          0.045347910000000005,
+          0.020024590000000002
+        ],
+        "median_ms": 0.023875415,
+        "min_ms": 0.020024590000000002,
+        "max_ms": 0.045347910000000005
+      },
+      "after": {
+        "session_medians_ms": [
+          0.02067001,
+          0.02044708,
+          0.02042125,
+          0.01991501
+        ],
+        "median_ms": 0.020434164999999997,
+        "min_ms": 0.01991501,
+        "max_ms": 0.02067001
+      },
+      "change_percent": -14.413362029518662
+    },
+    "public/dense_cached": {
+      "before": {
+        "session_medians_ms": [
+          0.43630083,
+          0.35701041,
+          0.44289875,
+          0.27661791
+        ],
+        "median_ms": 0.39665562,
+        "min_ms": 0.27661791,
+        "max_ms": 0.44289875
+      },
+      "after": {
+        "session_medians_ms": [
+          0.30350208,
+          0.30262,
+          0.29434999,
+          0.27419709000000003
+        ],
+        "median_ms": 0.29848499500000003,
+        "min_ms": 0.27419709000000003,
+        "max_ms": 0.30350208
+      },
+      "change_percent": -24.74958630360512
+    },
+    "public/jvp_cached": {
+      "before": {
+        "session_medians_ms": [
+          0.05460251,
+          0.03905125,
+          0.04304792,
+          0.061195
+        ],
+        "median_ms": 0.048825215000000005,
+        "min_ms": 0.03905125,
+        "max_ms": 0.061195
+      },
+      "after": {
+        "session_medians_ms": [
+          0.0671725,
+          0.038114169999999996,
+          0.036497919999999996,
+          0.03679292
+        ],
+        "median_ms": 0.037453545,
+        "min_ms": 0.036497919999999996,
+        "max_ms": 0.0671725
+      },
+      "change_percent": -23.290568203335116
+    },
+    "public/vjp_cached": {
+      "before": {
+        "session_medians_ms": [
+          0.06177375,
+          0.039044999999999996,
+          0.04826667,
+          0.04250041
+        ],
+        "median_ms": 0.04538354,
+        "min_ms": 0.039044999999999996,
+        "max_ms": 0.06177375
+      },
+      "after": {
+        "session_medians_ms": [
+          0.06751709,
+          0.03820083,
+          0.03739584,
+          0.03715876
+        ],
+        "median_ms": 0.037798335,
+        "min_ms": 0.03715876,
+        "max_ms": 0.06751709
+      },
+      "change_percent": -16.71355958570001
+    }
+  },
+  "accuracy_vs_before": {
+    "max_abs": 0.0,
+    "relative_frobenius": 0.0
+  }
+}

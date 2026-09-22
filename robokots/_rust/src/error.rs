@@ -4,7 +4,7 @@ use std::fmt;
 /// Validation failure in a model, motion, output request, or computation state.
 /// All current native validation failures map to ValueError at the Python boundary.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Error {
+pub struct Error {
     message: String,
 }
 
@@ -22,4 +22,4 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-pub(crate) type CoreResult<T> = std::result::Result<T, Error>;
+pub type CoreResult<T> = std::result::Result<T, Error>;

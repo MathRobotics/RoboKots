@@ -4,7 +4,7 @@ use crate::error::{Error, CoreResult};
 
 use crate::spatial::*;
 use crate::types::RustCompiledRobot;
-use crate::workspace::{DynamicsCmtmTangentWorkspace, DynamicsCmtmWorkspace};
+use crate::workspace::{CmtmWorkspace, DynamicsCmtmTangentWorkspace, DynamicsCmtmWorkspace};
 
 /// (owner: link=0/joint=1, owner index, momentum=0/force=1/torque=2/kinematics=3,
 /// ordinary time derivative index, world frame).
@@ -287,4 +287,152 @@ fn pose_tangent(mat: [[f64;4];4], dmat: [[f64;4];4], family: usize, world: bool)
         if world { [dmat[0][3], dmat[1][3], dmat[2][3], 0.0,0.0,0.0] }
         else { [v[3],v[4],v[5],0.0,0.0,0.0] }
     } else { v }
+}
+
+impl RustCompiledRobot {
+    /// Evaluate kinetic energy and its gradient with respect to the compact
+    /// `(q, qdot)` CMTM input.  The gradient is obtained by seeding each
+    /// link's local velocity with the energy derivative and using the shared
+    /// kinematics reverse recurrence; no dynamics or basis tangent is built.
+    pub(crate) fn kinetic_energy_gradient_into(
+        &self, motion: &[f64], primal: &mut CmtmWorkspace, gradient: &mut [f64],
+    ) -> f64 {
+        const ORDER: usize = 2;
+        self.kinematics_cmtm_into(motion, ORDER, primal);
+        let mut energy = 0.0;
+        let mut link_vec_bar = vec![0.0; self.link_num * 6];
+        for link in 0..self.link_num {
+            let velocity = vec6_from_flat(cmtm_vecs_slice(&primal.link_vecs, link, ORDER), 0);
+            let iv = mat6_vec6(self.link_inertia[link], velocity);
+            let itv = mat6_transpose_vec6(self.link_inertia[link], velocity);
+            energy += 0.5 * velocity.iter().zip(iv.iter()).map(|(a, b)| a * b).sum::<f64>();
+            for c in 0..6 {
+                // `0.5 * v^T I v` differentiates to `0.5 * (I + I^T) v`.
+                // Spatial inertias are symmetric, but retaining both terms
+                // makes this correct for every accepted inertia matrix.
+                link_vec_bar[link * 6 + c] = 0.5 * (iv[c] + itv[c]);
+            }
+        }
+        let link_mat_zero = vec![0.0; self.link_num * 16];
+        let joint_mat_zero = vec![0.0; self.joint_num * 16];
+        let joint_vec_zero = vec![0.0; self.joint_num * 6];
+        self.kinematics_cmtm_outward_reverse_into(
+            motion, ORDER, &link_mat_zero, &link_vec_bar, &joint_mat_zero,
+            &joint_vec_zero, 1, primal, gradient,
+        );
+        energy
+    }
+}
+
+impl RustCompiledRobot {
+    /// True reverse VJP for local link wrenches expressed in world frame.
+    /// The world transport is reversed into local wrench and kinematics
+    /// cotangents, then the shared local dynamics/kinematics reverse kernels
+    /// complete the propagation to motion.
+    pub(crate) fn world_link_dynamics_cmtm_reverse_vjp_into(
+        &self, motion: &[f64], momentum_cotangent: &[f64], force_cotangent: &[f64],
+        dynamics_order: usize, gravity: [f64; 3], rhs_cols: usize, out: &mut [f64],
+    ) {
+        let kin_order = dynamics_order + 2;
+        let input_len = self.dof * kin_order;
+        let momentum_order = dynamics_order + 1;
+        let vec_len = (kin_order - 1) * 6;
+        let mut primal = DynamicsCmtmWorkspace::new(self, dynamics_order);
+        self.dynamics_cmtm_into(motion, dynamics_order, gravity, &mut primal);
+        let mut local_momentum_bar = vec![0.0; self.link_num * momentum_order * 6 * rhs_cols];
+        let mut local_force_bar = vec![0.0; self.link_num * dynamics_order * 6 * rhs_cols];
+        let mut link_mat_bar = vec![0.0; self.link_num * 16 * rhs_cols];
+        let mut link_vec_bar = vec![0.0; self.link_num * vec_len * rhs_cols];
+
+        for link in 0..self.link_num {
+            let mat = mat4_from_flat(&primal.cmtm.link_mat, link);
+            let vecs = cmtm_vecs_slice(&primal.cmtm.link_vecs, link, kin_order);
+            let momentum = cmvec_slice(&primal.link_momentum, link, momentum_order);
+            let force = cmvec_slice(&primal.link_force, link, dynamics_order);
+            for rhs in 0..rhs_cols {
+                // The transport reverse handles every output coefficient at
+                // once.  This replaces the former O(order^2) sequence of
+                // prefix-series calls and preserves cross-coefficient terms.
+                let mut reverse_transport = |raw_rhs: &[f64], target: &[f64], order: usize,
+                                             local_bar: &mut [f64]| {
+                    let mut target_bar = vec![0.0; order * 6];
+                    for i in 0..order * 6 {
+                        target_bar[i] = target[(link * order * 6 + i) * rhs_cols + rhs];
+                    }
+                    let mut rhs_bar = vec![0.0; order * 6];
+                    let mut vec_bar = vec![0.0; order.saturating_sub(1) * 6];
+                    let mut mat_bar = [[0.0; 4]; 4];
+                    let mut a = vec![[[0.0; 3]; 3]; order];
+                    let mut c_blocks = vec![[[0.0; 3]; 3]; order];
+                    let mut a_bar = vec![[[0.0; 3]; 3]; order];
+                    let mut c_bar = vec![[[0.0; 3]; 3]; order];
+                    let mut scaled = vec![0.0; order.saturating_sub(1) * 6];
+                    cmtm_accumulate_mat_adj_wrench_series_reverse_accumulate_into(
+                        mat, &vecs[..order.saturating_sub(1) * 6], raw_rhs, &target_bar,
+                        order, &primal.factorial, &mut scaled, &mut a, &mut c_blocks,
+                        &mut a_bar, &mut c_bar, &mut rhs_bar, &mut vec_bar, &mut mat_bar,
+                    );
+                    for i in 0..order * 6 {
+                        local_bar[(link * order * 6 + i) * rhs_cols + rhs] += rhs_bar[i];
+                    }
+                    for i in 0..order.saturating_sub(1) * 6 {
+                        link_vec_bar[(link * vec_len + i) * rhs_cols + rhs] += vec_bar[i];
+                    }
+                    for row in 0..4 { for col in 0..4 {
+                        link_mat_bar[(link * 16 + row * 4 + col) * rhs_cols + rhs] += mat_bar[row][col];
+                    }}
+                };
+                reverse_transport(momentum, momentum_cotangent, momentum_order, &mut local_momentum_bar);
+                reverse_transport(force, force_cotangent, dynamics_order, &mut local_force_bar);
+            }
+        }
+
+        let mut dynamics_out = vec![0.0; input_len * rhs_cols];
+        self.dynamics_cmtm_reverse_into(
+            motion, &local_momentum_bar, &local_force_bar,
+            &vec![0.0; self.joint_num * momentum_order * 6 * rhs_cols],
+            &vec![0.0; self.joint_num * dynamics_order * 6 * rhs_cols],
+            &vec![0.0; self.joint_num * dynamics_order * rhs_cols], dynamics_order,
+            gravity, rhs_cols, None, &mut primal, &mut dynamics_out,
+        );
+        let mut kinematics_out = vec![0.0; input_len * rhs_cols];
+        let mut kinematics = CmtmWorkspace::new(self, kin_order);
+        self.kinematics_cmtm_outward_reverse_into(
+            motion, kin_order, &link_mat_bar, &link_vec_bar,
+            &vec![0.0; self.joint_num * 16 * rhs_cols],
+            &vec![0.0; self.joint_num * vec_len * rhs_cols], rhs_cols,
+            &mut kinematics, &mut kinematics_out,
+        );
+        for i in 0..out.len() { out[i] = dynamics_out[i] + kinematics_out[i]; }
+    }
+
+    pub(crate) fn world_joint_dynamics_cmtm_vjp_into(
+        &self, motion: &[f64], momentum_cotangent: &[f64], force_cotangent: &[f64],
+        dynamics_order: usize, gravity: [f64; 3], rhs_cols: usize, out: &mut [f64],
+    ) {
+        let mut link_momentum_cotangent = vec![0.0; self.link_num * (dynamics_order + 1) * 6 * rhs_cols];
+        let mut link_force_cotangent = vec![0.0; self.link_num * dynamics_order * 6 * rhs_cols];
+        for joint in 0..self.joint_num {
+            for &link in &self.link_subtree_links[self.child_link[joint]] {
+                for time in 0..=dynamics_order {
+                    for component in 0..6 { for rhs in 0..rhs_cols {
+                        let source = ((joint * (dynamics_order + 1) + time) * 6 + component) * rhs_cols + rhs;
+                        let target = ((link * (dynamics_order + 1) + time) * 6 + component) * rhs_cols + rhs;
+                        link_momentum_cotangent[target] += momentum_cotangent[source];
+                    }}
+                }
+                for time in 0..dynamics_order {
+                    for component in 0..6 { for rhs in 0..rhs_cols {
+                        let source = ((joint * dynamics_order + time) * 6 + component) * rhs_cols + rhs;
+                        let target = ((link * dynamics_order + time) * 6 + component) * rhs_cols + rhs;
+                        link_force_cotangent[target] += force_cotangent[source];
+                    }}
+                }
+            }
+        }
+        self.world_link_dynamics_cmtm_reverse_vjp_into(
+            motion, &link_momentum_cotangent, &link_force_cotangent,
+            dynamics_order, gravity, rhs_cols, out,
+        );
+    }
 }

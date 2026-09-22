@@ -5,11 +5,15 @@ edition = "2021"
 
 [lib]
 name = "robokots_rust"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["python"]
+python = ["dep:numpy", "dep:pyo3"]
 
 [dependencies]
-numpy = "0.23"
-pyo3 = { version = "0.23", features = ["extension-module"] }
+numpy = { version = "0.23", optional = true }
+pyo3 = { version = "0.23", features = ["extension-module"], optional = true }
 
 [profile.release]
 codegen-units = 1

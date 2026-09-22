@@ -308,6 +308,36 @@ split incrementally without adding another user-visible state container.
 `StateCache` holds semantic outward/CMTM state. Rust and inward workspaces are
 algorithm-specific numerical storage and must not be inserted into that cache.
 
+### Native Rust model and Python boundary
+
+`robokots/_rust/src/model.rs` defines `RobotModel`, `LinkModel`, and
+`JointModel`. `RustCompiledRobot::from_model()` validates topology and compiles
+these ordinary Rust values. Link zero is the root; every other link must be
+connected exactly once, and joints must appear in parent-before-child order.
+The native constructor rejects invalid indices, disconnected links, cycles,
+and invalid traversal order before accessing model arrays.
+
+`types.rs` owns native model/state containers and their factories. Python
+classes in `py_api.rs` hold these values directly; wrapping does not clone
+buffers or add a separate heap allocation. Dictionary/NumPy conversion and
+Python exceptions remain at this boundary. The existing Python class names,
+methods, array layouts, and supported joint subsets are retained.
+
+The default Cargo feature `python` builds the PyO3 extension. Both PyO3 and
+NumPy are optional dependencies, so the native model and kernels can also be
+built and tested without Python:
+
+```bash
+cargo test --offline --manifest-path robokots/_rust/Cargo.toml --no-default-features
+cargo tree --offline --manifest-path robokots/_rust/Cargo.toml --no-default-features
+```
+
+This is preparation for an independent Rust library, not a complete stable
+public Rust computation API. Many kernel methods remain crate-private and
+some high-level state/output orchestration still lives in the Python bindings.
+The native tests cover typed model construction, container creation, RNEA/ABA
+calculations, and invalid topology without importing or linking Python.
+
 ### Selected Rust dynamics derivatives
 
 For dynamics requests with motion order at least 3, the Rust derivative adapter

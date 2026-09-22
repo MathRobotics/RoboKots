@@ -1,6 +1,6 @@
 use crate::error::{Error, CoreResult};
 
-use crate::types::{RustBatchOutwardData, RustOutwardData};
+use crate::types::{RustAbaData, RustBatchOutwardData, RustOutwardData};
 use crate::workspace::CmtmWorkspace;
 
 impl RustOutwardData {
@@ -151,5 +151,44 @@ impl RustBatchOutwardData {
             )));
         }
         Ok(key_order - 1)
+    }
+}
+
+impl RustAbaData {
+    pub(crate) fn prepare_into(&mut self, q: &[f64], v: &[f64], gravity: [f64; 3]) -> crate::error::CoreResult<()> {
+        if q.len() != self.robot.dof || v.len() != self.robot.dof {
+            return Err(Error::new("q/v length must match robot dof"));
+        }
+        let changed = !self.prepared
+            || self.bias_q.as_slice() != q
+            || self.bias_v.as_slice() != v
+            || self.bias_gravity != gravity;
+        if changed {
+            let zero = vec![0.0; self.robot.dof];
+            self.robot
+                .aba_with_gravity_into(q, v, &zero, gravity, &mut self.workspace)
+                .map_err(Error::new)?;
+            self.workspace.bias_qdd.copy_from_slice(&self.workspace.qdd);
+            self.robot
+                .aba_factorize_mass_into(q, &mut self.workspace)
+                .map_err(Error::new)?;
+            self.factor_q.clear(); self.factor_q.extend_from_slice(q);
+            self.bias_q.clear(); self.bias_q.extend_from_slice(q);
+            self.bias_v.clear(); self.bias_v.extend_from_slice(v);
+            self.bias_gravity = gravity;
+            self.prepared = true;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn solve_into(&mut self, tau: &[f64]) -> crate::error::CoreResult<()> {
+        if !self.prepared {
+            return Err(Error::new("call prepare before solve"));
+        }
+        self.robot
+            .aba_solve_mass_into(tau, &mut self.workspace)
+            .map_err(Error::new)?;
+        for i in 0..self.robot.dof { self.workspace.qdd[i] += self.workspace.bias_qdd[i]; }
+        Ok(())
     }
 }

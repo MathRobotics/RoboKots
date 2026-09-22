@@ -572,3 +572,22 @@ construction is separate. Counters show one primal per sample and zero dynamics
 primal evaluations for kinematics-only requests. Input mutation, gravity, batch
 size, model identity, order and RHS-width changes are covered by regression
 tests rather than inferred from the unchanged-input benchmark.
+
+### Python/native boundary before and after
+
+Run these commands before the Rust refactor, then rebuild the release extension
+and repeat with `after` filenames and matching `--compare` inputs. Run timing
+jobs sequentially, without running tests or compilation at the same time.
+
+```bash
+.venv/bin/python -m developer.benchmarks.native_model_boundary --output developer/benchmarks/results/native_model_before.json
+.venv/bin/python -m developer.benchmarks.spatial_selected_outputs --output developer/benchmarks/results/python_boundary_before.json
+.venv/bin/python -m developer.benchmarks.native_model_boundary --output developer/benchmarks/results/native_model_after.json --compare developer/benchmarks/results/native_model_before.json
+.venv/bin/python -m developer.benchmarks.spatial_selected_outputs --output developer/benchmarks/results/python_boundary_after.json --compare developer/benchmarks/results/python_boundary_before.json
+```
+
+The model benchmark separates prepared-dictionary compilation from Python model
+serialization plus compilation; it excludes URDF parsing and process/import
+startup. The spatial benchmark separates state computation from dense/JVP/VJP
+calls on already computed states, including warmed derivative caches.
+JSON files retain first calls, raw samples, extension hashes, and output values.
