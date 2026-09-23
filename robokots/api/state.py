@@ -49,6 +49,13 @@ def _batch_state_info_list(batch, robot, state_type_list, get_value: Callable, l
 
 
 class StateManagementMixin:
+  def _state_model_info(self):
+    """Indexing information for the current state, without a full Rust-side Python model."""
+    state = self.outward_state_
+    if hasattr(state, "raw_data"):
+      return state.robot
+    return self._model_metadata
+
   def _set_batch_states(self, states, batch_shape: tuple, materialize_dict: bool = False):
     if not batch_shape:
       return self._set_current_state(states, materialize_dict=materialize_dict)
@@ -58,12 +65,14 @@ class StateManagementMixin:
     if hasattr(states, "cmtm"):
       result = export_state_dict(self.robot_, states) if materialize_dict else states
       self.batch_shape_ = batch_shape
+      self._computed_backend_ = "numpy"
       self.state_batch_ = self.outward_state_ = states
       return result
     batch = StateBatch.from_states(states, batch_shape)
     result = export_state_dict(self.robot_, batch) if materialize_dict else batch.outward_states
     self.batch_shape_ = batch_shape
     self.state_batch_ = batch
+    self._computed_backend_ = "numpy"
     self.outward_state_ = self.state_batch_.outward_states
     return result
 
@@ -81,7 +90,7 @@ class StateManagementMixin:
         from ..contrib.polars import RobotState
       except ImportError as e:
         raise ImportError("DataFrame state tables are optional. Install RoboKots with the `table` extra.") from e
-      self.state_ = RobotState(self.robot_.link_names, self.robot_.joint_names, self._state_l_aliases, self._state_j_aliases)
+      self.state_ = RobotState(self._model_metadata.link_names, self._model_metadata.joint_names, self._state_l_aliases, self._state_j_aliases)
     return self.state_
 
   def state_df(self):
@@ -105,7 +114,7 @@ class StateManagementMixin:
       return values if self.batch_shape_ else np.asarray(values).reshape(-1)
     if isinstance(self.state_batch_, StateBatch):
       return _batch_state_info(self.state_batch_, self.robot_, state_type, outward_api.get_value)
-    value = outward_api.get_value(self.robot_, self._state_for_direct_read(), state_type)
+    value = outward_api.get_value(self._state_model_info(), self._state_for_direct_read(), state_type)
     return value.mat() if self.batch_shape_ and hasattr(value, "mat") else value
 
   def state_info_list(self, state_type_list, list_output: bool = False):
@@ -117,7 +126,7 @@ class StateManagementMixin:
       if values is None:
         if isinstance(self.state_batch_, StateBatch):
           return _batch_state_info_list(self.state_batch_, self.robot_, state_type_list, outward_api.get_value, list_output=list_output)
-        values = [outward_api.get_value(self.robot_, self._state_for_direct_read(), st) for st in state_type_list]
+        values = [outward_api.get_value(self._state_model_info(), self._state_for_direct_read(), st) for st in state_type_list]
     if list_output:
       return [_copy_public_state_value(value) for value in values]
     return batch_shapes.concatenate_state_values(values, self.batch_shape_)
@@ -144,11 +153,11 @@ class StateManagementMixin:
       gravity = self.gravity_ if gravity is None else self._validate_gravity(gravity)
       if resolved == "rust":
         return resolved, lambda x: outward_api.build_dynamics_outward_state_rust(
-          self.robot_, x, order - 2, compiled_robot=self._rust_compiled_robot(), gravity=gravity)
+          self._rust_model_info(), x, order - 2, compiled_robot=self._rust_compiled_robot(), gravity=gravity)
       return resolved, lambda x: outward_api.build_dynamics_outward_state(self.robot_, x, order - 2, gravity=gravity)
     if resolved == "rust":
       return resolved, lambda x: outward_api.build_kinematics_outward_state_rust(
-        self.robot_, x, order, compiled_robot=self._rust_compiled_robot())
+        self._rust_model_info(), x, order, compiled_robot=self._rust_compiled_robot())
     if self._use_jax_kinematics_backend(resolved):
       return resolved, lambda x: outward_api.build_kinematics_outward_state(self.robot_, x, order, backend=resolved)
     return resolved, lambda x: outward_api.build_kinematics_outward_state(self.robot_, x, order)
@@ -162,11 +171,11 @@ class StateManagementMixin:
           active_gravity = self.gravity_ if gravity is None else gravity
           if resolved == "rust":
             return outward_api.build_dynamics_outward_state_rust(
-              self.robot_, motion, order - 2, compiled_robot=self._rust_compiled_robot(), gravity=active_gravity), motion.shape[:-1]
+              self._rust_model_info(), motion, order - 2, compiled_robot=self._rust_compiled_robot(), gravity=active_gravity), motion.shape[:-1]
           return outward_api.build_dynamics_outward_state(self.robot_, motion, order - 2, gravity=active_gravity), motion.shape[:-1]
         if resolved == "rust":
           return outward_api.build_kinematics_outward_state_rust(
-            self.robot_, motion, order, compiled_robot=self._rust_compiled_robot()), motion.shape[:-1]
+            self._rust_model_info(), motion, order, compiled_robot=self._rust_compiled_robot()), motion.shape[:-1]
         return outward_api.build_kinematics_outward_state(self.robot_, motion, order), motion.shape[:-1]
       except NotImplementedError as exc:
         _logger.debug("Batched state unavailable; evaluating individual samples: %s", exc)
@@ -179,6 +188,7 @@ class StateManagementMixin:
     result = export_state_dict(self.robot_, state_obj) if materialize_dict else state_obj
     self.batch_shape_ = ()
     self.state_batch_ = None
+    self._computed_backend_ = "numpy"
     self.outward_state_ = state_obj
     return result
 
@@ -217,7 +227,7 @@ class StateManagementMixin:
 
     if isinstance(self.state_batch_, StateBatch):
       return export_state_dict(self.robot_, self.state_batch_)
-    return export_state_dict(self.robot_, self._state_for_direct_read())
+    return export_state_dict(self._state_model_info(), self._state_for_direct_read())
 
   def update_state_dict(self, order: int = None, is_dynamics: bool = False, backend: str = None) -> dict:
     self.update_state(order=order, is_dynamics=is_dynamics, backend=backend)

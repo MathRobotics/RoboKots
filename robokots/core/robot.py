@@ -7,7 +7,8 @@ from __future__ import annotations
 import numpy as np
 
 import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import List, Dict
 
 warnings.simplefilter("always", UserWarning)
@@ -49,9 +50,16 @@ def _require_list4(value, field_name: str) -> list[float]:
     raise ValueError(f"{field_name} must be a list of 4 numbers in [w, x, y, z] order.") from exc
   if not np.all(np.isfinite(result)):
     raise ValueError(f"{field_name} must contain only finite numbers.")
-  if np.linalg.norm(result) <= 0.0:
-    raise ValueError(f"{field_name} must be non-zero.")
+  norm = np.linalg.norm(result)
+  if not np.isfinite(norm) or norm <= 0.0:
+    raise ValueError(f"{field_name} must have a finite, non-zero norm.")
   return result
+
+
+def _unit_quaternion(value):
+  # Model constants are normalized before conversion to the requested array library.
+  quaternion = np.asarray(value, dtype=float)
+  return quaternion / np.linalg.norm(quaternion)
 
 
 def _require_matrix(value, field_name: str, shape: tuple[int, int]) -> list[list[float]]:
@@ -312,6 +320,71 @@ class MotionOwner:
   dof_index: int
 
 
+@dataclass(frozen=True)
+class ModelLinkInfo:
+  id: int
+  name: str
+  dof: int = 0
+
+
+@dataclass(frozen=True)
+class ModelJointInfo:
+  id: int
+  name: str
+  type: str
+  dof: int
+  dof_index: int
+  parent_link_id: int
+  child_link_id: int
+
+
+@dataclass(frozen=True)
+class RobotModelInfo:
+  """Immutable indexing metadata; owns no inertia, SE3 or joint model arrays."""
+  dof: int
+  links: tuple[ModelLinkInfo, ...]
+  joints: tuple[ModelJointInfo, ...]
+  supports_cmtm: bool
+  _links: object = field(init=False, repr=False, compare=False)
+  _joints: object = field(init=False, repr=False, compare=False)
+
+  def __post_init__(self):
+    object.__setattr__(self, "_links", MappingProxyType({x.name: x for x in self.links}))
+    object.__setattr__(self, "_joints", MappingProxyType({x.name: x for x in self.joints}))
+
+  @classmethod
+  def from_native(cls, compiled):
+    dof, links, joints, supports_cmtm = compiled.model_info()
+    return cls(dof, tuple(ModelLinkInfo(i, name) for i, name in enumerate(links)),
+               tuple(ModelJointInfo(i, *values) for i, values in enumerate(joints)),
+               supports_cmtm)
+
+  @property
+  def link_names(self):
+    return tuple(x.name for x in self.links)
+
+  @property
+  def joint_names(self):
+    return tuple(x.name for x in self.joints)
+
+  @property
+  def link_num(self):
+    return len(self.links)
+
+  @property
+  def joint_num(self):
+    return len(self.joints)
+
+  def link(self, name):
+    return self._links.get(name)
+
+  def joint(self, name):
+    return self._joints.get(name)
+
+  def motion_owners(self):
+    return tuple(MotionOwner(j.dof, j.dof_index) for j in self.joints if j.dof > 0)
+
+
 class RobotStruct:
   def __init__(self, links_: List["LinkStruct"], joints_: List["JointStruct"]):
     self.joints = joints_
@@ -440,7 +513,7 @@ class RobotStruct:
         q_representation=joint.get("q_representation"),
         origin=SE3.set_pos_quaternion(
           xp.array(joint.get("origin", {}).get("position", [0., 0., 0.])),
-          xp.array(joint.get("origin", {}).get("orientation", [1., 0., 0., 0.])),
+          xp.array(_unit_quaternion(joint.get("origin", {}).get("orientation", [1., 0., 0., 0.]))),
           LIB=lib
         ),
         lib=lib

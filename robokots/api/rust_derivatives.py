@@ -15,18 +15,18 @@ class RustDerivativesMixin:
   def _rust_selected_dynamics_specs(self, states, max_order):
     """Select dynamics, spatial motion and pose tangents in public output order.
 
-    Keep pure implicit-local torque on its dedicated path. Joint motion
-    coordinates are not spatial CMTM entries.
+    Joint motion coordinates are not spatial CMTM entries.
     """
     if not hasattr(self.outward_state_, "raw_data") or self.dim_ != 3 or max_order < 1:
       return None
     if not states or all(st.data_type in keys_torque and st.frame_name is None for st in states):
       return None
     specs, widths = [], []
+    model_info = self._rust_model_info()
     families = {"momentum": 0, "force": 1, "torque": 2, "spatial": 3, "pos": 4, "rot": 5, "frame": 6}
     for st in states:
       try:
-        spec = state_output(self.robot_, st)
+        spec = state_output(model_info, st)
       except ValueError:
         return None
       if spec.family not in families or (spec.family == "torque" and spec.width != 1):
@@ -45,7 +45,7 @@ class RustDerivativesMixin:
       return None
     specs, widths = spec
     motion = np.asarray(self.motion(max_order), dtype=float)
-    input_dim = self.robot_.dof * max_order
+    input_dim = self._rust_model_info().dof * max_order
     rows = sum(widths) if transpose else input_dim
     rhs = np.asarray(rhs, dtype=float)
     cols = rhs.shape[-1] if rhs_is_matrix else 1
@@ -70,13 +70,15 @@ class RustDerivativesMixin:
     if self._rust_selected_dynamics_specs(states, max_order) is None:
       return None
     batch_shape = np.asarray(self.motion(max_order)).shape[:-1]
-    input_dim = self.robot_.dof * max_order
+    input_dim = self._model_metadata.dof * max_order
     basis = np.broadcast_to(np.eye(input_dim), batch_shape + (input_dim, input_dim))
     return self._rust_selected_dynamics_apply(
       states, max_order, basis, batch_shape, rhs_is_matrix=True, list_output=list_output,
     )
 
   def _rust_torque_row_parts(self, state_type_list, max_order : int):
+    if not hasattr(self.outward_state_, "raw_data"):
+      return None
     if self.dim_ != 3 or max_order != 3:
       return None
     rows = []
@@ -84,7 +86,7 @@ class RustDerivativesMixin:
     for st in state_type_list:
       if st.owner_type != "joint" or st.data_type != "torque" or st.frame_name is not None:
         return None
-      joint = self.robot_.joint(st.owner_name)
+      joint = self._rust_model_info().joint(st.owner_name)
       if joint is None or joint.dof <= 0:
         return None
       rows.extend(range(joint.dof_index, joint.dof_index + joint.dof))
@@ -93,7 +95,7 @@ class RustDerivativesMixin:
 
   def _rust_qva_order3(self):
     motion = np.asarray(self.motion(3), dtype=float)
-    if motion.shape[-1] != self.robot_.dof * 3:
+    if motion.shape[-1] != self._rust_model_info().dof * 3:
       return None
     if motion.ndim == 1:
       return (
@@ -185,7 +187,7 @@ class RustDerivativesMixin:
     if not hasattr(self.outward_state_, "raw_data") or self.dim_ != 3 or max_order < 3:
       return None
     dynamics_order = max_order - 2
-    link_ids = {link.name: i for i, link in enumerate(self.robot_.links)}
+    link_ids = {link.name: i for i, link in enumerate(self._rust_model_info().links)}
     parts = []
     for st in state_type_list:
       time = getattr(st, "key_order", 0) - 1
@@ -198,14 +200,14 @@ class RustDerivativesMixin:
       else:
         return None
     motion = np.asarray(self.motion(max_order), dtype=float)
-    if motion.shape[-1] != self.robot_.dof * max_order:
+    if motion.shape[-1] != self._rust_model_info().dof * max_order:
       return None
     try:
       rhs_matrix = rhs.reshape(batch_shape + rhs.shape[-2:]) if rhs_is_matrix and batch_shape else rhs if rhs_is_matrix else (rhs.reshape(batch_shape + (rhs.shape[-1],)) if batch_shape else rhs)[..., None]
       cols = rhs_matrix.shape[-1]
       base = rhs_matrix.shape[:-2]
-      lm = np.zeros(base + (len(self.robot_.links), dynamics_order + 1, 6, cols))
-      lf = np.zeros(base + (len(self.robot_.links), dynamics_order, 6, cols))
+      lm = np.zeros(base + (len(self._rust_model_info().links), dynamics_order + 1, 6, cols))
+      lf = np.zeros(base + (len(self._rust_model_info().links), dynamics_order, 6, cols))
       row = 0
       for family, link, time in parts:
         (lm if family == "momentum" else lf)[..., link, time, :, :] += rhs_matrix[..., row:row + 6, :]
@@ -228,7 +230,7 @@ class RustDerivativesMixin:
     if not hasattr(self.outward_state_, "raw_data") or self.dim_ != 3 or max_order < 3:
       return None
     dynamics_order = max_order - 2
-    joint_ids = {joint.name: i for i, joint in enumerate(self.robot_.joints)}
+    joint_ids = {joint.name: i for i, joint in enumerate(self._rust_model_info().joints)}
     parts = []
     for st in state_type_list:
       time = getattr(st, "key_order", 0) - 1
@@ -241,13 +243,13 @@ class RustDerivativesMixin:
       else:
         return None
     motion = np.asarray(self.motion(max_order), dtype=float)
-    if motion.shape[-1] != self.robot_.dof * max_order:
+    if motion.shape[-1] != self._rust_model_info().dof * max_order:
       return None
     try:
       rhs_matrix = rhs.reshape(batch_shape + rhs.shape[-2:]) if rhs_is_matrix and batch_shape else rhs if rhs_is_matrix else (rhs.reshape(batch_shape + (rhs.shape[-1],)) if batch_shape else rhs)[..., None]
       cols = rhs_matrix.shape[-1]; base = rhs_matrix.shape[:-2]
-      jm = np.zeros(base + (len(self.robot_.joints), dynamics_order + 1, 6, cols))
-      jf = np.zeros(base + (len(self.robot_.joints), dynamics_order, 6, cols))
+      jm = np.zeros(base + (len(self._rust_model_info().joints), dynamics_order + 1, 6, cols))
+      jf = np.zeros(base + (len(self._rust_model_info().joints), dynamics_order, 6, cols))
       row = 0
       for family, joint, time in parts:
         (jm if family == "momentum" else jf)[..., joint, time, :, :] += rhs_matrix[..., row:row + 6, :]
@@ -324,10 +326,12 @@ class RustDerivativesMixin:
       return None
 
   def _rust_cmtm_kinematics_row_parts(self, state_type_list, max_order : int):
+    if not hasattr(self.outward_state_, "raw_data"):
+      return None
     if self.dim_ != 3 or max_order < 3:
       return None
-    link_ids = {link.name: link_id for link_id, link in enumerate(self.robot_.links)}
-    joint_ids = {joint.name: joint_id for joint_id, joint in enumerate(self.robot_.joints)}
+    link_ids = {link.name: link_id for link_id, link in enumerate(self._rust_model_info().links)}
+    joint_ids = {joint.name: joint_id for joint_id, joint in enumerate(self._rust_model_info().joints)}
     parts = []
     for st in state_type_list:
       # Position/rotation/frame outputs include the CMTM transform and keep
@@ -350,14 +354,14 @@ class RustDerivativesMixin:
       return None
     motion = np.asarray(self.motion(max_order), dtype=float)
     motion_batch_shape = motion.shape[:-1] if motion.ndim > 1 else ()
-    if motion.shape[-1] != self.robot_.dof * max_order or tuple(batch_shape) != tuple(motion_batch_shape):
+    if motion.shape[-1] != self._rust_model_info().dof * max_order or tuple(batch_shape) != tuple(motion_batch_shape):
       return None
     try:
       rhs_matrix = rhs.reshape(batch_shape + rhs.shape[-2:]) if rhs_is_matrix and batch_shape else rhs if rhs_is_matrix else (rhs.reshape(batch_shape + (rhs.shape[-1],)) if batch_shape else rhs)[..., None]
       rhs_cols = rhs_matrix.shape[-1]
       base_shape = rhs_matrix.shape[:-2]
-      link_rhs = np.zeros(base_shape + (len(self.robot_.links), max_order - 1, 6, rhs_cols))
-      joint_rhs = np.zeros(base_shape + (len(self.robot_.joints), max_order - 1, 6, rhs_cols))
+      link_rhs = np.zeros(base_shape + (len(self._rust_model_info().links), max_order - 1, 6, rhs_cols))
+      joint_rhs = np.zeros(base_shape + (len(self._rust_model_info().joints), max_order - 1, 6, rhs_cols))
       row = 0
       for owner_type, owner_id, time in parts:
         target = link_rhs if owner_type == "link" else joint_rhs
@@ -394,14 +398,16 @@ class RustDerivativesMixin:
     local momentum/force/wrench and torque states can be packed directly into
     the single Rust outward-dynamics VJP without materialising a Jacobian.
     """
+    if not hasattr(self.outward_state_, "raw_data"):
+      return None
     if self.dim_ != 3 or max_order < 3:
       return None
     dynamics_order = max_order - 2
-    active = [(joint_id, joint) for joint_id, joint in enumerate(self.robot_.joints) if joint.dof > 0]
+    active = [(joint_id, joint) for joint_id, joint in enumerate(self._rust_model_info().joints) if joint.dof > 0]
     if any(joint.dof != 1 for _, joint in active):
       return None
-    link_ids = {link.name: link_id for link_id, link in enumerate(self.robot_.links)}
-    joint_ids = {joint.name: joint_id for joint_id, joint in enumerate(self.robot_.joints)}
+    link_ids = {link.name: link_id for link_id, link in enumerate(self._rust_model_info().links)}
+    joint_ids = {joint.name: joint_id for joint_id, joint in enumerate(self._rust_model_info().joints)}
     parts = []
     for st in state_type_list:
       if st.frame_name is not None:
@@ -440,13 +446,13 @@ class RustDerivativesMixin:
     dynamics_order, parts = spec
     motion = np.asarray(self.motion(max_order), dtype=float)
     motion_batch_shape = motion.shape[:-1] if motion.ndim > 1 else ()
-    if motion.shape[-1] != self.robot_.dof * max_order or tuple(batch_shape) != tuple(motion_batch_shape):
+    if motion.shape[-1] != self._rust_model_info().dof * max_order or tuple(batch_shape) != tuple(motion_batch_shape):
       return None
     try:
       rhs_matrix = rhs.reshape(batch_shape + rhs.shape[-2:]) if rhs_is_matrix and batch_shape else rhs if rhs_is_matrix else (rhs.reshape(batch_shape + (rhs.shape[-1],)) if batch_shape else rhs)[..., None]
       rhs_cols = rhs_matrix.shape[-1]
       base_shape = rhs_matrix.shape[:-2]
-      link_num, joint_num = len(self.robot_.links), len(self.robot_.joints)
+      link_num, joint_num = len(self._rust_model_info().links), len(self._rust_model_info().joints)
       packed = {
         "link_momentum": np.zeros(base_shape + (link_num, dynamics_order + 1, 6, rhs_cols)),
         "link_force": np.zeros(base_shape + (link_num, dynamics_order, 6, rhs_cols)),
@@ -516,12 +522,14 @@ class RustDerivativesMixin:
     retain the established outward/CMTM Python implementation rather than
     silently selecting incorrectly laid-out rows.
     """
+    if not hasattr(self.outward_state_, "raw_data"):
+      return None
     if self.dim_ != 3 or max_order < 3:
       return None
     dynamics_order = max_order - 2
     active = [
       (joint_id, joint)
-      for joint_id, joint in enumerate(self.robot_.joints)
+      for joint_id, joint in enumerate(self._rust_model_info().joints)
       if joint.dof > 0
     ]
     if any(joint.dof != 1 for _, joint in active):
@@ -533,10 +541,10 @@ class RustDerivativesMixin:
       if st.data_type not in keys_torque or st.frame_name is not None or torque_order < 0 or torque_order >= dynamics_order:
         return None
       if st.owner_type == "joint":
-        joint = self.robot_.joint(st.owner_name)
+        joint = self._rust_model_info().joint(st.owner_name)
         if joint is None or joint.dof != 1:
           return None
-        joint_id = next((i for i, candidate in enumerate(self.robot_.joints) if candidate is joint), None)
+        joint_id = next((i for i, candidate in enumerate(self._rust_model_info().joints) if candidate is joint), None)
         if joint_id is None:
           return None
         parts.append(([(joint_id, torque_order)], 1))
@@ -564,7 +572,7 @@ class RustDerivativesMixin:
     dynamics_order, part_specs = spec
     motion = np.asarray(self.motion(max_order), dtype=float)
     batch_shape = motion.shape[:-1] if motion.ndim > 1 else ()
-    input_len = self.robot_.dof * max_order
+    input_len = self._rust_model_info().dof * max_order
     if motion.shape[-1] != input_len:
       return None
     robot = self._rust_compiled_robot()
@@ -615,7 +623,7 @@ class RustDerivativesMixin:
     dynamics_order, part_specs = spec
     motion = np.asarray(self.motion(max_order), dtype=float)
     motion_batch_shape = motion.shape[:-1] if motion.ndim > 1 else ()
-    if motion.shape[-1] != self.robot_.dof * max_order or tuple(batch_shape) != tuple(motion_batch_shape):
+    if motion.shape[-1] != self._rust_model_info().dof * max_order or tuple(batch_shape) != tuple(motion_batch_shape):
       return None
     try:
       if rhs_is_matrix:
@@ -673,7 +681,7 @@ class RustDerivativesMixin:
     dynamics_order, part_specs = spec
     motion = np.asarray(self.motion(max_order), dtype=float)
     motion_batch_shape = motion.shape[:-1] if motion.ndim > 1 else ()
-    if motion.shape[-1] != self.robot_.dof * max_order or tuple(batch_shape) != tuple(motion_batch_shape):
+    if motion.shape[-1] != self._rust_model_info().dof * max_order or tuple(batch_shape) != tuple(motion_batch_shape):
       return None
 
     robot = self._rust_compiled_robot()
@@ -690,7 +698,7 @@ class RustDerivativesMixin:
         rhs_matrix = rhs_vec[..., :, None]
       rhs_cols = rhs_matrix.shape[-1]
       packed = np.zeros(
-        rhs_matrix.shape[:-2] + (len(self.robot_.joints), dynamics_order, rhs_cols),
+        rhs_matrix.shape[:-2] + (len(self._rust_model_info().joints), dynamics_order, rhs_cols),
         dtype=rhs_matrix.dtype,
       )
       row_start = 0
@@ -753,7 +761,7 @@ class RustDerivativesMixin:
     dynamics_order, part_specs = spec
     motion = np.asarray(self.motion(max_order), dtype=float)
     motion_batch_shape = motion.shape[:-1] if motion.ndim > 1 else ()
-    if motion.shape[-1] != self.robot_.dof * max_order or tuple(batch_shape) != tuple(motion_batch_shape):
+    if motion.shape[-1] != self._rust_model_info().dof * max_order or tuple(batch_shape) != tuple(motion_batch_shape):
       return None
     try:
       torque_matrix = torque_rhs.reshape(batch_shape + torque_rhs.shape[-2:]) if rhs_is_matrix and batch_shape else torque_rhs if rhs_is_matrix else (torque_rhs.reshape(batch_shape + (torque_rhs.shape[-1],)) if batch_shape else torque_rhs)[..., None]
@@ -762,7 +770,7 @@ class RustDerivativesMixin:
       if energy_matrix.shape[-2:] != (1, rhs_cols):
         return None
       packed = np.zeros(
-        torque_matrix.shape[:-2] + (len(self.robot_.joints), dynamics_order, rhs_cols),
+        torque_matrix.shape[:-2] + (len(self._rust_model_info().joints), dynamics_order, rhs_cols),
         dtype=torque_matrix.dtype,
       )
       row_start = 0
@@ -811,10 +819,10 @@ class RustDerivativesMixin:
       else:
         rhs_vec = rhs.reshape(batch_shape + (rhs.shape[-1],)) if batch_shape else rhs
         rhs_part = rhs_vec[..., :, None]
-      if len(rows) == self.robot_.dof and rows == list(range(self.robot_.dof)):
+      if len(rows) == self._rust_model_info().dof and rows == list(range(self._rust_model_info().dof)):
         full_rhs = rhs_part
       else:
-        full_rhs = np.zeros(rhs_part.shape[:-2] + (self.robot_.dof, rhs_part.shape[-1]), dtype=rhs_part.dtype)
+        full_rhs = np.zeros(rhs_part.shape[:-2] + (self._rust_model_info().dof, rhs_part.shape[-1]), dtype=rhs_part.dtype)
         full_rhs[..., rows, :] = rhs_part
       if batch_shape:
         flat_rhs = np.ascontiguousarray(full_rhs.reshape((-1,) + full_rhs.shape[-2:]))
@@ -830,6 +838,8 @@ class RustDerivativesMixin:
     return out[..., 0]
 
   def _rust_link_local_specs(self, state_type_list, max_order : int):
+    if not hasattr(self.outward_state_, "raw_data"):
+      return None
     if self.dim_ != 3 or max_order != 3:
       return None
     code_map = {
@@ -844,7 +854,7 @@ class RustDerivativesMixin:
     for st in state_type_list:
       if st.owner_type != "link" or st.data_type not in code_map or st.frame_name is not None:
         return None
-      link = self.robot_.link(st.owner_name)
+      link = self._rust_model_info().link(st.owner_name)
       if link is None:
         return None
       link_ids.append(link.id)
@@ -949,7 +959,7 @@ class RustDerivativesMixin:
     """
     motion = np.asarray(self.motion(2), dtype=float)
     batch_shape = motion.shape[:-1] if batch_shapes.is_batched_feature_array(motion) else ()
-    input_dim = self.robot_.dof * 2
+    input_dim = self._model_metadata.dof * 2
     rhs, rhs_is_matrix = batch_shapes.broadcast_feature_rhs(rhs, batch_shape, input_dim, name="rhs")
     tangent = rhs if rhs_is_matrix else rhs[..., None]
     robot = self._rust_compiled_robot()
@@ -983,5 +993,5 @@ class RustDerivativesMixin:
       flat_motion = np.ascontiguousarray(motion.reshape((-1, motion.shape[-1])))
       out = np.asarray(robot.kinetic_energy_jacobian_transpose_mul_rhs_batch(
         flat_motion, np.ascontiguousarray(cotangent),
-      )).reshape(batch_shape + (self.robot_.dof * 2, cotangent.shape[-1]))
+      )).reshape(batch_shape + (self._model_metadata.dof * 2, cotangent.shape[-1]))
     return out if rhs_is_matrix else out[..., 0]

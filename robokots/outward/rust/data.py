@@ -4,7 +4,7 @@ import numpy as np
 from mathrobo import SE3
 
 from ...core import batch_shape as batch_shapes
-from ...core.robot import RobotStruct
+from ...core.robot import RobotStruct, RobotModelInfo
 from ...core.state.spec import keys_force, keys_kinematics, keys_momentum, keys_torque
 from .model import _rust_compiled_robot
 
@@ -558,12 +558,12 @@ class RustOutwardState:
   """
 
   def __init__(self, robot: RobotStruct, raw_data, order: int):
-    self.robot = robot
+    self.robot = robot if isinstance(robot, RobotModelInfo) else RobotModelInfo.from_native(raw_data)
     self.raw_data = raw_data
     self.order = int(order)
-    self.link_ids = {link.name: i for i, link in enumerate(robot.links)}
-    self.joint_ids = {joint.name: i for i, joint in enumerate(robot.joints)}
-    self.joint_dofs = tuple(joint.dof for joint in robot.joints)
+    self.link_ids = {link.name: i for i, link in enumerate(self.robot.links)}
+    self.joint_ids = {joint.name: i for i, joint in enumerate(self.robot.joints)}
+    self.joint_dofs = tuple(joint.dof for joint in self.robot.joints)
     self._cache = {}
     self._has_kinematics = False
     self._has_dynamics = False
@@ -646,6 +646,12 @@ class RustOutwardState:
 
   def joint_vec(self, joint, key_order: int) -> np.ndarray:
     return np.asarray(self.raw_data.joint_vec(self._joint_id(joint), int(key_order)))
+
+  def world_link_vec(self, link, key_order: int) -> np.ndarray:
+    return np.asarray(self.raw_data.world_link_vec(self._link_id(link), int(key_order))).reshape(getattr(self, "batch_shape", ()) + (6,))
+
+  def world_joint_vec(self, joint, key_order: int) -> np.ndarray:
+    return np.asarray(self.raw_data.world_joint_vec(self._joint_id(joint), int(key_order))).reshape(getattr(self, "batch_shape", ()) + (6,))
 
   def link_momentum(self, link, key_order: int) -> np.ndarray:
     self._require_full_dynamics()
@@ -789,10 +795,9 @@ class RustOutwardState:
       return mat[..., :3, :3].reshape(mat.shape[:-2] + (9,))
     if data_type in keys_kinematics:
       if state_type.frame_name == "world" and key_order >= 2:
-        from robokots.core.kernels.cmtm_apply import world_spatial_value
-        n = key_order - 1
-        link_name = name if owner_type == "link" else self.robot.links[self.robot.joint(name).child_link_id].name
-        return world_spatial_value(self.cmtm(owner_type, name, n+1), self.cmtm("link", link_name, n), n)
+        if owner_type == "link":
+          return self.world_link_vec(name, key_order)
+        return self.world_joint_vec(name, key_order)
       if key_order < 2:
         raise NotImplementedError(f"Unsupported kinematics data_type={data_type!r}")
       return self._vec(owner_type, name, key_order)
@@ -869,7 +874,7 @@ def create_rust_outward_state(
   if order < 1:
     raise ValueError("order must be >= 1")
   rust_robot = compiled_robot if compiled_robot is not None else _rust_compiled_robot(robot)
-  return RustOutwardState(robot, rust_robot.create_outward_data(order), order)
+  return RustOutwardState(robot if isinstance(robot, RobotModelInfo) else RobotModelInfo.from_native(rust_robot), rust_robot.create_outward_data(order), order)
 
 
 class RustBatchOutwardState(RustOutwardState):
@@ -1000,7 +1005,7 @@ def create_rust_batch_outward_state(
   batch_size = int(np.prod(batch_shape, dtype=int))
   rust_robot = compiled_robot if compiled_robot is not None else _rust_compiled_robot(robot)
   return RustBatchOutwardState(
-    robot,
+    robot if isinstance(robot, RobotModelInfo) else RobotModelInfo.from_native(rust_robot),
     rust_robot.create_batch_outward_data(order, batch_size),
     order,
     batch_shape,

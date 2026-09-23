@@ -3,6 +3,10 @@
 This directory contains local benchmark and investigation tools. These tools are
 not part of RoboKots' normal runtime path.
 
+For the staged plan to make Rust independent and avoid expanding full models in
+Python, see [Rust改善方針](rust_roadmap.md) and the [Python依存の棚卸し](python_dependency_audit.md).
+The roadmap describes planned work, not implemented behavior.
+
 ## Install Developer Dependencies
 
 Pinocchio is optional and is not installed with the default RoboKots
@@ -301,7 +305,9 @@ split incrementally without adding another user-visible state container.
 - `robokots.api.fast_derivatives`: specialized joint-motion/joint-torque
   NumPy paths.
 - `robokots.api.rust_derivatives`: Rust RNEA, CMTM, link-local derivative
-  kernels and kinetic-energy derivative operations.
+  kernels.
+- `robokots.api.whole_body`: whole-body quantities and kinetic-energy value/JVP/VJP
+  dispatch for NumPy and Rust.
 - `Kots`: the stable public facade plus model, motion, semantic state cache,
   targets, and visualization helpers.
 
@@ -332,11 +338,112 @@ cargo test --offline --manifest-path robokots/_rust/Cargo.toml --no-default-feat
 cargo tree --offline --manifest-path robokots/_rust/Cargo.toml --no-default-features
 ```
 
-This is preparation for an independent Rust library, not a complete stable
-public Rust computation API. Many kernel methods remain crate-private and
-some high-level state/output orchestration still lives in the Python bindings.
-The native tests cover typed model construction, container creation, RNEA/ABA
-calculations, and invalid topology without importing or linking Python.
+Native state operations are now public: outward/batch compute methods, local
+matrix/vector and local/world motion/wrench getters, selected JVP/VJP application,
+and ABA preparation/solve. Selected inputs and outputs use flattened row-major
+arrays, with explicit batch size and RHS column count. Dense Jacobians can be
+obtained by supplying an identity RHS; product methods do not build one.
+See [the external-crate integration tests](../robokots/_rust/tests/native_api.rs)
+for a complete model/state/finite-difference/JVP/VJP/ABA example without Python.
+
+ModelInfo holds names, joint kinds, DOFs, motion offsets and parent/child indices.
+Its immutable native storage is shared by model clones. Python obtains the
+metadata in one transfer and caches an immutable RobotModelInfo by compiled
+model identity. Rust state adapters and Rust-specific derivative selection use
+this metadata instead of retaining the full RobotStruct. State reads and exports
+also use the metadata for raw Rust states. The default input path retains the
+existing RobotStruct behavior; native-first input is described below.
+
+Performance and regression results for this step are recorded in
+[the native API comparison](benchmarks/results/native_api_comparison.md).
+
+LinkModel and JointModel now require a name in Rust. Names must be nonempty and
+unique within each owner type. The low-level Python dictionary constructor
+retains support for missing names by assigning link_N/joint_N. Native CMTM
+factories explicitly reject prismatic models; their RNEA/ABA support is retained.
+Minimal dynamics permits torque reads but rejects uncomputed momentum/force
+values. Native getters return owned vectors, so callers cannot mutate storage.
+
+### Native-first model input
+
+```python
+k = Kots.from_json_file("model.json", order=4, backend="rust")
+# Also available on from_json_data(...) and from_urdf_file(...).
+k.import_motions(motion)
+k.dynamics()  # Rust is the default for instances loaded with backend="rust".
+```
+
+`backend="rust"` bypasses RobotStruct/LinkStruct/JointStruct construction and
+RobotStruct.to_dict. JSON text is parsed by Rust using serde_json; decoded
+Python dictionaries cross PyO3 directly without JSON serialization. URDF still
+uses the existing Python XML reader/topological normalization, then passes its
+decoded data directly to Rust. Neither path expands the Python numerical model.
+Canonical schema 0.0.2 validation and ID sorting live in model_input.rs; the
+native constructor validates names, topology and finite numerical values.
+Joint IDs must retain the existing parent-before-child order and link 0 is root.
+
+Kots keeps a private input snapshot and lightweight metadata. A full Python model
+is generated once on demand for `k.robot_`, NumPy/JAX computation, or other
+features that require it. File input is not read again. Rust-supported state and
+selected derivative operations, RNEA/ABA and set_order do not require expansion.
+An unsupported derivative fallback can still materialize a Python model; this
+is not a guarantee that every public Kots method runs entirely in Rust.
+The native-first model is a snapshot: to change the model, create a new Kots;
+directly editing the lazily generated Python model does not update Rust caches.
+
+The new input mode requires dim=3 and lib="numpy". Fixed/revolute rigid models
+support CMTM, while prismatic models support RNEA/ABA and explicitly reject
+CMTM state computation. Input construction without a backend retains the
+Python model path; on-demand calculations follow the backend policy below.
+The low-level legacy `from_model_data` binding retains its permissive defaults;
+new canonical inputs use `from_json` or `from_input_data`.
+
+Rust callers can use `RustCompiledRobot::from_json` or `from_json_file` without
+Python. URDF parsing is not yet available from the Rust-only crate. serde_json
+is now a native dependency; PyO3 and NumPy remain optional.
+
+[Input-path performance comparison](benchmarks/results/native_model_input_comparison.md)
+includes model preparation, first dynamics and repeated computations.
+
+This remains an experimental Rust API: many kernels remain crate-private.
+Mathrobo-compatible views, native URDF reading,
+validation beyond the supported rigid-model subset and coordinated model replacement are still
+separate follow-up work. Python-free unit and integration tests validate
+construction, indexing, state lifetime, matrix-free products and numerical
+consistency. Existing Python numerical and API tests cover the binding path.
+
+### Native world values and typed calculation API
+
+`RustOutwardData` and `RustBatchOutwardData` expose `world_link_vec` and
+`world_joint_vec`. Their key_order is 2 for velocity, 3 for acceleration, and so
+on; values contain angular then linear components. Batch native getters accept
+an explicit sample index. Joint outputs transform the relative joint motion
+with the child-link frame; they do not substitute the child's absolute motion.
+Higher derivatives include the moving frame's derivatives and retain ordinary
+(non-factorial-normalized) derivative values. Cached order-3/minimal dynamics
+and fixed joints obey the same convention.
+
+The Python Rust adapter and public value dispatch now use those native getters;
+NumPy retains its Python implementation. A framed joint `jerk` (`local`/`world`)
+is spatial motion, whereas the existing unframed joint-coordinate selection
+keeps its coordinate-derivative interpretation.
+
+The experimental external Rust selected API now accepts `StateOutput` with
+`StateOwner::{Link, Joint}`, `StateQuantity` and `ReferenceFrame::{Local, World}`.
+It replaces the previous exported numeric tuple alias. The packed numeric
+protocol remains crate-private for the existing Python binding. The output's
+`derivative` is zero-based (SpatialMotion 0 = velocity); `width()` is its tangent
+row count. Rotation/frame derivatives have 3/6 rows, distinct from matrix values.
+See the [executable Rust example](../robokots/_rust/src/lib.rs) and
+[integration tests](../robokots/_rust/tests/native_api.rs).
+
+`RustCompiledRobot::inverse_dynamics`/`forward_dynamics` and their `_batch`
+variants expose RNEA/ABA directly, with explicit world gravity and checked
+lengths/finite inputs. Batch arrays are flattened (batch, dof). Python rnea/aba
+methods delegate to these operations. Use `create_aba_data` for repeated cached
+ABA solves; these convenience methods allocate temporary workspaces.
+
+[World value performance and validation](benchmarks/results/world_state_comparison.md).
 
 ### Selected Rust dynamics derivatives
 

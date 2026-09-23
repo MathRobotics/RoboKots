@@ -199,7 +199,10 @@ def test_unexpected_rust_derivative_error_propagates(monkeypatch, error):
     states = [StateType("joint", kots.joint_name_list()[-1], "torque")]
     def fail(*args, **kwargs):
         raise error("injected Rust derivative failure")
-    monkeypatch.setattr(kots, "_rust_compiled_robot", lambda: SimpleNamespace(dynamics_jacobian=fail))
+    compiled = SimpleNamespace(
+        dynamics_jacobian=fail, model_info=kots._rust_compiled_robot().model_info
+    )
+    monkeypatch.setattr(kots, "_rust_compiled_robot", lambda: compiled)
     with pytest.raises(error, match="injected Rust derivative failure"):
         kots._rust_torque_jacobian(states, 3)
 
@@ -209,7 +212,10 @@ def test_explicit_rust_unsupported_is_logged(monkeypatch, caplog):
     kots.dynamics(backend="rust", order=3)
     def fail(*args, **kwargs):
         raise NotImplementedError("test unsupported Rust derivative")
-    monkeypatch.setattr(kots, "_rust_compiled_robot", lambda: SimpleNamespace(dynamics_jacobian=fail))
+    compiled = SimpleNamespace(
+        dynamics_jacobian=fail, model_info=kots._rust_compiled_robot().model_info
+    )
+    monkeypatch.setattr(kots, "_rust_compiled_robot", lambda: compiled)
     states = [StateType("joint", kots.joint_name_list()[-1], "torque")]
     with caplog.at_level("DEBUG", logger="robokots.api.rust_derivatives"):
         assert kots._rust_torque_jacobian(states, 3) is None

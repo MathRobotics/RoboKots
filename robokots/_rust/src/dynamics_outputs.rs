@@ -12,6 +12,47 @@ use crate::workspace::{CmtmWorkspace, DynamicsCmtmTangentWorkspace, DynamicsCmtm
 /// Pose derivatives use body tangents by default and spatial tangents in world.
 pub(crate) type DynamicsOutput = (usize, usize, usize, usize, bool);
 
+/// Owner of an output; a joint motion is relative, not its child's absolute motion.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StateOwner { Link(usize), Joint(usize) }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StateQuantity { Momentum, Force, Torque, SpatialMotion, Position, Rotation, Frame }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReferenceFrame { Local, World }
+
+/// Selected derivative output. `derivative` is the ordinary time derivative index:
+/// SpatialMotion 0 is velocity, 1 acceleration. Pose quantities require index 0.
+/// Pose Jacobians use body tangents (Local) or spatial tangents (World), rather
+/// than derivatives of flattened rotation/frame matrix elements.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct StateOutput {
+    pub owner: StateOwner,
+    pub quantity: StateQuantity,
+    pub derivative: usize,
+    pub frame: ReferenceFrame,
+}
+
+impl StateOutput {
+    pub const fn new(owner: StateOwner, quantity: StateQuantity, derivative: usize, frame: ReferenceFrame) -> Self {
+        Self { owner, quantity, derivative, frame }
+    }
+
+    /// Number of tangent rows (rotation: 3, frame: 6, torque: 1).
+    pub fn width(&self) -> usize { output_width(self.raw().2) }
+
+    pub(crate) fn raw(&self) -> DynamicsOutput {
+        let (owner, id) = match self.owner { StateOwner::Link(id) => (0, id), StateOwner::Joint(id) => (1, id) };
+        let family = match self.quantity {
+            StateQuantity::Momentum => 0, StateQuantity::Force => 1, StateQuantity::Torque => 2,
+            StateQuantity::SpatialMotion => 3, StateQuantity::Position => 4,
+            StateQuantity::Rotation => 5, StateQuantity::Frame => 6,
+        };
+        (owner, id, family, self.derivative, self.frame == ReferenceFrame::World)
+    }
+}
+
 impl RustCompiledRobot {
     pub(crate) fn check_dynamics_outputs(
         &self, outputs: &[DynamicsOutput], dynamics_order: usize,
@@ -275,7 +316,7 @@ fn output_width(family: usize) -> usize {
 }
 
 // Ad_motion(T) = P Ad_wrench(T) P, with P swapping angular/linear halves.
-fn swap_spatial(values: &[f64]) -> Vec<f64> {
+pub(crate) fn swap_spatial(values: &[f64]) -> Vec<f64> {
     (0..values.len()).map(|i| values[(i/6)*6+(i%6+3)%6]).collect()
 }
 

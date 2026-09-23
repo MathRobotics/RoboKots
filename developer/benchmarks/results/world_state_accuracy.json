@@ -1,0 +1,66 @@
+{
+  "order3/batch()/world_values": {
+    "max_abs": 2.7755575615628914e-17,
+    "relative_frobenius": 1.3882258312605358e-16
+  },
+  "order3/batch()/dense_cached": {
+    "max_abs": 0.0,
+    "relative_frobenius": 0.0
+  },
+  "order3/batch()/jvp_cached": {
+    "max_abs": 0.0,
+    "relative_frobenius": 0.0
+  },
+  "order3/batch()/vjp_cached": {
+    "max_abs": 0.0,
+    "relative_frobenius": 0.0
+  },
+  "order3/batch(2, 3)/world_values": {
+    "max_abs": 2.7755575615628914e-17,
+    "relative_frobenius": 9.895884204693866e-17
+  },
+  "order3/batch(2, 3)/dense_cached": {
+    "max_abs": 0.0,
+    "relative_frobenius": 0.0
+  },
+  "order3/batch(2, 3)/jvp_cached": {
+    "max_abs": 0.0,
+    "relative_frobenius": 0.0
+  },
+  "order3/batch(2, 3)/vjp_cached": {
+    "max_abs": 0.0,
+    "relative_frobenius": 0.0
+  },
+  "order6/batch()/world_values": {
+    "max_abs": 2.7755575615628914e-17,
+    "relative_frobenius": 1.1378282887295132e-16
+  },
+  "order6/batch()/dense_cached": {
+    "max_abs": 0.0,
+    "relative_frobenius": 0.0
+  },
+  "order6/batch()/jvp_cached": {
+    "max_abs": 0.0,
+    "relative_frobenius": 0.0
+  },
+  "order6/batch()/vjp_cached": {
+    "max_abs": 0.0,
+    "relative_frobenius": 0.0
+  },
+  "order6/batch(2, 3)/world_values": {
+    "max_abs": 5.551115123125783e-17,
+    "relative_frobenius": 1.3467911555983936e-16
+  },
+  "order6/batch(2, 3)/dense_cached": {
+    "max_abs": 0.0,
+    "relative_frobenius": 0.0
+  },
+  "order6/batch(2, 3)/jvp_cached": {
+    "max_abs": 0.0,
+    "relative_frobenius": 0.0
+  },
+  "order6/batch(2, 3)/vjp_cached": {
+    "max_abs": 0.0,
+    "relative_frobenius": 0.0
+  }
+}

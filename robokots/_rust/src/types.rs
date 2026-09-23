@@ -3,6 +3,7 @@ use crate::workspace::{AbaWorkspace, DynamicsCmtmWorkspace};
 
 #[derive(Clone)]
 pub struct RustCompiledRobot {
+    pub(crate) info: std::sync::Arc<crate::model::ModelInfo>,
     pub(crate) link_num: usize,
     pub(crate) joint_num: usize,
     pub(crate) dof: usize,
@@ -55,6 +56,7 @@ pub struct RustOutwardData {
     pub(crate) has_kinematics: bool,
     pub(crate) has_dynamics: bool,
     pub(crate) has_cached_order1_dynamics: bool,
+    pub(crate) has_full_dynamics: bool,
 }
 
 pub struct RustBatchOutwardData {
@@ -66,6 +68,7 @@ pub struct RustBatchOutwardData {
     pub(crate) has_kinematics: bool,
     pub(crate) has_dynamics: bool,
     pub(crate) has_cached_order1_dynamics: bool,
+    pub(crate) has_full_dynamics: bool,
 }
 
 
@@ -88,6 +91,7 @@ use crate::error::{CoreResult, Error};
 
 impl RustCompiledRobot {
     pub fn create_selected_workspace(&self, order: usize) -> CoreResult<crate::types::RustSelectedWorkspace> {
+        self.check_cmtm_supported()?;
         if order == 0 { return Err(Error::new("selected workspace order must be positive")); }
         Ok(crate::types::RustSelectedWorkspace {
             robot: self.clone(), order, primal: Vec::new(), tangent: None, motion: Vec::new(),
@@ -97,6 +101,7 @@ impl RustCompiledRobot {
     }
 
     pub fn create_outward_data(&self, order: usize) -> CoreResult<RustOutwardData> {
+        self.check_cmtm_supported()?;
         if order < 1 {
             return Err(Error::new("order must be >= 1"));
         }
@@ -109,6 +114,7 @@ impl RustCompiledRobot {
             has_kinematics: false,
             has_dynamics: false,
             has_cached_order1_dynamics: false,
+            has_full_dynamics: false,
         })
     }
 
@@ -139,6 +145,7 @@ impl RustCompiledRobot {
         order: usize,
         batch: usize,
     ) -> CoreResult<RustBatchOutwardData> {
+        self.check_cmtm_supported()?;
         if order < 1 {
             return Err(Error::new("order must be >= 1"));
         }
@@ -156,6 +163,7 @@ impl RustCompiledRobot {
             has_kinematics: false,
             has_dynamics: false,
             has_cached_order1_dynamics: false,
+            has_full_dynamics: false,
         })
     }
 }

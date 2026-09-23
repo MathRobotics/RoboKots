@@ -7,6 +7,15 @@ from ..core import batch_shape as batch_shapes
 
 
 class RustBackendMixin:
+  def _rust_model_info(self):
+    compiled = self._rust_compiled_robot()
+    cached = getattr(self, "_rust_model_info_cache_", None)
+    if cached is None or cached[0] is not compiled:
+      from ..core.robot import RobotModelInfo
+      cached = (compiled, RobotModelInfo.from_native(compiled))
+      self._rust_model_info_cache_ = cached
+    return cached[1]
+
   def _rust_compiled_robot(self):
     if self._rust_compiled_robot_ is None:
       from ..outward.rust import _rust_compiled_robot
@@ -31,14 +40,16 @@ class RustBackendMixin:
     q = np.asarray(q, dtype=float)
     if q.ndim not in (1, 2):
       raise ValueError("q must have shape (dof,) or (batch, dof)")
-    if q.shape[-1] != self.robot_.dof:
-      raise ValueError(f"q length must match robot dof: expected {self.robot_.dof}, got {q.shape[-1]}.")
+    if q.shape[-1] != self._model_metadata.dof:
+      raise ValueError(f"q length must match robot dof: expected {self._model_metadata.dof}, got {q.shape[-1]}.")
     v = np.zeros_like(q) if v is None else np.asarray(v, dtype=float)
     a = np.zeros_like(q) if a is None else np.asarray(a, dtype=float)
     if v.shape != q.shape:
       raise ValueError(f"v shape must match q shape: expected {q.shape}, got {v.shape}.")
     if a.shape != q.shape:
       raise ValueError(f"a shape must match q shape: expected {q.shape}, got {a.shape}.")
+    if not all(np.all(np.isfinite(value)) for value in (q, v, a)):
+      raise ValueError("q, v, and acceleration/effort must contain only finite values")
     return tuple(np.ascontiguousarray(value) for value in (q, v, a))
 
   def _rust_fast_forward_kinematics(self, q, v=None, a=None, backend: str = "rust"):
@@ -58,8 +69,8 @@ class RustBackendMixin:
     q = np.ascontiguousarray(np.asarray(q, dtype=float))
     if q.ndim not in (1, 2):
       raise ValueError("q must have shape (dof,) or (batch, dof)")
-    if q.shape[-1] != self.robot_.dof:
-      raise ValueError(f"q length must match robot dof: expected {self.robot_.dof}, got {q.shape[-1]}.")
+    if q.shape[-1] != self._model_metadata.dof:
+      raise ValueError(f"q length must match robot dof: expected {self._model_metadata.dof}, got {q.shape[-1]}.")
     robot = self._rust_compiled_robot()
     return robot.joint_jacobians(q) if q.ndim == 1 else robot.joint_jacobians_batch(q)
 
@@ -74,13 +85,13 @@ class RustBackendMixin:
 
   def _create_rust_outward_state(self, order=None):
     from ..outward.rust import create_rust_outward_state
-    return create_rust_outward_state(self.robot_, self.order_ if order is None else order, compiled_robot=self._rust_compiled_robot())
+    return create_rust_outward_state(self._rust_model_info(), self.order_ if order is None else order, compiled_robot=self._rust_compiled_robot())
 
   def _create_rust_batch_outward_state(self, order=None, batch_shape=None):
     from ..outward.rust import create_rust_batch_outward_state
     if batch_shape is None:
       batch_shape = self.motions_.batch_shape()
-    return create_rust_batch_outward_state(self.robot_, self.order_ if order is None else order, batch_shape, compiled_robot=self._rust_compiled_robot())
+    return create_rust_batch_outward_state(self._rust_model_info(), self.order_ if order is None else order, batch_shape, compiled_robot=self._rust_compiled_robot())
 
   def _cached_rust_data(self, order, batch_shape=()):
     key = (int(order), tuple(batch_shape))
@@ -112,7 +123,7 @@ class RustBackendMixin:
         self._rust_outward_data_cache_state_[key] = (self.motions_.revision(), bool(is_dynamics), gravity_key)
       if materialize_dict:
         from ..state_io.dictionary import export_state_dict
-        result = export_state_dict(self.robot_, data)
+        result = export_state_dict(self._rust_model_info(), data)
       else:
         result = data
     except Exception:
@@ -125,6 +136,7 @@ class RustBackendMixin:
       raise
     self.batch_shape_ = tuple(batch_shape)
     self.state_batch_ = None
+    self._computed_backend_ = "rust"
     self.outward_state_ = data
     if is_dynamics:
       self.gravity_ = active_gravity

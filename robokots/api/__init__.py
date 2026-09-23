@@ -7,6 +7,7 @@ responsibilities and deliberately do not introduce another state container.
 from .derivatives import DerivativesMixin
 from .fast_derivatives import FastDerivativesMixin
 from .inward import InwardDynamicsMixin
+from .model import ModelInputMixin
 from .outward import OutwardDynamicsMixin
 from .rust_backend import RustBackendMixin
 from .rust_derivatives import RustDerivativesMixin
@@ -17,6 +18,7 @@ __all__ = [
     "DerivativesMixin",
     "FastDerivativesMixin",
     "InwardDynamicsMixin",
+    "ModelInputMixin",
     "OutwardDynamicsMixin",
     "RustBackendMixin",
     "RustDerivativesMixin",

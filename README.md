@@ -109,6 +109,13 @@ tau = kots.inverse_dynamics(q, v, a)  # gravity = [0, 0, -9.81]
 tau_zero_g = kots.inverse_dynamics(q, v, a, gravity=[0, 0, 0])
 ```
 
+To avoid building the full Python model before using Rust, specify
+`backend="rust"` when calling `Kots.from_urdf_file`, `from_json_file`, or
+`from_json_data`. These instances also default to Rust for `kinematics()` and
+`dynamics()`. Python model-based operations materialize the Python model only
+when needed. URDF XML parsing still uses the Python reader.
+See [native-first model input](developer/README.md#native-first-model-input).
+
 The gravity-aware API uses the Rust fixed/revolute/prismatic RNEA backend.
 Higher-order force and torque derivatives can include gravity as well. The
 `dynamics()` default remains zero gravity for backward compatibility:

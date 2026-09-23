@@ -30,6 +30,7 @@ impl JointKind {
 
 #[derive(Clone, Debug)]
 pub struct LinkModel {
+    pub name: String,
     pub mass: f64,
     pub cog: [f64; 3],
     /// ixx, iyy, izz, ixy, ixz, iyz, about the center of gravity.
@@ -38,6 +39,7 @@ pub struct LinkModel {
 
 #[derive(Clone, Debug)]
 pub struct JointModel {
+    pub name: String,
     pub parent_link: usize,
     pub child_link: usize,
     pub kind: JointKind,
@@ -55,12 +57,71 @@ pub struct RobotModel {
     pub joints: Vec<JointModel>,
 }
 
+/// Read-only metadata for resolving named state requests without a Python model.
+#[derive(Clone, Debug)]
+pub struct ModelInfo {
+    pub dof: usize,
+    pub link_names: Vec<String>,
+    pub joints: Vec<JointInfo>,
+    /// CMTM currently supports fixed/revolute rigid-link models.
+    pub supports_cmtm: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct JointInfo {
+    pub id: usize,
+    pub name: String,
+    pub kind: JointKind,
+    pub dof: usize,
+    pub dof_index: usize,
+    pub parent_link: usize,
+    pub child_link: usize,
+}
+
+impl JointKind {
+    pub fn as_str(self) -> &'static str {
+        match self { Self::Fixed => "fixed", Self::Revolute => "revolute", Self::Prismatic => "prismatic" }
+    }
+}
+
 impl RustCompiledRobot {
+    pub fn model_info(&self) -> &ModelInfo { &self.info }
+
+    pub(crate) fn check_cmtm_supported(&self) -> CoreResult<()> {
+        if !self.info.supports_cmtm {
+            return Err(Error::new("Rust CMTM supports fixed/revolute joints only"));
+        }
+        Ok(())
+    }
+
     pub fn from_model(model: &RobotModel, allow_prismatic: bool) -> CoreResult<Self> {
         let link_num = model.links.len();
         let joint_num = model.joints.len();
         if link_num == 0 {
             return Err(Error::new("model must contain at least one link"));
+        }
+        for names in [model.links.iter().map(|x| x.name.as_str()).collect::<Vec<_>>(),
+                      model.joints.iter().map(|x| x.name.as_str()).collect::<Vec<_>>()] {
+            let mut seen = std::collections::HashSet::new();
+            if names.iter().any(|name| name.is_empty() || !seen.insert(*name)) {
+                return Err(Error::new("model owner names must be nonempty and unique within each owner type"));
+            }
+        }
+        for link in &model.links {
+            if !link.mass.is_finite() || link.mass < 0.0
+                || !link.cog.iter().chain(&link.inertia).all(|x| x.is_finite()) {
+                return Err(Error::new("link mass must be nonnegative and all inertial values finite"));
+            }
+        }
+        for joint in &model.joints {
+            let norm2 = |x: &[f64]| x.iter().map(|v| v * v).sum::<f64>();
+            let qnorm = norm2(&joint.orientation);
+            let anorm = norm2(&joint.axis);
+            if !joint.position.iter().chain(&joint.orientation).chain(&joint.axis).all(|x| x.is_finite())
+                || !qnorm.is_finite() || qnorm <= 0.0
+                || (joint.kind != JointKind::Fixed && (!anorm.is_finite() || anorm <= 0.0)) {
+                return Err(Error::new("joint origin and axis must be finite; quaternion and moving axis must be nonzero with finite norm"));
+            }
         }
         let mut reached = vec![false; link_num];
         reached[0] = true;
@@ -145,7 +206,18 @@ impl RustCompiledRobot {
             links.sort_unstable_by_key(|&link| topology_rank[link]);
         }
 
+        let mut offset = 0;
+        let joints = model.joints.iter().enumerate().map(|(id, joint)| {
+            let dof = usize::from(joint.kind != JointKind::Fixed);
+            let info = JointInfo { id, name: joint.name.clone(), kind: joint.kind,
+                dof, dof_index: offset, parent_link: joint.parent_link, child_link: joint.child_link };
+            offset += dof;
+            info
+        }).collect();
+        let info = ModelInfo { dof, link_names: model.links.iter().map(|x| x.name.clone()).collect(),
+            joints, supports_cmtm: !is_prismatic.iter().any(|x| *x) };
         Ok(RustCompiledRobot {
+            info: std::sync::Arc::new(info),
             link_num,
             joint_num,
             dof,
@@ -166,7 +238,7 @@ impl RustCompiledRobot {
     }
 }
 fn spatial_inertia(link: &LinkModel) -> [[f64; 6]; 6] {
-    let LinkModel { mass, cog, inertia: iv } = *link;
+    let LinkModel { mass, cog, inertia: iv, .. } = *link;
     let inertia = [
         [iv[0], iv[3], iv[4]],
         [iv[3], iv[1], iv[5]],
@@ -194,10 +266,11 @@ mod tests {
     fn model(kind: JointKind) -> RobotModel {
         RobotModel {
             links: vec![
-                LinkModel { mass: 0.0, cog: [0.0; 3], inertia: [0.0; 6] },
-                LinkModel { mass: 2.0, cog: [0.0; 3], inertia: [1.0, 2.0, 3.0, 0.0, 0.0, 0.0] },
+                LinkModel { name: "world".into(), mass: 0.0, cog: [0.0; 3], inertia: [0.0; 6] },
+                LinkModel { name: "body".into(), mass: 2.0, cog: [0.0; 3], inertia: [1.0, 2.0, 3.0, 0.0, 0.0, 0.0] },
             ],
             joints: vec![JointModel {
+                name: "joint".into(),
                 parent_link: 0, child_link: 1, kind, axis: [0.0, 0.0, 1.0],
                 position: [0.0; 3], orientation: [1.0, 0.0, 0.0, 0.0],
             }],
@@ -254,12 +327,16 @@ mod tests {
     fn branch_and_fixed_link_topology() {
         let mut input = model(JointKind::Revolute);
         input.links.extend([input.links[1].clone(), input.links[1].clone()]);
+        input.links[2].name = "fixed_body".into();
+        input.links[3].name = "branch_body".into();
         let mut fixed = input.joints[0].clone();
+        fixed.name = "fixed_joint".into();
         fixed.parent_link = 1;
         fixed.child_link = 2;
         fixed.kind = JointKind::Fixed;
         let mut branch = input.joints[0].clone();
         branch.child_link = 3;
+        branch.name = "branch_joint".into();
         input.joints.extend([fixed, branch]);
         let robot = RustCompiledRobot::from_model(&input, false).unwrap();
         assert_eq!(robot.dof, 2);

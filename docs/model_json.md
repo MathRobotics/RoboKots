@@ -156,15 +156,18 @@ If `dof` is present, it must match the joint type: `0` for
 `fixed`, `1` for `revolute`/`prismatic`, `3` for `spherical`, and `6` for
 `floating`.
 
-The Python backend supports these joint types. The Rust backend currently
-supports only `fixed` and `revolute`.
+The Python backend supports these joint types. Rust CMTM calculations,
+including kinetic energy and its JVP/VJP, support only `fixed` and `revolute`;
+models containing `prismatic` joints are explicitly rejected by these operations.
+Rust inverse/forward dynamics (RNEA/ABA) also support `prismatic`.
 
 ### Origin
 
 `origin.position` is a 3-element translation vector.
 
 `origin.orientation` is a quaternion in `[w, x, y, z]` order. It must be a
-4-element, finite, non-zero vector.
+4-element vector with finite components and a finite, non-zero norm.
+Both Python and Rust normalize it to unit length when constructing the model.
 
 ## Topology
 
@@ -183,3 +186,24 @@ implemented in schema `0.0.2`:
 
 - `planar`
 - `custom`
+
+## Native-first input
+
+`Kots.from_json_file(..., backend="rust")` parses and validates JSON in Rust,
+without constructing a Python RobotStruct. `from_json_data(..., backend="rust")`
+accepts a decoded, JSON-compatible dictionary directly. These instances default
+to Rust for kinematics/dynamics; an explicit Python computation or access to
+`robot_` materializes the Python model on demand from a retained snapshot.
+Calls without the input backend retain the previous behavior.
+
+The supported native model subset is rigid links and fixed/revolute/prismatic
+joints. Prismatic models support RNEA/ABA, but not CMTM states/derivatives.
+Native input additionally rejects negative/nonfinite mass, nonfinite vectors,
+zero quaternions, and zero moving-joint axes. It sorts array entries by ID and
+requires joint IDs in parent-before-child order, rooted at link 0. Names are
+nonempty and unique within the link/joint groups. Malformed or unsupported
+native input raises ValueError; it does not fall back to Python construction.
+
+The input snapshot is independent of later changes to the original dictionary
+or file. Construct a new Kots to change the model; mutating the generated Python
+model does not synchronize existing native workspaces.

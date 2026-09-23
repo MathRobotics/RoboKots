@@ -6,7 +6,7 @@ import numpy as np
 from typing import List, Any, Optional
 
 from .core.motion import RobotMotions
-from .core.state.spec import StateType, data_type_dof, dim_to_dof, is_in_keys_dynamics, keys_force, keys_joint_motion, keys_kinematics, keys_momentum, keys_torque
+from .core.state.spec import is_joint_coordinate_state, StateType, data_type_dof, dim_to_dof, is_in_keys_dynamics, keys_force, keys_joint_motion, keys_kinematics, keys_momentum, keys_torque
 from .api.state_cache import StateCache
 from .core.state.batch import StateBatch
 from .core.state.tensor import JacobianTensor, StateTensor
@@ -18,11 +18,11 @@ from .core import batch_shape as batch_shapes
 from . import outward as outward_api
 from .robot_io import load_json_file
 from .urdf_io import load_urdf_file
-from .api import DerivativesMixin, FastDerivativesMixin, InwardDynamicsMixin, OutwardDynamicsMixin, RustBackendMixin, RustDerivativesMixin, StateManagementMixin, WholeBodyMixin
+from .api import ModelInputMixin, DerivativesMixin, FastDerivativesMixin, InwardDynamicsMixin, OutwardDynamicsMixin, RustBackendMixin, RustDerivativesMixin, StateManagementMixin, WholeBodyMixin
 
 default_order = 3 
 default_dim = 3
-class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBackendMixin, InwardDynamicsMixin, OutwardDynamicsMixin, StateManagementMixin, WholeBodyMixin):
+class Kots(ModelInputMixin, DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBackendMixin, InwardDynamicsMixin, OutwardDynamicsMixin, StateManagementMixin, WholeBodyMixin):
   robot_ : RobotStruct
   motions_ : RobotMotions
   state_ : Optional[Any]
@@ -70,7 +70,7 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
 
     m_aliases, l_aliases, j_aliases = self.order_to_aliases(order)
 
-    self.robot_ = robot
+    self._init_model(robot)
     self.motions_ = RobotMotions(robot.dof, m_aliases, owner_layout=robot.motion_owners())
     self.state_ = None
     self.outward_state_ = None
@@ -95,7 +95,7 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
       raise ValueError("order must be greater than 0")
     m_aliases, l_aliases, j_aliases = self.order_to_aliases(order)
     self.order_ = order
-    self.motions_ = RobotMotions(self.robot_.dof, m_aliases, owner_layout=self.robot_.motion_owners())
+    self.motions_ = RobotMotions(self._model_metadata.dof, m_aliases, owner_layout=self._model_metadata.motion_owners())
     self.state_ = None
     self.outward_state_ = None
     self._state_l_aliases = l_aliases
@@ -104,23 +104,35 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
     self.state_cache_config_ = None
     self.state_batch_ = None
     self.batch_shape_ = ()
-    self._rust_compiled_robot_ = None
-    self._rust_inverse_dynamics_robot_ = None
+    if self._input_backend_ != "rust":
+      self._rust_compiled_robot_ = None
+      self._rust_inverse_dynamics_robot_ = None
     self._rust_outward_data_cache_ = {}
     self._rust_outward_data_cache_state_ = {}
     self.gravity_ = np.zeros(3, dtype=float)
 
   @staticmethod
-  def from_json_file(model_file_name : str, order=default_order, dim=default_dim, lib : str = "numpy") -> "Kots":
+  def from_json_file(model_file_name : str, order=default_order, dim=default_dim, lib : str = "numpy", *, backend: str = None) -> "Kots":
+    Kots._check_input_backend(backend)
+    if backend == "rust":
+      from pathlib import Path
+      return Kots._from_rust_input(Path(model_file_name).read_text(encoding="utf-8"), order, dim, lib)
     robot = RobotStruct.from_dict(load_json_file(model_file_name), lib)
 
-    return Kots(robot, order, dim, lib)
+    result = Kots(robot, order, dim, lib)
+    result._input_backend_ = backend
+    return result
 
   @staticmethod
-  def from_json_data(model_data : dict, order=default_order, dim=default_dim, lib : str = "numpy") -> "Kots":
+  def from_json_data(model_data : dict, order=default_order, dim=default_dim, lib : str = "numpy", *, backend: str = None) -> "Kots":
+    Kots._check_input_backend(backend)
+    if backend == "rust":
+      return Kots._from_rust_input(model_data, order, dim, lib)
     robot = RobotStruct.from_dict(model_data, lib=lib)
 
-    return Kots(robot, order, dim, lib)
+    result = Kots(robot, order, dim, lib)
+    result._input_backend_ = backend
+    return result
 
   @staticmethod
   def from_urdf_file(
@@ -129,10 +141,16 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
       dim=default_dim,
       lib: str = "numpy",
       add_world_link: bool = True,
+      *, backend: str = None,
   ) -> "Kots":
+    Kots._check_input_backend(backend)
     model_data = load_urdf_file(urdf_file_name, add_world_link=add_world_link)
+    if backend == "rust":
+      return Kots._from_rust_input(model_data, order, dim, lib)
     robot = RobotStruct.from_dict(model_data, lib=lib)
-    return Kots(robot, order, dim, lib)
+    result = Kots(robot, order, dim, lib)
+    result._input_backend_ = backend
+    return result
 
   def print_structure(self):
     self.robot_.print()
@@ -146,16 +164,16 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
     return self.target_
     
   def dof(self):
-    return self.robot_.dof
+    return self._model_metadata.dof
 
   def order(self):
     return self.order_
   
   def link_name_list(self):
-    return self.robot_.link_names
+    return list(self._model_metadata.link_names)
   
   def joint_name_list(self):
-    return self.robot_.joint_names
+    return list(self._model_metadata.joint_names)
 
   def motions(self):
     """Return an independent snapshot of the stored owner-major motion."""
@@ -240,8 +258,8 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
           "an explicit traj argument."
         ) from e
       self.state_ = RobotState(
-        self.robot_.link_names,
-        self.robot_.joint_names,
+        self._model_metadata.link_names,
+        self._model_metadata.joint_names,
         self._state_l_aliases,
         self._state_j_aliases,
       )
@@ -260,7 +278,7 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
       raise TypeError("target_file must be a string")
     self.target_ = TargetList.from_dict(
       load_json_file(target_file),
-      RobotNames(self.robot_.joint_names, self.robot_.link_names, self._active_joint_names()),
+      RobotNames(self._model_metadata.joint_names, self._model_metadata.link_names, self._active_joint_names()),
     )
     self.set_order(self.target_._max_order)
 
@@ -283,7 +301,7 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
     return outward_api.diff_outward_numerical(self.robot_, motion, state_type, order, eps, update_method, update_direction)
 
   def _active_joint_names(self):
-    return [joint.name for joint in self.robot_.joints if joint.dof > 0]
+    return [joint.name for joint in self._state_model_info().joints if joint.dof > 0]
 
   def _state_type_list(self, state_type):
     state_type_list = state_type if type(state_type) is list else [state_type]
@@ -318,29 +336,29 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
     """Take q..source_order coefficients from a larger scalar-major motion RHS."""
     trailing = (rhs.shape[-1],) if rhs_is_matrix else ()
     head = rhs.shape[:-(2 if rhs_is_matrix else 1)]
-    shaped = rhs.reshape(head + (self.robot_.dof, target_order) + trailing)
-    return shaped[..., :source_order, :].reshape(head + (self.robot_.dof * source_order,) + trailing) if rhs_is_matrix \
-      else shaped[..., :source_order].reshape(head + (self.robot_.dof * source_order,))
+    shaped = rhs.reshape(head + (self._model_metadata.dof, target_order) + trailing)
+    return shaped[..., :source_order, :].reshape(head + (self._model_metadata.dof * source_order,) + trailing) if rhs_is_matrix \
+      else shaped[..., :source_order].reshape(head + (self._model_metadata.dof * source_order,))
 
   def _embed_motion_order_rhs(self, rhs, source_order: int, target_order: int, rhs_is_matrix: bool):
     """Zero-pad a q..source_order motion result into a larger motion order."""
     trailing = (rhs.shape[-1],) if rhs_is_matrix else ()
     head = rhs.shape[:-(2 if rhs_is_matrix else 1)]
-    shaped = rhs.reshape(head + (self.robot_.dof, source_order) + trailing)
-    out = np.zeros(head + (self.robot_.dof, target_order) + trailing, dtype=rhs.dtype)
+    shaped = rhs.reshape(head + (self._model_metadata.dof, source_order) + trailing)
+    out = np.zeros(head + (self._model_metadata.dof, target_order) + trailing, dtype=rhs.dtype)
     if rhs_is_matrix:
       out[..., :source_order, :] = shaped
     else:
       out[..., :source_order] = shaped
-    return out.reshape(head + (self.robot_.dof * target_order,) + trailing)
+    return out.reshape(head + (self._model_metadata.dof * target_order,) + trailing)
 
   def _embed_motion_order_jacobian(self, jacobian, source_order: int, target_order: int):
     head = jacobian.shape[:-2]
     rows = jacobian.shape[-2]
-    shaped = jacobian.reshape(head + (rows, self.robot_.dof, source_order))
-    out = np.zeros(head + (rows, self.robot_.dof, target_order), dtype=jacobian.dtype)
+    shaped = jacobian.reshape(head + (rows, self._model_metadata.dof, source_order))
+    out = np.zeros(head + (rows, self._model_metadata.dof, target_order), dtype=jacobian.dtype)
     out[..., :source_order] = shaped
-    return out.reshape(head + (rows, self.robot_.dof * target_order))
+    return out.reshape(head + (rows, self._model_metadata.dof * target_order))
 
   def _joint_motion_index(self, data_type : str):
     order_map = {
@@ -352,13 +370,13 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
     return order_map.get(data_type)
 
   def _joint_motion_state_info_list(self, state_type_list):
-    if not any(st.owner_type == "joint" and st.data_type in keys_joint_motion for st in state_type_list):
+    if not any(is_joint_coordinate_state(st) for st in state_type_list):
       return None
     values = []
     motion = self.motion(self.order_)
     for st in state_type_list:
-      if st.owner_type == "joint" and st.data_type in keys_joint_motion:
-        joint = self.robot_.joint(st.owner_name)
+      if is_joint_coordinate_state(st):
+        joint = self._state_model_info().joint(st.owner_name)
         if joint is None or joint.dof <= 0:
           raise ValueError(f"Invalid active joint for joint motion state: {st.owner_name}")
         motion_index = self._joint_motion_index(st.data_type)
@@ -372,9 +390,9 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
 
   def _sample_motions(self, motion : np.ndarray, order : int) -> RobotMotions:
     sample_motions = RobotMotions(
-      self.robot_.dof,
+      self._model_metadata.dof,
       self.motions_.aliases[:order],
-      owner_layout=self.robot_.motion_owners(),
+      owner_layout=self._model_metadata.motion_owners(),
     )
     sample_motions.set_motion(motion)
     return sample_motions
@@ -389,24 +407,24 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
     self._ensure_not_batched("show_robot")
     from .core.state.access import state_link_positions
 
-    conectivity = np.zeros((self.robot_.joint_num, 2), dtype='int64')
-    for i in range(self.robot_.joint_num):
-      joint = self.robot_.joints[i]
+    conectivity = np.zeros((self._model_metadata.joint_num, 2), dtype='int64')
+    for i in range(self._model_metadata.joint_num):
+      joint = self._model_metadata.joints[i]
       conectivity[i, 0] = joint.child_link_id
       conectivity[i, 1] = joint.parent_link_id
 
-    show_robot(conectivity, state_link_positions(self._state_for_direct_read(), self.robot_.link_names), save, ax, color)
+    show_robot(conectivity, state_link_positions(self._state_for_direct_read(), self._model_metadata.link_names), save, ax, color)
 
   def show_robot_traj(self, traj = None, save = False, ax = None, color : RobotColor = None):
-    conectivity = np.zeros((self.robot_.joint_num, 2), dtype='int64')
-    for i in range(self.robot_.joint_num):
-      joint = self.robot_.joints[i]
+    conectivity = np.zeros((self._model_metadata.joint_num, 2), dtype='int64')
+    for i in range(self._model_metadata.joint_num):
+      joint = self._model_metadata.joints[i]
       conectivity[i, 0] = joint.child_link_id
       conectivity[i, 1] = joint.parent_link_id
 
     if traj is None:
       self._ensure_not_batched("show_robot_traj")
-      link_pos_traj = self._ensure_state_table().extract_links_info_traj("pos", self.robot_.link_names)
+      link_pos_traj = self._ensure_state_table().extract_links_info_traj("pos", self._model_metadata.link_names)
     else:
       link_pos_traj = traj
     show_robot_traj(conectivity, link_pos_traj, save, ax, color)
@@ -415,7 +433,7 @@ class Kots(DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBac
     self._ensure_not_batched("show_link_points")
     from .core.state.access import state_link_positions
 
-    show_link_points(state_link_positions(self._state_for_direct_read(), self.robot_.link_names))
+    show_link_points(state_link_positions(self._state_for_direct_read(), self._model_metadata.link_names))
 
   def show_target_link_points(self, plt = None, dimension=3):
     self._ensure_not_batched("show_target_link_points")

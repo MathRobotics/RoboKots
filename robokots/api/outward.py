@@ -49,6 +49,8 @@ class OutwardDynamicsMixin:
     )
 
   def _resolve_kinematics_backend(self, is_dynamics: bool = False, backend: str = None):
+    if backend is None and self._input_backend_ is not None:
+      backend = self._input_backend_
     if is_dynamics:
       if backend not in (None, "numpy", "rust"):
         raise ValueError(f"Unsupported dynamics backend: {backend}. Use 'numpy' or 'rust'.")

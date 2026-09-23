@@ -112,7 +112,7 @@ class DerivativesMixin:
         except NotImplementedError as exc:
           _logger.debug("Batched derivative unavailable; evaluating individual samples: %s", exc)
         is_dynamics = any(st.is_dynamics for st in state_type_list)
-        _, build_state = self._state_builder(max_order, is_dynamics=is_dynamics)
+        _, build_state = self._state_builder(max_order, is_dynamics=is_dynamics, backend="numpy")
         flat_motion, batch_shape = batch_shapes.flatten_feature_batch(self.motion(max_order))
         states = [build_state(x) for x in flat_motion]
         sample_results = [
@@ -203,7 +203,7 @@ class DerivativesMixin:
         except NotImplementedError as exc:
           _logger.debug("Batched derivative unavailable; evaluating individual samples: %s", exc)
         is_dynamics = any(st.is_dynamics for st in state_type_list)
-        _, build_state = self._state_builder(max_order, is_dynamics=is_dynamics)
+        _, build_state = self._state_builder(max_order, is_dynamics=is_dynamics, backend="numpy")
         flat_motion, _ = batch_shapes.flatten_feature_batch(self.motion(max_order))
         states = [build_state(x) for x in flat_motion]
         sample_results = [
@@ -266,7 +266,7 @@ class DerivativesMixin:
         except NotImplementedError as exc:
           _logger.debug("Batched derivative unavailable; evaluating individual samples: %s", exc)
         is_dynamics = any(st.is_dynamics for st in state_type_list)
-        _, build_state = self._state_builder(max_order, is_dynamics=is_dynamics)
+        _, build_state = self._state_builder(max_order, is_dynamics=is_dynamics, backend="numpy")
         flat_motion, _ = batch_shapes.flatten_feature_batch(self.motion(max_order))
         states = [build_state(x) for x in flat_motion]
         sample_results = [
@@ -332,7 +332,7 @@ class DerivativesMixin:
       if self._is_total_body_kinetic_energy(st):
         output_dim += 1
       elif self._is_joint_motion_state(st):
-        joint = self.robot_.joint(st.owner_name)
+        joint = self._model_metadata.joint(st.owner_name)
         if joint is None:
           raise ValueError(f"Invalid joint name: {st.owner_name}")
         output_dim += joint.dof
@@ -343,7 +343,7 @@ class DerivativesMixin:
       elif st.data_type in keys_torque:
         if st.owner_type != "joint":
           raise ValueError("torque can be specified only for joint owner type")
-        joint = self.robot_.joint(st.owner_name)
+        joint = self._model_metadata.joint(st.owner_name)
         if joint is None:
           raise ValueError(f"Invalid joint name: {st.owner_name}")
         output_dim += joint.dof
@@ -438,7 +438,7 @@ class DerivativesMixin:
     if self._has_gravity_force_output(state_type_list) and batch_shape and not isinstance(state, list):
       is_dynamics = any(st.is_dynamics for st in state_type_list)
       _, build_state = self._state_builder(
-        max_order, is_dynamics=is_dynamics, gravity=self.gravity_
+        max_order, is_dynamics=is_dynamics, gravity=self.gravity_, backend="numpy"
       )
       flat_motion, _ = batch_shapes.flatten_feature_batch(self.motion(max_order))
       flat_vec = np.asarray(vec).reshape((-1, vec.shape[-1]))
@@ -466,7 +466,7 @@ class DerivativesMixin:
         except NotImplementedError as exc:
           _logger.debug("Batched derivative unavailable; evaluating individual samples: %s", exc)
         is_dynamics = any(st.is_dynamics for st in state_type_list)
-        _, build_state = self._state_builder(max_order, is_dynamics=is_dynamics)
+        _, build_state = self._state_builder(max_order, is_dynamics=is_dynamics, backend="numpy")
         flat_motion, _ = batch_shapes.flatten_feature_batch(self.motion(max_order))
         states = [build_state(x) for x in flat_motion]
         sample_results = [
@@ -560,7 +560,7 @@ class DerivativesMixin:
       else:
         is_dynamics = any(st.is_dynamics for st in state_type_list)
         _, build_state = self._state_builder(
-          max_order, is_dynamics=is_dynamics, gravity=self.gravity_
+          max_order, is_dynamics=is_dynamics, gravity=self.gravity_, backend="numpy"
         )
         flat_motion, _ = batch_shapes.flatten_feature_batch(self.motion(max_order))
         states = [build_state(x) for x in flat_motion]
@@ -637,7 +637,7 @@ class DerivativesMixin:
     """
     state_type_list = self._state_type_list(state_type)
     max_order = StateType.max_time_order(state_type_list)
-    input_dim = self.robot_.dof * max_order
+    input_dim = self._model_metadata.dof * max_order
     batch_shape = self.batch_shape_ if self.batch_shape_ else self.motions_.batch_shape()
     rhs, rhs_is_matrix = batch_shapes.broadcast_feature_rhs(rhs, batch_shape, input_dim, name="rhs")
 
@@ -679,7 +679,7 @@ class DerivativesMixin:
     rhs, rhs_is_matrix = batch_shapes.broadcast_feature_rhs(rhs, batch_shape, output_dim, name="rhs")
 
     if any(self._is_total_body_kinetic_energy(st) for st in state_type_list) and not all(self._is_total_body_kinetic_energy(st) for st in state_type_list):
-      out = np.zeros(rhs.shape[:-(2 if rhs_is_matrix else 1)] + (self.robot_.dof * max_order,) + ((rhs.shape[-1],) if rhs_is_matrix else ()), dtype=rhs.dtype)
+      out = np.zeros(rhs.shape[:-(2 if rhs_is_matrix else 1)] + (self._model_metadata.dof * max_order,) + ((rhs.shape[-1],) if rhs_is_matrix else ()), dtype=rhs.dtype)
       row = 0
       for st in state_type_list:
         width = self._jacobian_output_dim([st])
@@ -805,30 +805,30 @@ class DerivativesMixin:
     torque-series losses.
     """
     states = self._state_type_list(torque_state)
-    if len(states) != self.robot_.dof or any(st.data_type != "torque" for st in states):
+    if len(states) != self._model_metadata.dof or any(st.data_type != "torque" for st in states):
       raise ValueError("squared_power_torque_vjp_terms requires a total_joint torque StateType")
     batch_shape = self.batch_shape_ if self.batch_shape_ else self.motions_.batch_shape()
     power_rhs, rhs_is_matrix = batch_shapes.broadcast_feature_rhs(
       power_rhs, batch_shape, 1, name="power_rhs",
     )
     tau = np.asarray(self.state_info(torque_state) if torque_value is None else torque_value, dtype=float)
-    if tau.shape != batch_shape + (self.robot_.dof,):
-      raise ValueError(f"torque_value must have shape {batch_shape + (self.robot_.dof,)}, got {tau.shape}")
-    motion = np.asarray(self.motion(2), dtype=float).reshape(batch_shape + (self.robot_.dof, 2))
+    if tau.shape != batch_shape + (self._model_metadata.dof,):
+      raise ValueError(f"torque_value must have shape {batch_shape + (self._model_metadata.dof,)}, got {tau.shape}")
+    motion = np.asarray(self.motion(2), dtype=float).reshape(batch_shape + (self._model_metadata.dof, 2))
     velocity = motion[..., :, 1]
     power = np.sum(tau * velocity, axis=-1)
     if rhs_is_matrix:
       scale = 2.0 * power[..., None] * power_rhs[..., 0, :]
       torque_rhs = velocity[..., :, None] * scale[..., None, :]
       velocity_rhs = tau[..., :, None] * scale[..., None, :]
-      motion_vjp = np.zeros(batch_shape + (self.robot_.dof * 2, scale.shape[-1]), dtype=float)
-      motion_vjp.reshape(batch_shape + (self.robot_.dof, 2, scale.shape[-1]))[..., :, 1, :] = velocity_rhs
+      motion_vjp = np.zeros(batch_shape + (self._model_metadata.dof * 2, scale.shape[-1]), dtype=float)
+      motion_vjp.reshape(batch_shape + (self._model_metadata.dof, 2, scale.shape[-1]))[..., :, 1, :] = velocity_rhs
     else:
       scale = 2.0 * power * power_rhs[..., 0]
       torque_rhs = velocity * scale[..., None]
       velocity_rhs = tau * scale[..., None]
-      motion_vjp = np.zeros(batch_shape + (self.robot_.dof * 2,), dtype=float)
-      motion_vjp.reshape(batch_shape + (self.robot_.dof, 2))[..., :, 1] = velocity_rhs
+      motion_vjp = np.zeros(batch_shape + (self._model_metadata.dof * 2,), dtype=float)
+      motion_vjp.reshape(batch_shape + (self._model_metadata.dof, 2))[..., :, 1] = velocity_rhs
     return {
       "torque_request": (torque_state, torque_rhs),
       "motion_vjp_order2": motion_vjp,

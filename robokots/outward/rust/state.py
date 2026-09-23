@@ -4,7 +4,7 @@ import numpy as np
 
 from ...core import batch_shape as batch_shapes
 from ...outward.data import ArrayOutwardState
-from ...core.robot import RobotStruct
+from ...core.robot import RobotStruct, RobotModelInfo
 from .model import _rust_compiled_robot
 
 def build_kinematics_outward_state_rust(
@@ -16,6 +16,7 @@ def build_kinematics_outward_state_rust(
   if order < 1:
     raise ValueError("order must be >= 1")
   rust_robot = compiled_robot if compiled_robot is not None else _rust_compiled_robot(robot)
+  robot = robot if isinstance(robot, RobotModelInfo) else RobotModelInfo.from_native(rust_robot)
   motion = np.asarray(motions, dtype=float)
   if motion.ndim == 1:
     _validate_motion_length(robot, motion, order)
@@ -41,6 +42,7 @@ def build_dynamics_outward_state_rust(
   if dynamics_order < 0:
     raise ValueError("dynamics_order must be >= 0")
   rust_robot = compiled_robot if compiled_robot is not None else _rust_compiled_robot(robot)
+  robot = robot if isinstance(robot, RobotModelInfo) else RobotModelInfo.from_native(rust_robot)
   gravity = np.asarray(gravity, dtype=float)
   if gravity.shape != (3,):
     raise ValueError(f"gravity must have shape (3,), got {gravity.shape}.")

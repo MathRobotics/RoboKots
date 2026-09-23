@@ -10,7 +10,7 @@ import numpy as np
 from mathrobo import CMVector
 
 from robokots.core.state.access import state_cmtm, state_cmtm_wrench, state_cmvec, state_rel_cmtm
-from robokots.core.state.spec import keys_kinematics, keys_joint_motion, keys_force, data_type_dof, StateType, state_output, state_output_width
+from robokots.core.state.spec import is_joint_coordinate_state, keys_kinematics, keys_joint_motion, keys_force, data_type_dof, StateType, state_output, state_output_width
 from robokots.core.kernels.joint import joint_select_diag_mat
 
 
@@ -99,7 +99,7 @@ def spatial_apply(robot, state, states, order, rhs, *, transpose=False):
     row = 0
     routes = {}
     for s, width in zip(states, widths):
-        if s.owner_type == 'joint' and s.data_type in keys_joint_motion:
+        if is_joint_coordinate_state(s):
             joint = robot.joint(s.owner_name)
             cols = (joint.dof_index + np.arange(joint.dof))*order + s.key_order-1
             if transpose:

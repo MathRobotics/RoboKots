@@ -4,12 +4,12 @@ from __future__ import annotations
 import numpy as np
 
 from .. import outward as outward_api
-from ..core.state.spec import StateType, keys_joint_motion, keys_torque
+from ..core.state.spec import is_joint_coordinate_state, StateType, keys_torque
 
 
 class FastDerivativesMixin:
   def _is_joint_motion_state(self, st : StateType) -> bool:
-    return st.owner_type == "joint" and st.data_type in keys_joint_motion
+    return is_joint_coordinate_state(st)
 
   def _is_joint_torque_state(self, st : StateType) -> bool:
     return st.owner_type == "joint" and st.data_type in keys_torque and st.frame_name is None
@@ -24,13 +24,13 @@ class FastDerivativesMixin:
     return has_motion
 
   def _joint_state_dof(self, st : StateType) -> int:
-    joint = self.robot_.joint(st.owner_name)
+    joint = self._model_metadata.joint(st.owner_name)
     if joint is None or joint.dof <= 0:
       raise ValueError(f"Invalid active joint state: {st.owner_name}")
     return joint.dof
 
   def _joint_motion_col_slice(self, st : StateType, max_order : int) -> slice:
-    joint = self.robot_.joint(st.owner_name)
+    joint = self._model_metadata.joint(st.owner_name)
     if joint is None or joint.dof <= 0:
       raise ValueError(f"Invalid active joint motion state: {st.owner_name}")
     motion_index = self._joint_motion_index(st.data_type)
@@ -40,9 +40,9 @@ class FastDerivativesMixin:
     return slice(start, start + joint.dof)
 
   def _joint_motion_selector_jacobian(self, st : StateType, max_order : int, batch_shape : tuple):
-    joint = self.robot_.joint(st.owner_name)
+    joint = self._model_metadata.joint(st.owner_name)
     col_slice = self._joint_motion_col_slice(st, max_order)
-    out = np.zeros(tuple(batch_shape) + (joint.dof, self.robot_.dof * max_order), dtype=float)
+    out = np.zeros(tuple(batch_shape) + (joint.dof, self._model_metadata.dof * max_order), dtype=float)
     diag = np.arange(joint.dof)
     out[..., diag, col_slice.start + diag] = 1.0
     return out
@@ -190,10 +190,10 @@ class FastDerivativesMixin:
     rhs = np.asarray(rhs)
     if rhs_is_matrix:
       rhs_data = rhs.reshape(batch_shape + rhs.shape[-2:]) if batch_shape else rhs
-      result = np.zeros(tuple(batch_shape) + (self.robot_.dof * max_order, rhs_data.shape[-1]), dtype=rhs_data.dtype)
+      result = np.zeros(tuple(batch_shape) + (self._model_metadata.dof * max_order, rhs_data.shape[-1]), dtype=rhs_data.dtype)
     else:
       rhs_data = rhs.reshape(batch_shape + (rhs.shape[-1],)) if batch_shape else rhs
-      result = np.zeros(tuple(batch_shape) + (self.robot_.dof * max_order,), dtype=rhs_data.dtype)
+      result = np.zeros(tuple(batch_shape) + (self._model_metadata.dof * max_order,), dtype=rhs_data.dtype)
     row_start = 0
     torque_states = []
     torque_rhs_parts = []

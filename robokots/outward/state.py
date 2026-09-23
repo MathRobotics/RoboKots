@@ -109,7 +109,7 @@ def _left_matmul(mat: np.ndarray, value: np.ndarray) -> np.ndarray:
 
 
 def _cmtm_matvec(cmtm: CMTM, vec: np.ndarray) -> np.ndarray:
-  return apply_mat_adj(cmtm, vec)
+  return apply_mat_adj(cmtm, np.asarray(vec)[..., None])[..., 0]
 
 
 def _joint_local_and_rel_cmtm(joint_data, joint_motions: np.ndarray, order: int) -> tuple[CMTM, CMTM]:
@@ -136,6 +136,13 @@ def get_dof(robot : RobotStruct, state_type : StateType, dim : int = 3) -> int:
         return data_type_dof(state_type.data_type, dim = dim)
 
 def get_value(robot : RobotStruct, state : OutwardDataView, state_type : StateType):
+    if isinstance(state, StateValueProvider):
+        try:
+            return state.state_value(state_type)
+        except NotImplementedError:
+            if not hasattr(state, "cmtm"):
+                raise
+
     if state_type.frame_name == 'world' and state_type.data_type in keys_kinematics and state_type.key_order >= 2:
         # Ordinary derivatives of Ad(T_world) v_local, including frame motion.
         n = state_type.key_order - 1
@@ -143,13 +150,6 @@ def get_value(robot : RobotStruct, state : OutwardDataView, state_type : StateTy
         link_name = state_type.owner_name if state_type.owner_type == 'link' else robot.links[robot.joint(state_type.owner_name).child_link_id].name
         frame = state_cmtm(state, link_name, 'link', n)
         return world_spatial_value(owner, frame, n)
-
-    if isinstance(state, StateValueProvider):
-        try:
-            return state.state_value(state_type)
-        except NotImplementedError:
-            if not hasattr(state, "cmtm"):
-                raise
 
     if state_type.owner_type == "link":
         link_name = state_type.owner_name
@@ -258,7 +258,7 @@ def _local_gravity_cmvec(link_cmtm: CMTM, gravity: np.ndarray, order: int) -> CM
   world_vecs = np.zeros(batch_shape + (order, 6), dtype=float)
   world_vecs[..., 0, 3:] = gravity
   world_gravity = CMVector(world_vecs)
-  local_cm = apply_mat_inv_adj(truncated, world_gravity.cm_vec())
+  local_cm = apply_mat_inv_adj(truncated, world_gravity.cm_vec()[..., None])[..., 0]
   return CMVector.set_cmvecs(local_cm.reshape(batch_shape + (order, 6)))
 
 
@@ -443,7 +443,7 @@ def build_dynamics_outward_state(
       c_joint_rel_cmtm = momentum_link_cmtm_dict[child.name].inv() @ momentum_link_cmtm_dict[c_joint_link.name]
       c_joint_cmtm_wrench = CMTM.change_elemclass(c_joint_rel_cmtm, SE3wrench)
 
-      transported = apply_mat_adj(c_joint_cmtm_wrench, c_joint_momentum.cm_vec())
+      transported = apply_mat_adj(c_joint_cmtm_wrench, c_joint_momentum.cm_vec()[..., None])[..., 0]
       joint_momentums += _left_matmul(factor_mat, transported)
 
     # calculate joint force and torque
@@ -464,7 +464,7 @@ def build_dynamics_outward_state(
             @ _truncate_link_cmtm_order(link_cmtm_dict[c_joint_link.name], dynamics_order)
           )
           rel_wrench = CMTM.change_elemclass(rel_cmtm, SE3wrench)
-          transported = apply_mat_adj(rel_wrench, child_gravity.cm_vec())
+          transported = apply_mat_adj(rel_wrench, child_gravity.cm_vec()[..., None])[..., 0]
           joint_gravity += _left_matmul(gravity_factor_mat, transported)
         joint_gravity = CMVector(
           joint_gravity.reshape(joint_gravity.shape[:-1] + (dynamics_order, 6))

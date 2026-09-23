@@ -151,11 +151,13 @@ def paired(before, after, output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--before", type=Path)
+    parser.add_argument("--before-root", type=Path, help="Baseline checkout for Python code compatibility (fresh-process mode)")
     parser.add_argument("--after", type=Path)
     parser.add_argument("--extension", type=Path)
     parser.add_argument("--paired", action="store_true")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+    args.output = args.output.resolve()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     if args.extension:
         worker(args.extension.resolve(), args.output)
@@ -171,7 +173,8 @@ def main():
         path = args.output.with_name(args.output.stem + f"_{i}_{label}.json")
         binary = args.before if label == "before" else args.after
         subprocess.run([sys.executable, "-m", __spec__.name, "--extension", str(binary.resolve()),
-                        "--output", str(path)], check=True)
+                        "--output", str(path)], check=True,
+                       cwd=args.before_root if label == "before" else None)
         runs.append({"label": label, "file": path.name, "data": json.loads(path.read_text())})
         print(f"{i+1}/{len(sequence)} {label}", flush=True)
     reference = runs[0]["data"]

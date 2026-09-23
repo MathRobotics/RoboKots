@@ -5,7 +5,7 @@ use numpy::{
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyAny, PyDict, PyList};
+use pyo3::types::{PyAny, PyBool, PyDict, PyFloat, PyInt, PyList, PyString, PyTuple};
 
 use crate::error::Error;
 use crate::model::*;
@@ -13,7 +13,7 @@ use crate::dynamics_outputs::DynamicsOutput;
 use crate::spatial::*;
 use crate::types as native;
 use crate::workspace::{
-    AbaWorkspace, BulkDerivativeWorkspace, CmtmWorkspace, DynamicsCmtmTangentWorkspace, DynamicsCmtmWorkspace,
+    BulkDerivativeWorkspace, CmtmWorkspace, DynamicsCmtmTangentWorkspace, DynamicsCmtmWorkspace,
     Workspace,
 };
 
@@ -94,7 +94,7 @@ pub(crate) fn get_vec4_default(
     }
 }
 
-pub(crate) fn link_model_from_dict(link: &Bound<'_, PyDict>) -> PyResult<LinkModel> {
+pub(crate) fn link_model_from_dict(link: &Bound<'_, PyDict>, id: usize) -> PyResult<LinkModel> {
     let mass = match link.get_item("mass")? {
         Some(value) => value.extract::<f64>()?,
         None => 0.0,
@@ -114,7 +114,40 @@ pub(crate) fn link_model_from_dict(link: &Bound<'_, PyDict>) -> PyResult<LinkMod
         }
         None => [1.0, 1.0, 1.0, 0.0, 0.0, 0.0],
     };
-    Ok(LinkModel { mass, cog, inertia: iv })
+    Ok(LinkModel { name: match link.get_item("name")? { Some(x) => x.extract()?, None => format!("link_{id}") }, mass, cog, inertia: iv })
+}
+
+// Convert decoded input without building a Python RobotStruct or serializing JSON.
+fn input_value(value: &Bound<'_, PyAny>) -> PyResult<serde_json::Value> {
+    input_value_at_depth(value, 0)
+}
+
+fn input_value_at_depth(value: &Bound<'_, PyAny>, depth: usize) -> PyResult<serde_json::Value> {
+    if depth > 128 { return Err(PyValueError::new_err("model input nesting is too deep or cyclic")); }
+    use serde_json::Value;
+    if value.is_none() { return Ok(Value::Null); }
+    if value.is_instance_of::<PyBool>() { return Ok(Value::Bool(value.extract()?)); }
+    if value.is_instance_of::<PyInt>() { return Ok(Value::Number(value.extract::<i64>()?.into())); }
+    if value.is_instance_of::<PyFloat>() {
+        return serde_json::Number::from_f64(value.extract()?).map(Value::Number)
+            .ok_or_else(|| PyValueError::new_err("model numbers must be finite"));
+    }
+    if value.is_instance_of::<PyString>() { return Ok(Value::String(value.extract()?)); }
+    if let Ok(dict) = value.downcast::<PyDict>() {
+        let mut out = serde_json::Map::new();
+        for (k, v) in dict { out.insert(k.extract::<String>()?, input_value_at_depth(&v, depth + 1)?); }
+        return Ok(Value::Object(out));
+    }
+    if value.is_instance_of::<PyList>() || value.is_instance_of::<PyTuple>() {
+        return Ok(Value::Array(value.try_iter()?.map(|v| input_value_at_depth(&v?, depth + 1)).collect::<PyResult<Vec<_>>>()?));
+    }
+    Err(PyValueError::new_err("model input must contain JSON-compatible values"))
+}
+
+fn model_info_tuple(info: &ModelInfo) -> (usize, Vec<String>, Vec<(String, String, usize, usize, usize, usize)>, bool) {
+    (info.dof, info.link_names.clone(), info.joints.iter().map(|j|
+        (j.name.clone(), j.kind.as_str().to_owned(), j.dof, j.dof_index, j.parent_link, j.child_link)
+    ).collect(), info.supports_cmtm)
 }
 
 // Keep Python exception construction at the binding boundary.
@@ -196,112 +229,17 @@ fn gravity_vec3(gravity: Option<PyReadonlyArray1<'_, f64>>) -> PyResult<[f64; 3]
     Ok([gravity[0], gravity[1], gravity[2]])
 }
 
-fn cmtm_world_wrench_value(
-    elem_mat: [[f64; 4]; 4],
-    elem_vecs: &[f64],
-    raw_vecs: &[f64],
-    key_order: usize,
-) -> Vec<f64> {
-    let mut fact = vec![1.0; key_order.max(1)];
-    fill_factorial_table(&mut fact);
-    let mut cm_rhs = vec![0.0; key_order * 6];
-    for k in 0..key_order {
-        let scale = 1.0 / fact[k];
-        for i in 0..6 {
-            cm_rhs[k * 6 + i] = raw_vecs[k * 6 + i] * scale;
-        }
-    }
-    let mut blocks = vec![[[0.0; 6]; 6]; key_order];
-    let mut out_cm = vec![0.0; key_order * 6];
-    cmtm_apply_mat_adj_wrench_with_blocks_into(
-        elem_mat,
-        elem_vecs,
-        &cm_rhs,
-        key_order,
-        &fact,
-        &mut blocks,
-        &mut out_cm,
-    );
-    let start = (key_order - 1) * 6;
-    let scale = fact[key_order - 1];
-    out_cm[start..start + 6]
-        .iter()
-        .map(|value| value * scale)
-        .collect()
-}
 
-fn order1_link_momentum_value(
-    robot: &native::RustCompiledRobot,
-    ws: &DynamicsCmtmWorkspace,
-    link_id: usize,
-    vec_index: usize,
-) -> [f64; 6] {
-    let link_vel = cmtm_vecs_slice(&ws.cmtm.link_vecs, link_id, 3);
-    mat6_vec6(
-        robot.link_inertia[link_id],
-        vec6_from_flat(link_vel, vec_index),
-    )
-}
 
-fn order1_link_force_value(
-    robot: &native::RustCompiledRobot,
-    ws: &DynamicsCmtmWorkspace,
-    link_id: usize,
-) -> [f64; 6] {
-    let link_vel = cmtm_vecs_slice(&ws.cmtm.link_vecs, link_id, 3);
-    let v0 = vec6_from_flat(link_vel, 0);
-    let m0 = mat6_vec6(robot.link_inertia[link_id], v0);
-    let m1 = mat6_vec6(robot.link_inertia[link_id], vec6_from_flat(link_vel, 1));
-    add6(m1, hat_adj_wrench_vec6(v0, m0))
-}
 
-fn order1_joint_force_value(
-    robot: &native::RustCompiledRobot,
-    ws: &DynamicsCmtmWorkspace,
-    joint_id: usize,
-) -> [f64; 6] {
-    let child = robot.child_link[joint_id];
-    let link_vel = cmtm_vecs_slice(&ws.cmtm.link_vecs, child, 3);
-    let v0 = vec6_from_flat(link_vel, 0);
-    let start = joint_id * 2 * 6;
-    let m0 = vec6_from_flat(&ws.joint_momentum[start..start + 12], 0);
-    let m1 = vec6_from_flat(&ws.joint_momentum[start..start + 12], 1);
-    add6(m1, hat_adj_wrench_vec6(v0, m0))
-}
 
-fn order1_joint_mat_value(
-    robot: &native::RustCompiledRobot,
-    ws: &DynamicsCmtmWorkspace,
-    joint_id: usize,
-) -> [[f64; 4]; 4] {
-    let q_index = robot.q_index[joint_id];
-    if q_index < 0 {
-        return eye4();
-    }
-    let q = ws.cached_motion[q_index as usize * 3];
-    mat4_from_rot_pos(rot_axis(robot.axis[joint_id], q), [0.0; 3])
-}
 
-fn order1_joint_vec_value(
-    robot: &native::RustCompiledRobot,
-    ws: &DynamicsCmtmWorkspace,
-    joint_id: usize,
-    vec_index: usize,
-) -> [f64; 6] {
-    let q_index = robot.q_index[joint_id];
-    if q_index < 0 {
-        return [0.0; 6];
-    }
-    let value = ws.cached_motion[q_index as usize * 3 + vec_index + 1];
-    [
-        robot.axis[joint_id][0] * value,
-        robot.axis[joint_id][1] * value,
-        robot.axis[joint_id][2] * value,
-        0.0,
-        0.0,
-        0.0,
-    ]
-}
+
+
+
+
+
+
 
 fn fill_link_local_jacobian(
     robot: &native::RustCompiledRobot,
@@ -403,8 +341,26 @@ fn fill_link_local_jacobian(
 
 #[pymethods]
 impl RustCompiledRobot {
+    /// One transfer of immutable model metadata; no Python robot objects.
+    fn model_info(&self) -> (usize, Vec<String>, Vec<(String, String, usize, usize, usize, usize)>, bool) {
+        model_info_tuple(self.inner.model_info())
+    }
+
     fn create_selected_workspace(&self, order: usize) -> PyResult<RustSelectedWorkspace> {
         Ok(RustSelectedWorkspace { inner: self.inner.create_selected_workspace(order)? })
+    }
+
+    #[staticmethod]
+    #[pyo3(signature = (text, allow_prismatic = true))]
+    fn from_json(text: &str, allow_prismatic: bool) -> PyResult<Self> {
+        Ok(Self { inner: native::RustCompiledRobot::from_json(text, allow_prismatic)? })
+    }
+
+    #[staticmethod]
+    #[pyo3(signature = (model_data, allow_prismatic = true))]
+    fn from_input_data(model_data: &Bound<'_, PyDict>, allow_prismatic: bool) -> PyResult<Self> {
+        let model = RobotModel::from_json_value(&input_value(model_data.as_any())?)?;
+        Ok(Self { inner: native::RustCompiledRobot::from_model(&model, allow_prismatic)? })
     }
 
     #[pyo3(signature = (model_data, allow_prismatic = false))]
@@ -414,10 +370,10 @@ impl RustCompiledRobot {
             .ok_or_else(|| PyValueError::new_err("model_data must contain links"))?;
         let joints_any = model_data.get_item("joints")?
             .ok_or_else(|| PyValueError::new_err("model_data must contain joints"))?;
-        let links = links_any.downcast::<PyList>()?.iter()
-            .map(|value| link_model_from_dict(value.downcast::<PyDict>()?))
+        let links = links_any.downcast::<PyList>()?.iter().enumerate()
+            .map(|(id, value)| link_model_from_dict(value.downcast::<PyDict>()?, id))
             .collect::<PyResult<Vec<_>>>()?;
-        let joints = joints_any.downcast::<PyList>()?.iter().map(|value| {
+        let joints = joints_any.downcast::<PyList>()?.iter().enumerate().map(|(id, value)| {
             let joint = value.downcast::<PyDict>()?;
             let kind = get_string(joint, "type")?;
             let representation = if kind == "spherical" || kind == "floating" {
@@ -436,6 +392,7 @@ impl RustCompiledRobot {
             };
             let kind = JointKind::parse(&kind, &representation)?;
             Ok(JointModel {
+                name: match joint.get_item("name")? { Some(x) => x.extract()?, None => format!("joint_{id}") },
                 parent_link: get_usize(joint, "parent_link_id")?,
                 child_link: get_usize(joint, "child_link_id")?,
                 axis: if kind == JointKind::Fixed { [1.0, 0.0, 0.0] }
@@ -582,14 +539,8 @@ impl RustCompiledRobot {
         a: PyReadonlyArray1<'py, f64>,
         gravity: Option<PyReadonlyArray1<'py, f64>>,
     ) -> PyResult<Bound<'py, PyArray1<f64>>> {
-        let q = q.as_slice()?;
-        let v = v.as_slice()?;
-        let a = a.as_slice()?;
-        self.check_motion(q, v, a)?;
-        let gravity = gravity_vec3(gravity)?;
-        let mut ws = Workspace::new(self);
-        self.rnea_with_gravity_into(q, v, a, gravity, &mut ws);
-        Ok(ws.tau.into_pyarray(py))
+        let out = self.inner.inverse_dynamics(q.as_slice()?, v.as_slice()?, a.as_slice()?, gravity_vec3(gravity)?)?;
+        Ok(out.into_pyarray(py))
     }
 
     #[pyo3(signature = (q, v, a, gravity = None))]
@@ -602,24 +553,7 @@ impl RustCompiledRobot {
         gravity: Option<PyReadonlyArray1<'py, f64>>,
     ) -> PyResult<Bound<'py, PyArray2<f64>>> {
         let batch = self.check_motion_batch(q.shape(), v.shape(), a.shape())?;
-        let q = q.as_slice()?;
-        let v = v.as_slice()?;
-        let a = a.as_slice()?;
-        let gravity = gravity_vec3(gravity)?;
-        let mut out = vec![0.0; batch * self.dof];
-        let mut ws = Workspace::new(self);
-        for sample in 0..batch {
-            let start = sample * self.dof;
-            let end = start + self.dof;
-            self.rnea_with_gravity_into(
-                &q[start..end],
-                &v[start..end],
-                &a[start..end],
-                gravity,
-                &mut ws,
-            );
-            out[start..end].copy_from_slice(&ws.tau);
-        }
+        let out = self.inner.inverse_dynamics_batch(q.as_slice()?, v.as_slice()?, a.as_slice()?, batch, gravity_vec3(gravity)?)?;
         Ok(out.into_pyarray(py).reshape([batch, self.dof])?)
     }
 
@@ -628,12 +562,8 @@ impl RustCompiledRobot {
         &self, py: Python<'py>, q: PyReadonlyArray1<'py, f64>, v: PyReadonlyArray1<'py, f64>,
         tau: PyReadonlyArray1<'py, f64>, gravity: Option<PyReadonlyArray1<'py, f64>>,
     ) -> PyResult<Bound<'py, PyArray1<f64>>> {
-        let q = q.as_slice()?; let v = v.as_slice()?; let tau = tau.as_slice()?;
-        self.check_motion(q, v, tau)?;
-        let mut ws = AbaWorkspace::new(self);
-        self.aba_with_gravity_into(q, v, tau, gravity_vec3(gravity)?, &mut ws)
-            .map_err(PyValueError::new_err)?;
-        Ok(ws.qdd.into_pyarray(py))
+        let out = self.inner.forward_dynamics(q.as_slice()?, v.as_slice()?, tau.as_slice()?, gravity_vec3(gravity)?)?;
+        Ok(out.into_pyarray(py))
     }
 
     #[pyo3(signature = (q, v, tau, gravity = None))]
@@ -642,15 +572,7 @@ impl RustCompiledRobot {
         tau: PyReadonlyArray2<'py, f64>, gravity: Option<PyReadonlyArray1<'py, f64>>,
     ) -> PyResult<Bound<'py, PyArray2<f64>>> {
         let batch = self.check_motion_batch(q.shape(), v.shape(), tau.shape())?;
-        let q = q.as_slice()?; let v = v.as_slice()?; let tau = tau.as_slice()?;
-        let gravity = gravity_vec3(gravity)?; let mut ws = AbaWorkspace::new(self);
-        let mut out = vec![0.0; batch * self.dof];
-        for sample in 0..batch {
-            let start = sample * self.dof; let end = start + self.dof;
-            self.aba_with_gravity_into(&q[start..end], &v[start..end], &tau[start..end], gravity, &mut ws)
-                .map_err(PyValueError::new_err)?;
-            out[start..end].copy_from_slice(&ws.qdd);
-        }
+        let out = self.inner.forward_dynamics_batch(q.as_slice()?, v.as_slice()?, tau.as_slice()?, batch, gravity_vec3(gravity)?)?;
         Ok(out.into_pyarray(py).reshape([batch, self.dof])?)
     }
 
@@ -1210,6 +1132,7 @@ impl RustCompiledRobot {
     fn kinetic_energy<'py>(
         &self, py: Python<'py>, motion: PyReadonlyArray1<'py, f64>,
     ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+        self.check_cmtm_supported()?;
         let motion = motion.as_slice()?;
         self.check_cmtm_motion(motion, 2)?;
         let mut primal = CmtmWorkspace::new(self, 2);
@@ -1222,6 +1145,7 @@ impl RustCompiledRobot {
     fn kinetic_energy_batch<'py>(
         &self, py: Python<'py>, motions: PyReadonlyArray2<'py, f64>,
     ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+        self.check_cmtm_supported()?;
         let shape = motions.shape();
         if shape.len() != 2 || shape[1] != self.dof * 2 {
             return Err(PyValueError::new_err("motions must have shape (batch, robot dof * 2)"));
@@ -1244,6 +1168,7 @@ impl RustCompiledRobot {
         &self, py: Python<'py>, motion: PyReadonlyArray1<'py, f64>,
         motion_tangent: PyReadonlyArray2<'py, f64>,
     ) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        self.check_cmtm_supported()?;
         let motion = motion.as_slice()?;
         self.check_cmtm_motion(motion, 2)?;
         let shape = motion_tangent.shape();
@@ -1265,6 +1190,7 @@ impl RustCompiledRobot {
         &self, py: Python<'py>, motions: PyReadonlyArray2<'py, f64>,
         motion_tangents: PyReadonlyArray3<'py, f64>,
     ) -> PyResult<Bound<'py, PyArray3<f64>>> {
+        self.check_cmtm_supported()?;
         let motion_shape = motions.shape(); let tangent_shape = motion_tangents.shape();
         if motion_shape.len() != 2 || motion_shape[1] != self.dof * 2
             || tangent_shape.len() != 3 || tangent_shape[0] != motion_shape[0]
@@ -1290,6 +1216,7 @@ impl RustCompiledRobot {
         &self, py: Python<'py>, motion: PyReadonlyArray1<'py, f64>,
         energy_cotangent: PyReadonlyArray2<'py, f64>,
     ) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        self.check_cmtm_supported()?;
         let motion = motion.as_slice()?; self.check_cmtm_motion(motion, 2)?;
         let shape = energy_cotangent.shape();
         if shape.len() != 2 || shape[0] != 1 {
@@ -1309,6 +1236,7 @@ impl RustCompiledRobot {
         &self, py: Python<'py>, motions: PyReadonlyArray2<'py, f64>,
         energy_cotangents: PyReadonlyArray3<'py, f64>,
     ) -> PyResult<Bound<'py, PyArray3<f64>>> {
+        self.check_cmtm_supported()?;
         let motion_shape = motions.shape(); let cotangent_shape = energy_cotangents.shape();
         if motion_shape.len() != 2 || motion_shape[1] != self.dof * 2
             || cotangent_shape.len() != 3 || cotangent_shape[0] != motion_shape[0]
@@ -2562,6 +2490,18 @@ impl RustFastData {
 
 #[pymethods]
 impl RustOutwardData {
+    fn world_link_vec<'py>(&self, py: Python<'py>, link_id: usize, key_order: usize) -> PyResult<Bound<'py, PyArray1<f64>>> {
+        Ok(self.inner.world_link_vec(link_id, key_order)?.into_pyarray(py))
+    }
+    fn world_joint_vec<'py>(&self, py: Python<'py>, joint_id: usize, key_order: usize) -> PyResult<Bound<'py, PyArray1<f64>>> {
+        Ok(self.inner.world_joint_vec(joint_id, key_order)?.into_pyarray(py))
+    }
+
+    fn model_info(&self) -> (usize, Vec<String>, Vec<(String, String, usize, usize, usize, usize)>, bool) {
+        model_info_tuple(self.inner.robot.model_info())
+    }
+
+
     /// Internal allocation diagnostic: shared kinematics and dynamics-only bytes.
     fn _workspace_buffer_bytes(&self) -> (usize, usize) {
         (self.inner.dynamics.cmtm.buffer_bytes(), self.inner.dynamics.buffer_bytes())
@@ -2578,14 +2518,7 @@ impl RustOutwardData {
     }
 
     fn compute_kinematics(&mut self, motion: PyReadonlyArray1<'_, f64>) -> PyResult<()> {
-        let motion = motion.as_slice()?;
-        self.inner.robot.check_cmtm_motion(motion, self.inner.order)?;
-        self.inner.robot
-            .kinematics_cmtm_into(motion, self.inner.order, &mut self.inner.dynamics.cmtm);
-        self.inner.has_kinematics = true;
-        self.inner.has_dynamics = false;
-        self.inner.has_cached_order1_dynamics = false;
-        Ok(())
+        Ok(self.inner.compute_kinematics(motion.as_slice()?)?)
     }
 
     #[pyo3(signature = (motion, gravity = None))]
@@ -2594,25 +2527,7 @@ impl RustOutwardData {
         motion: PyReadonlyArray1<'_, f64>,
         gravity: Option<PyReadonlyArray1<'_, f64>>,
     ) -> PyResult<()> {
-        if self.inner.order < 2 {
-            return Err(PyValueError::new_err("dynamics data requires order >= 2"));
-        }
-        let gravity = gravity_vec3(gravity)?;
-        let motion = motion.as_slice()?;
-        self.inner.robot.check_cmtm_motion(motion, self.inner.order)?;
-        self.inner.dynamics.ensure_dynamics(&self.inner.robot, self.inner.dynamics_order);
-        if self.inner.order == 3 && self.inner.dynamics_order == 1 && gravity == [0.0; 3] {
-            self.inner.robot
-                .dynamics_cmtm_order1_cached_into(motion, &mut self.inner.dynamics);
-            self.inner.has_cached_order1_dynamics = true;
-        } else {
-            self.inner.robot
-                .dynamics_cmtm_into(motion, self.inner.dynamics_order, gravity, &mut self.inner.dynamics);
-            self.inner.has_cached_order1_dynamics = false;
-        }
-        self.inner.has_kinematics = true;
-        self.inner.has_dynamics = true;
-        Ok(())
+        Ok(self.inner.compute_dynamics(motion.as_slice()?, gravity_vec3(gravity)?)?)
     }
 
     #[pyo3(signature = (motion, gravity = None))]
@@ -2621,23 +2536,7 @@ impl RustOutwardData {
         motion: PyReadonlyArray1<'_, f64>,
         gravity: Option<PyReadonlyArray1<'_, f64>>,
     ) -> PyResult<()> {
-        if self.inner.order < 2 {
-            return Err(PyValueError::new_err("dynamics data requires order >= 2"));
-        }
-        let gravity = gravity_vec3(gravity)?;
-        let motion = motion.as_slice()?;
-        self.inner.robot.check_cmtm_motion(motion, self.inner.order)?;
-        self.inner.dynamics.ensure_dynamics(&self.inner.robot, self.inner.dynamics_order);
-        self.inner.robot.dynamics_cmtm_minimal_into(
-            motion,
-            self.inner.dynamics_order,
-            gravity,
-            &mut self.inner.dynamics,
-        );
-        self.inner.has_kinematics = true;
-        self.inner.has_dynamics = true;
-        self.inner.has_cached_order1_dynamics = false;
-        Ok(())
+        Ok(self.inner.compute_dynamics_minimal(motion.as_slice()?, gravity_vec3(gravity)?)?)
     }
 
     fn link_mat<'py>(
@@ -2645,13 +2544,7 @@ impl RustOutwardData {
         py: Python<'py>,
         link_id: usize,
     ) -> PyResult<Bound<'py, PyArray2<f64>>> {
-        self.check_link_id(link_id)?;
-        let ws = self.cmtm_source()?;
-        let start = link_id * 16;
-        Ok(ws.link_mat[start..start + 16]
-            .to_vec()
-            .into_pyarray(py)
-            .reshape([4, 4])?)
+        Ok(self.inner.link_mat(link_id)?.into_pyarray(py).reshape([4, 4])?)
     }
 
     fn joint_mat<'py>(
@@ -2659,21 +2552,7 @@ impl RustOutwardData {
         py: Python<'py>,
         joint_id: usize,
     ) -> PyResult<Bound<'py, PyArray2<f64>>> {
-        self.check_joint_id(joint_id)?;
-        if self.inner.has_cached_order1_dynamics {
-            let mat = order1_joint_mat_value(&self.inner.robot, &self.inner.dynamics, joint_id);
-            let mut out = Vec::with_capacity(16);
-            for row in mat {
-                out.extend_from_slice(&row);
-            }
-            return Ok(out.into_pyarray(py).reshape([4, 4])?);
-        }
-        let ws = self.cmtm_source()?;
-        let start = joint_id * 16;
-        Ok(ws.joint_mat[start..start + 16]
-            .to_vec()
-            .into_pyarray(py)
-            .reshape([4, 4])?)
+        Ok(self.inner.joint_mat(joint_id)?.into_pyarray(py).reshape([4, 4])?)
     }
 
     fn link_vec<'py>(
@@ -2682,11 +2561,7 @@ impl RustOutwardData {
         link_id: usize,
         key_order: usize,
     ) -> PyResult<Bound<'py, PyArray1<f64>>> {
-        self.check_link_id(link_id)?;
-        let vec_index = self.cmtm_vec_index(key_order)?;
-        let ws = self.cmtm_source()?;
-        let start = (link_id * (self.inner.order - 1) + vec_index) * 6;
-        Ok(ws.link_vecs[start..start + 6].to_vec().into_pyarray(py))
+        Ok(self.inner.link_vec(link_id, key_order)?.into_pyarray(py))
     }
 
     fn joint_vec<'py>(
@@ -2695,18 +2570,7 @@ impl RustOutwardData {
         joint_id: usize,
         key_order: usize,
     ) -> PyResult<Bound<'py, PyArray1<f64>>> {
-        self.check_joint_id(joint_id)?;
-        let vec_index = self.cmtm_vec_index(key_order)?;
-        if self.inner.has_cached_order1_dynamics {
-            return Ok(
-                order1_joint_vec_value(&self.inner.robot, &self.inner.dynamics, joint_id, vec_index)
-                    .to_vec()
-                    .into_pyarray(py),
-            );
-        }
-        let ws = self.cmtm_source()?;
-        let start = (joint_id * (self.inner.order - 1) + vec_index) * 6;
-        Ok(ws.joint_vecs[start..start + 6].to_vec().into_pyarray(py))
+        Ok(self.inner.joint_vec(joint_id, key_order)?.into_pyarray(py))
     }
 
     fn link_momentum<'py>(
@@ -2715,20 +2579,7 @@ impl RustOutwardData {
         link_id: usize,
         key_order: usize,
     ) -> PyResult<Bound<'py, PyArray1<f64>>> {
-        self.check_link_id(link_id)?;
-        self.check_dynamics_computed()?;
-        let vec_index = self.momentum_vec_index(key_order)?;
-        if self.inner.has_cached_order1_dynamics {
-            return Ok(
-                order1_link_momentum_value(&self.inner.robot, &self.inner.dynamics, link_id, vec_index)
-                    .to_vec()
-                    .into_pyarray(py),
-            );
-        }
-        let start = (link_id * (self.inner.dynamics_order + 1) + vec_index) * 6;
-        Ok(self.inner.dynamics.link_momentum[start..start + 6]
-            .to_vec()
-            .into_pyarray(py))
+        Ok(self.inner.link_momentum(link_id, key_order)?.into_pyarray(py))
     }
 
     fn joint_momentum<'py>(
@@ -2737,13 +2588,7 @@ impl RustOutwardData {
         joint_id: usize,
         key_order: usize,
     ) -> PyResult<Bound<'py, PyArray1<f64>>> {
-        self.check_joint_id(joint_id)?;
-        self.check_dynamics_computed()?;
-        let vec_index = self.momentum_vec_index(key_order)?;
-        let start = (joint_id * (self.inner.dynamics_order + 1) + vec_index) * 6;
-        Ok(self.inner.dynamics.joint_momentum[start..start + 6]
-            .to_vec()
-            .into_pyarray(py))
+        Ok(self.inner.joint_momentum(joint_id, key_order)?.into_pyarray(py))
     }
 
     fn world_link_momentum<'py>(
@@ -2752,29 +2597,7 @@ impl RustOutwardData {
         link_id: usize,
         key_order: usize,
     ) -> PyResult<Bound<'py, PyArray1<f64>>> {
-        self.check_link_id(link_id)?;
-        self.check_dynamics_computed()?;
-        self.momentum_vec_index(key_order)?;
-        let ws = self.cmtm_source()?;
-        let mat = mat4_from_flat(&ws.link_mat, link_id);
-        let vecs = cmtm_vecs_slice(&ws.link_vecs, link_id, self.inner.order);
-        if self.inner.has_cached_order1_dynamics {
-            let mut raw = [0.0; 12];
-            for index in 0..key_order {
-                let value = order1_link_momentum_value(&self.inner.robot, &self.inner.dynamics, link_id, index);
-                raw[index * 6..index * 6 + 6].copy_from_slice(&value);
-            }
-            let out = cmtm_world_wrench_value(mat, vecs, &raw[..key_order * 6], key_order);
-            return Ok(out.into_pyarray(py));
-        }
-        let start = link_id * (self.inner.dynamics_order + 1) * 6;
-        let out = cmtm_world_wrench_value(
-            mat,
-            vecs,
-            &self.inner.dynamics.link_momentum[start..start + key_order * 6],
-            key_order,
-        );
-        Ok(out.into_pyarray(py))
+        Ok(self.inner.world_link_momentum(link_id, key_order)?.into_pyarray(py))
     }
 
     fn world_joint_momentum<'py>(
@@ -2783,21 +2606,7 @@ impl RustOutwardData {
         joint_id: usize,
         key_order: usize,
     ) -> PyResult<Bound<'py, PyArray1<f64>>> {
-        self.check_joint_id(joint_id)?;
-        self.check_dynamics_computed()?;
-        self.momentum_vec_index(key_order)?;
-        let link_id = self.inner.robot.child_link[joint_id];
-        let ws = self.cmtm_source()?;
-        let mat = mat4_from_flat(&ws.link_mat, link_id);
-        let vecs = cmtm_vecs_slice(&ws.link_vecs, link_id, self.inner.order);
-        let start = joint_id * (self.inner.dynamics_order + 1) * 6;
-        let out = cmtm_world_wrench_value(
-            mat,
-            vecs,
-            &self.inner.dynamics.joint_momentum[start..start + key_order * 6],
-            key_order,
-        );
-        Ok(out.into_pyarray(py))
+        Ok(self.inner.world_joint_momentum(joint_id, key_order)?.into_pyarray(py))
     }
 
     fn link_force<'py>(
@@ -2806,20 +2615,7 @@ impl RustOutwardData {
         link_id: usize,
         key_order: usize,
     ) -> PyResult<Bound<'py, PyArray1<f64>>> {
-        self.check_link_id(link_id)?;
-        self.check_dynamics_computed()?;
-        let vec_index = self.force_vec_index(key_order)?;
-        if self.inner.has_cached_order1_dynamics {
-            return Ok(
-                order1_link_force_value(&self.inner.robot, &self.inner.dynamics, link_id)
-                    .to_vec()
-                    .into_pyarray(py),
-            );
-        }
-        let start = (link_id * self.inner.dynamics_order + vec_index) * 6;
-        Ok(self.inner.dynamics.link_force[start..start + 6]
-            .to_vec()
-            .into_pyarray(py))
+        Ok(self.inner.link_force(link_id, key_order)?.into_pyarray(py))
     }
 
     fn world_link_force<'py>(
@@ -2828,25 +2624,7 @@ impl RustOutwardData {
         link_id: usize,
         key_order: usize,
     ) -> PyResult<Bound<'py, PyArray1<f64>>> {
-        self.check_link_id(link_id)?;
-        self.check_dynamics_computed()?;
-        self.force_vec_index(key_order)?;
-        let ws = self.cmtm_source()?;
-        let mat = mat4_from_flat(&ws.link_mat, link_id);
-        let vecs = cmtm_vecs_slice(&ws.link_vecs, link_id, self.inner.order);
-        if self.inner.has_cached_order1_dynamics {
-            let force = order1_link_force_value(&self.inner.robot, &self.inner.dynamics, link_id);
-            let out = cmtm_world_wrench_value(mat, vecs, &force, key_order);
-            return Ok(out.into_pyarray(py));
-        }
-        let start = link_id * self.inner.dynamics_order * 6;
-        let out = cmtm_world_wrench_value(
-            mat,
-            vecs,
-            &self.inner.dynamics.link_force[start..start + key_order * 6],
-            key_order,
-        );
-        Ok(out.into_pyarray(py))
+        Ok(self.inner.world_link_force(link_id, key_order)?.into_pyarray(py))
     }
 
     fn world_joint_force<'py>(
@@ -2855,26 +2633,7 @@ impl RustOutwardData {
         joint_id: usize,
         key_order: usize,
     ) -> PyResult<Bound<'py, PyArray1<f64>>> {
-        self.check_joint_id(joint_id)?;
-        self.check_dynamics_computed()?;
-        self.force_vec_index(key_order)?;
-        let link_id = self.inner.robot.child_link[joint_id];
-        let ws = self.cmtm_source()?;
-        let mat = mat4_from_flat(&ws.link_mat, link_id);
-        let vecs = cmtm_vecs_slice(&ws.link_vecs, link_id, self.inner.order);
-        if self.inner.has_cached_order1_dynamics {
-            let force = order1_joint_force_value(&self.inner.robot, &self.inner.dynamics, joint_id);
-            let out = cmtm_world_wrench_value(mat, vecs, &force, key_order);
-            return Ok(out.into_pyarray(py));
-        }
-        let start = joint_id * self.inner.dynamics_order * 6;
-        let out = cmtm_world_wrench_value(
-            mat,
-            vecs,
-            &self.inner.dynamics.joint_force[start..start + key_order * 6],
-            key_order,
-        );
-        Ok(out.into_pyarray(py))
+        Ok(self.inner.world_joint_force(joint_id, key_order)?.into_pyarray(py))
     }
 
     fn joint_force<'py>(
@@ -2883,20 +2642,7 @@ impl RustOutwardData {
         joint_id: usize,
         key_order: usize,
     ) -> PyResult<Bound<'py, PyArray1<f64>>> {
-        self.check_joint_id(joint_id)?;
-        self.check_dynamics_computed()?;
-        let vec_index = self.force_vec_index(key_order)?;
-        if self.inner.has_cached_order1_dynamics {
-            return Ok(
-                order1_joint_force_value(&self.inner.robot, &self.inner.dynamics, joint_id)
-                    .to_vec()
-                    .into_pyarray(py),
-            );
-        }
-        let start = (joint_id * self.inner.dynamics_order + vec_index) * 6;
-        Ok(self.inner.dynamics.joint_force[start..start + 6]
-            .to_vec()
-            .into_pyarray(py))
+        Ok(self.inner.joint_force(joint_id, key_order)?.into_pyarray(py))
     }
 
     fn joint_torque<'py>(
@@ -2905,11 +2651,7 @@ impl RustOutwardData {
         joint_id: usize,
         key_order: usize,
     ) -> PyResult<Bound<'py, PyArray1<f64>>> {
-        self.check_joint_id(joint_id)?;
-        self.check_dynamics_computed()?;
-        let vec_index = self.force_vec_index(key_order)?;
-        let start = joint_id * self.inner.dynamics_order + vec_index;
-        Ok(vec![self.inner.dynamics.joint_torque[start]].into_pyarray(py))
+        Ok(self.inner.joint_torque(joint_id, key_order)?.into_pyarray(py))
     }
 
     fn cmtm_wrench_var_jacob_matvec<'py>(
@@ -3050,6 +2792,28 @@ impl RustOutwardData {
 
 #[pymethods]
 impl RustBatchOutwardData {
+    fn world_link_vec<'py>(&self, py: Python<'py>, link_id: usize, key_order: usize) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        self.check_link_id(link_id)?;
+        self.cmtm_vec_index(key_order)?;
+        if !self.inner.has_kinematics { return Err(PyValueError::new_err("compute_kinematics or compute_dynamics must be called before reading kinematics values")); }
+        let mut out = Vec::with_capacity(self.inner.batch * 6);
+        for sample in 0..self.inner.batch { out.extend(self.inner.world_link_vec(sample, link_id, key_order)?); }
+        Ok(out.into_pyarray(py).reshape([self.inner.batch, 6])?)
+    }
+    fn world_joint_vec<'py>(&self, py: Python<'py>, joint_id: usize, key_order: usize) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        self.check_joint_id(joint_id)?;
+        self.cmtm_vec_index(key_order)?;
+        if !self.inner.has_kinematics { return Err(PyValueError::new_err("compute_kinematics or compute_dynamics must be called before reading kinematics values")); }
+        let mut out = Vec::with_capacity(self.inner.batch * 6);
+        for sample in 0..self.inner.batch { out.extend(self.inner.world_joint_vec(sample, joint_id, key_order)?); }
+        Ok(out.into_pyarray(py).reshape([self.inner.batch, 6])?)
+    }
+
+    fn model_info(&self) -> (usize, Vec<String>, Vec<(String, String, usize, usize, usize, usize)>, bool) {
+        model_info_tuple(self.inner.robot.model_info())
+    }
+
+
     /// Internal allocation diagnostic: shared kinematics and dynamics-only bytes.
     fn _workspace_buffer_bytes(&self) -> (usize, usize) {
         self.inner.dynamics.iter().fold((0, 0), |(kin, dyn_bytes), ws| {
@@ -3074,21 +2838,7 @@ impl RustBatchOutwardData {
 
     fn compute_kinematics(&mut self, motions: PyReadonlyArray2<'_, f64>) -> PyResult<()> {
         self.check_motion_shape(motions.shape())?;
-        let motions = motions.as_slice()?;
-        let motion_len = self.inner.robot.dof * self.inner.order;
-        for sample in 0..self.inner.batch {
-            let start = sample * motion_len;
-            let end = start + motion_len;
-            self.inner.robot.kinematics_cmtm_into(
-                &motions[start..end],
-                self.inner.order,
-                &mut self.inner.dynamics[sample].cmtm,
-            );
-        }
-        self.inner.has_kinematics = true;
-        self.inner.has_dynamics = false;
-        self.inner.has_cached_order1_dynamics = false;
-        Ok(())
+        Ok(self.inner.compute_kinematics(motions.as_slice()?)?)
     }
 
     #[pyo3(signature = (motions, gravity = None))]
@@ -3097,36 +2847,8 @@ impl RustBatchOutwardData {
         motions: PyReadonlyArray2<'_, f64>,
         gravity: Option<PyReadonlyArray1<'_, f64>>,
     ) -> PyResult<()> {
-        if self.inner.order < 2 {
-            return Err(PyValueError::new_err("dynamics data requires order >= 2"));
-        }
-        let gravity = gravity_vec3(gravity)?;
         self.check_motion_shape(motions.shape())?;
-        let motions = motions.as_slice()?;
-        let motion_len = self.inner.robot.dof * self.inner.order;
-        for sample in 0..self.inner.batch {
-            let start = sample * motion_len;
-            let end = start + motion_len;
-            self.inner.dynamics[sample].ensure_dynamics(&self.inner.robot, self.inner.dynamics_order);
-            if self.inner.order == 3 && self.inner.dynamics_order == 1 && gravity == [0.0; 3] {
-                self.inner.robot.dynamics_cmtm_order1_cached_into(
-                    &motions[start..end],
-                    &mut self.inner.dynamics[sample],
-                );
-            } else {
-                self.inner.robot.dynamics_cmtm_into(
-                    &motions[start..end],
-                    self.inner.dynamics_order,
-                    gravity,
-                    &mut self.inner.dynamics[sample],
-                );
-            }
-        }
-        self.inner.has_kinematics = true;
-        self.inner.has_dynamics = true;
-        self.inner.has_cached_order1_dynamics =
-            self.inner.order == 3 && self.inner.dynamics_order == 1 && gravity == [0.0; 3];
-        Ok(())
+        Ok(self.inner.compute_dynamics(motions.as_slice()?, gravity_vec3(gravity)?)?)
     }
 
     #[pyo3(signature = (motions, gravity = None))]
@@ -3135,28 +2857,8 @@ impl RustBatchOutwardData {
         motions: PyReadonlyArray2<'_, f64>,
         gravity: Option<PyReadonlyArray1<'_, f64>>,
     ) -> PyResult<()> {
-        if self.inner.order < 2 {
-            return Err(PyValueError::new_err("dynamics data requires order >= 2"));
-        }
-        let gravity = gravity_vec3(gravity)?;
         self.check_motion_shape(motions.shape())?;
-        let motions = motions.as_slice()?;
-        let motion_len = self.inner.robot.dof * self.inner.order;
-        for sample in 0..self.inner.batch {
-            let start = sample * motion_len;
-            let end = start + motion_len;
-            self.inner.dynamics[sample].ensure_dynamics(&self.inner.robot, self.inner.dynamics_order);
-            self.inner.robot.dynamics_cmtm_minimal_into(
-                &motions[start..end],
-                self.inner.dynamics_order,
-                gravity,
-                &mut self.inner.dynamics[sample],
-            );
-        }
-        self.inner.has_kinematics = true;
-        self.inner.has_dynamics = true;
-        self.inner.has_cached_order1_dynamics = false;
-        Ok(())
+        Ok(self.inner.compute_dynamics_minimal(motions.as_slice()?, gravity_vec3(gravity)?)?)
     }
 
     fn link_mat<'py>(
@@ -3165,12 +2867,9 @@ impl RustBatchOutwardData {
         link_id: usize,
     ) -> PyResult<Bound<'py, PyArray3<f64>>> {
         self.check_link_id(link_id)?;
-        let mut out = vec![0.0; self.inner.batch * 16];
+        let mut out = Vec::with_capacity(self.inner.batch * 16);
         for sample in 0..self.inner.batch {
-            let ws = self.cmtm_source(sample)?;
-            let src = link_id * 16;
-            let dst = sample * 16;
-            out[dst..dst + 16].copy_from_slice(&ws.link_mat[src..src + 16]);
+            out.extend(self.inner.link_mat(sample, link_id)?);
         }
         Ok(out.into_pyarray(py).reshape([self.inner.batch, 4, 4])?)
     }
@@ -3181,19 +2880,9 @@ impl RustBatchOutwardData {
         joint_id: usize,
     ) -> PyResult<Bound<'py, PyArray3<f64>>> {
         self.check_joint_id(joint_id)?;
-        let mut out = vec![0.0; self.inner.batch * 16];
+        let mut out = Vec::with_capacity(self.inner.batch * 16);
         for sample in 0..self.inner.batch {
-            let dst = sample * 16;
-            if self.inner.has_cached_order1_dynamics {
-                let mat = order1_joint_mat_value(&self.inner.robot, &self.inner.dynamics[sample], joint_id);
-                for row in 0..4 {
-                    out[dst + row * 4..dst + row * 4 + 4].copy_from_slice(&mat[row]);
-                }
-            } else {
-                let ws = self.cmtm_source(sample)?;
-                let src = joint_id * 16;
-                out[dst..dst + 16].copy_from_slice(&ws.joint_mat[src..src + 16]);
-            }
+            out.extend(self.inner.joint_mat(sample, joint_id)?);
         }
         Ok(out.into_pyarray(py).reshape([self.inner.batch, 4, 4])?)
     }
@@ -3205,13 +2894,10 @@ impl RustBatchOutwardData {
         key_order: usize,
     ) -> PyResult<Bound<'py, PyArray2<f64>>> {
         self.check_link_id(link_id)?;
-        let vec_index = self.cmtm_vec_index(key_order)?;
-        let mut out = vec![0.0; self.inner.batch * 6];
+        self.cmtm_vec_index(key_order)?;
+        let mut out = Vec::with_capacity(self.inner.batch * 6);
         for sample in 0..self.inner.batch {
-            let ws = self.cmtm_source(sample)?;
-            let src = (link_id * (self.inner.order - 1) + vec_index) * 6;
-            let dst = sample * 6;
-            out[dst..dst + 6].copy_from_slice(&ws.link_vecs[src..src + 6]);
+            out.extend(self.inner.link_vec(sample, link_id, key_order)?);
         }
         Ok(out.into_pyarray(py).reshape([self.inner.batch, 6])?)
     }
@@ -3223,22 +2909,10 @@ impl RustBatchOutwardData {
         key_order: usize,
     ) -> PyResult<Bound<'py, PyArray2<f64>>> {
         self.check_joint_id(joint_id)?;
-        let vec_index = self.cmtm_vec_index(key_order)?;
-        let mut out = vec![0.0; self.inner.batch * 6];
+        self.cmtm_vec_index(key_order)?;
+        let mut out = Vec::with_capacity(self.inner.batch * 6);
         for sample in 0..self.inner.batch {
-            let dst = sample * 6;
-            if self.inner.has_cached_order1_dynamics {
-                out[dst..dst + 6].copy_from_slice(&order1_joint_vec_value(
-                    &self.inner.robot,
-                    &self.inner.dynamics[sample],
-                    joint_id,
-                    vec_index,
-                ));
-            } else {
-                let ws = self.cmtm_source(sample)?;
-                let src = (joint_id * (self.inner.order - 1) + vec_index) * 6;
-                out[dst..dst + 6].copy_from_slice(&ws.joint_vecs[src..src + 6]);
-            }
+            out.extend(self.inner.joint_vec(sample, joint_id, key_order)?);
         }
         Ok(out.into_pyarray(py).reshape([self.inner.batch, 6])?)
     }
@@ -3251,22 +2925,10 @@ impl RustBatchOutwardData {
     ) -> PyResult<Bound<'py, PyArray2<f64>>> {
         self.check_link_id(link_id)?;
         self.check_dynamics_computed()?;
-        let vec_index = self.momentum_vec_index(key_order)?;
-        let mut out = vec![0.0; self.inner.batch * 6];
+        self.momentum_vec_index(key_order)?;
+        let mut out = Vec::with_capacity(self.inner.batch * 6);
         for sample in 0..self.inner.batch {
-            let dst = sample * 6;
-            if self.inner.has_cached_order1_dynamics {
-                out[dst..dst + 6].copy_from_slice(&order1_link_momentum_value(
-                    &self.inner.robot,
-                    &self.inner.dynamics[sample],
-                    link_id,
-                    vec_index,
-                ));
-            } else {
-                let src = (link_id * (self.inner.dynamics_order + 1) + vec_index) * 6;
-                out[dst..dst + 6]
-                    .copy_from_slice(&self.inner.dynamics[sample].link_momentum[src..src + 6]);
-            }
+            out.extend(self.inner.link_momentum(sample, link_id, key_order)?);
         }
         Ok(out.into_pyarray(py).reshape([self.inner.batch, 6])?)
     }
@@ -3279,12 +2941,10 @@ impl RustBatchOutwardData {
     ) -> PyResult<Bound<'py, PyArray2<f64>>> {
         self.check_joint_id(joint_id)?;
         self.check_dynamics_computed()?;
-        let vec_index = self.momentum_vec_index(key_order)?;
-        let mut out = vec![0.0; self.inner.batch * 6];
+        self.momentum_vec_index(key_order)?;
+        let mut out = Vec::with_capacity(self.inner.batch * 6);
         for sample in 0..self.inner.batch {
-            let src = (joint_id * (self.inner.dynamics_order + 1) + vec_index) * 6;
-            let dst = sample * 6;
-            out[dst..dst + 6].copy_from_slice(&self.inner.dynamics[sample].joint_momentum[src..src + 6]);
+            out.extend(self.inner.joint_momentum(sample, joint_id, key_order)?);
         }
         Ok(out.into_pyarray(py).reshape([self.inner.batch, 6])?)
     }
@@ -3298,34 +2958,9 @@ impl RustBatchOutwardData {
         self.check_link_id(link_id)?;
         self.check_dynamics_computed()?;
         self.momentum_vec_index(key_order)?;
-        let mut out = vec![0.0; self.inner.batch * 6];
+        let mut out = Vec::with_capacity(self.inner.batch * 6);
         for sample in 0..self.inner.batch {
-            let ws = self.cmtm_source(sample)?;
-            let mat = mat4_from_flat(&ws.link_mat, link_id);
-            let vecs = cmtm_vecs_slice(&ws.link_vecs, link_id, self.inner.order);
-            if self.inner.has_cached_order1_dynamics {
-                let mut raw = [0.0; 12];
-                for index in 0..key_order {
-                    let value = order1_link_momentum_value(
-                        &self.inner.robot,
-                        &self.inner.dynamics[sample],
-                        link_id,
-                        index,
-                    );
-                    raw[index * 6..index * 6 + 6].copy_from_slice(&value);
-                }
-                let value = cmtm_world_wrench_value(mat, vecs, &raw[..key_order * 6], key_order);
-                out[sample * 6..sample * 6 + 6].copy_from_slice(&value);
-                continue;
-            }
-            let src = link_id * (self.inner.dynamics_order + 1) * 6;
-            let value = cmtm_world_wrench_value(
-                mat,
-                vecs,
-                &self.inner.dynamics[sample].link_momentum[src..src + key_order * 6],
-                key_order,
-            );
-            out[sample * 6..sample * 6 + 6].copy_from_slice(&value);
+            out.extend(self.inner.world_link_momentum(sample, link_id, key_order)?);
         }
         Ok(out.into_pyarray(py).reshape([self.inner.batch, 6])?)
     }
@@ -3339,20 +2974,9 @@ impl RustBatchOutwardData {
         self.check_joint_id(joint_id)?;
         self.check_dynamics_computed()?;
         self.momentum_vec_index(key_order)?;
-        let link_id = self.inner.robot.child_link[joint_id];
-        let mut out = vec![0.0; self.inner.batch * 6];
+        let mut out = Vec::with_capacity(self.inner.batch * 6);
         for sample in 0..self.inner.batch {
-            let ws = self.cmtm_source(sample)?;
-            let mat = mat4_from_flat(&ws.link_mat, link_id);
-            let vecs = cmtm_vecs_slice(&ws.link_vecs, link_id, self.inner.order);
-            let src = joint_id * (self.inner.dynamics_order + 1) * 6;
-            let value = cmtm_world_wrench_value(
-                mat,
-                vecs,
-                &self.inner.dynamics[sample].joint_momentum[src..src + key_order * 6],
-                key_order,
-            );
-            out[sample * 6..sample * 6 + 6].copy_from_slice(&value);
+            out.extend(self.inner.world_joint_momentum(sample, joint_id, key_order)?);
         }
         Ok(out.into_pyarray(py).reshape([self.inner.batch, 6])?)
     }
@@ -3365,20 +2989,10 @@ impl RustBatchOutwardData {
     ) -> PyResult<Bound<'py, PyArray2<f64>>> {
         self.check_link_id(link_id)?;
         self.check_dynamics_computed()?;
-        let vec_index = self.force_vec_index(key_order)?;
-        let mut out = vec![0.0; self.inner.batch * 6];
+        self.force_vec_index(key_order)?;
+        let mut out = Vec::with_capacity(self.inner.batch * 6);
         for sample in 0..self.inner.batch {
-            let dst = sample * 6;
-            if self.inner.has_cached_order1_dynamics {
-                out[dst..dst + 6].copy_from_slice(&order1_link_force_value(
-                    &self.inner.robot,
-                    &self.inner.dynamics[sample],
-                    link_id,
-                ));
-            } else {
-                let src = (link_id * self.inner.dynamics_order + vec_index) * 6;
-                out[dst..dst + 6].copy_from_slice(&self.inner.dynamics[sample].link_force[src..src + 6]);
-            }
+            out.extend(self.inner.link_force(sample, link_id, key_order)?);
         }
         Ok(out.into_pyarray(py).reshape([self.inner.batch, 6])?)
     }
@@ -3392,25 +3006,9 @@ impl RustBatchOutwardData {
         self.check_link_id(link_id)?;
         self.check_dynamics_computed()?;
         self.force_vec_index(key_order)?;
-        let mut out = vec![0.0; self.inner.batch * 6];
+        let mut out = Vec::with_capacity(self.inner.batch * 6);
         for sample in 0..self.inner.batch {
-            let ws = self.cmtm_source(sample)?;
-            let mat = mat4_from_flat(&ws.link_mat, link_id);
-            let vecs = cmtm_vecs_slice(&ws.link_vecs, link_id, self.inner.order);
-            if self.inner.has_cached_order1_dynamics {
-                let force = order1_link_force_value(&self.inner.robot, &self.inner.dynamics[sample], link_id);
-                let value = cmtm_world_wrench_value(mat, vecs, &force, key_order);
-                out[sample * 6..sample * 6 + 6].copy_from_slice(&value);
-                continue;
-            }
-            let src = link_id * self.inner.dynamics_order * 6;
-            let value = cmtm_world_wrench_value(
-                mat,
-                vecs,
-                &self.inner.dynamics[sample].link_force[src..src + key_order * 6],
-                key_order,
-            );
-            out[sample * 6..sample * 6 + 6].copy_from_slice(&value);
+            out.extend(self.inner.world_link_force(sample, link_id, key_order)?);
         }
         Ok(out.into_pyarray(py).reshape([self.inner.batch, 6])?)
     }
@@ -3424,26 +3022,9 @@ impl RustBatchOutwardData {
         self.check_joint_id(joint_id)?;
         self.check_dynamics_computed()?;
         self.force_vec_index(key_order)?;
-        let link_id = self.inner.robot.child_link[joint_id];
-        let mut out = vec![0.0; self.inner.batch * 6];
+        let mut out = Vec::with_capacity(self.inner.batch * 6);
         for sample in 0..self.inner.batch {
-            let ws = self.cmtm_source(sample)?;
-            let mat = mat4_from_flat(&ws.link_mat, link_id);
-            let vecs = cmtm_vecs_slice(&ws.link_vecs, link_id, self.inner.order);
-            if self.inner.has_cached_order1_dynamics {
-                let force = order1_joint_force_value(&self.inner.robot, &self.inner.dynamics[sample], joint_id);
-                let value = cmtm_world_wrench_value(mat, vecs, &force, key_order);
-                out[sample * 6..sample * 6 + 6].copy_from_slice(&value);
-                continue;
-            }
-            let src = joint_id * self.inner.dynamics_order * 6;
-            let value = cmtm_world_wrench_value(
-                mat,
-                vecs,
-                &self.inner.dynamics[sample].joint_force[src..src + key_order * 6],
-                key_order,
-            );
-            out[sample * 6..sample * 6 + 6].copy_from_slice(&value);
+            out.extend(self.inner.world_joint_force(sample, joint_id, key_order)?);
         }
         Ok(out.into_pyarray(py).reshape([self.inner.batch, 6])?)
     }
@@ -3456,20 +3037,10 @@ impl RustBatchOutwardData {
     ) -> PyResult<Bound<'py, PyArray2<f64>>> {
         self.check_joint_id(joint_id)?;
         self.check_dynamics_computed()?;
-        let vec_index = self.force_vec_index(key_order)?;
-        let mut out = vec![0.0; self.inner.batch * 6];
+        self.force_vec_index(key_order)?;
+        let mut out = Vec::with_capacity(self.inner.batch * 6);
         for sample in 0..self.inner.batch {
-            let dst = sample * 6;
-            if self.inner.has_cached_order1_dynamics {
-                out[dst..dst + 6].copy_from_slice(&order1_joint_force_value(
-                    &self.inner.robot,
-                    &self.inner.dynamics[sample],
-                    joint_id,
-                ));
-            } else {
-                let src = (joint_id * self.inner.dynamics_order + vec_index) * 6;
-                out[dst..dst + 6].copy_from_slice(&self.inner.dynamics[sample].joint_force[src..src + 6]);
-            }
+            out.extend(self.inner.joint_force(sample, joint_id, key_order)?);
         }
         Ok(out.into_pyarray(py).reshape([self.inner.batch, 6])?)
     }
@@ -3482,11 +3053,10 @@ impl RustBatchOutwardData {
     ) -> PyResult<Bound<'py, PyArray2<f64>>> {
         self.check_joint_id(joint_id)?;
         self.check_dynamics_computed()?;
-        let vec_index = self.force_vec_index(key_order)?;
-        let mut out = vec![0.0; self.inner.batch];
+        self.force_vec_index(key_order)?;
+        let mut out = Vec::with_capacity(self.inner.batch * 1);
         for sample in 0..self.inner.batch {
-            let src = joint_id * self.inner.dynamics_order + vec_index;
-            out[sample] = self.inner.dynamics[sample].joint_torque[src];
+            out.extend(self.inner.joint_torque(sample, joint_id, key_order)?);
         }
         Ok(out.into_pyarray(py).reshape([self.inner.batch, 1])?)
     }
@@ -3675,7 +3245,7 @@ fn mat4_from_slice(slice: &[f64]) -> [[f64; 4]; 4] {
 impl RustSelectedWorkspace {
     /// Number of actual primal evaluations (kinematics-only, dynamics, cached samples).
     fn cache_info(&self) -> (usize, usize, usize) {
-        (self.inner.kinematics_evaluations, self.inner.dynamics_evaluations, self.inner.primal.len())
+        self.inner.cache_info()
     }
 
     #[pyo3(signature = (motions, rhs, outputs, gravity = None, transpose = false))]
@@ -3693,52 +3263,8 @@ impl RustSelectedWorkspace {
         if motions.shape()[1] != input_len || rhs.shape()[..2] != [batch, rhs_rows] {
             return Err(PyValueError::new_err("selected workspace motion or RHS shape is invalid"));
         }
-        let motion = motions.as_slice()?;
-        let rhs = rhs.as_slice()?;
-        let gravity = gravity_vec3(gravity)?;
-        for i in 0..batch {
-            self.inner.robot.check_cmtm_motion(&motion[i*input_len..(i+1)*input_len], self.inner.order)?;
-        }
-        let dynamic = outputs.iter().any(|x| x.2 < 3);
-        let replace = self.inner.primal.len() != batch || self.inner.dynamic != dynamic;
-        if replace {
-            self.inner.primal = (0..batch).map(|_| if dynamic {
-                DynamicsCmtmWorkspace::new(&self.inner.robot, self.inner.order-2)
-            } else { DynamicsCmtmWorkspace::kinematics_only(&self.inner.robot, self.inner.order) }).collect();
-            self.inner.tangent = None;
-            self.inner.ready = false;
-        }
-        let changed_gravity = dynamic && self.inner.gravity != gravity;
-        for i in 0..batch {
-            let sample = &motion[i*input_len..(i+1)*input_len];
-            if !self.inner.ready || changed_gravity || self.inner.motion[i*input_len..(i+1)*input_len] != *sample {
-                if dynamic {
-                    self.inner.robot.dynamics_cmtm_into(sample, self.inner.order-2, gravity, &mut self.inner.primal[i]);
-                    self.inner.dynamics_evaluations += 1;
-                } else {
-                    self.inner.robot.kinematics_cmtm_into(sample, self.inner.order, &mut self.inner.primal[i].cmtm);
-                    self.inner.kinematics_evaluations += 1;
-                }
-            }
-        }
-        self.inner.motion.clear(); self.inner.motion.extend_from_slice(motion);
-        self.inner.gravity = gravity; self.inner.dynamic = dynamic; self.inner.ready = true;
-        if !transpose && self.inner.tangent.as_ref().map(|x| x.rhs_cols) != Some(cols) {
-            self.inner.tangent = Some(if dynamic {
-                DynamicsCmtmTangentWorkspace::new(&self.inner.robot, self.inner.order-2, cols)
-            } else { DynamicsCmtmTangentWorkspace::kinematics_only(&self.inner.robot, self.inner.order, cols) });
-        }
-        let mut out = vec![0.0; batch*out_rows*cols];
-        for i in 0..batch {
-            let sample = &motion[i*input_len..(i+1)*input_len];
-            let directions = &rhs[i*rhs_rows*cols..(i+1)*rhs_rows*cols];
-            let result = &mut out[i*out_rows*cols..(i+1)*out_rows*cols];
-            if transpose {
-                self.inner.robot.selected_reverse_from_state_into(sample, directions, &outputs, self.inner.order, gravity, cols, &mut self.inner.primal[i], result);
-            } else {
-                self.inner.robot.selected_tangent_from_state_into(sample, directions, &outputs, self.inner.order, gravity, &mut self.inner.primal[i], self.inner.tangent.as_mut().unwrap(), result);
-            }
-        }
+        let out = self.inner.apply_raw(motions.as_slice()?, rhs.as_slice()?, &outputs, batch, cols,
+                                   gravity_vec3(gravity)?, transpose)?;
         Ok(out.into_pyarray(py).reshape([batch, out_rows, cols])?)
     }
 }

@@ -366,6 +366,12 @@ class StateOutput:
     frame: str
 
 
+def is_joint_coordinate_state(state: StateType) -> bool:
+    """Bare joint jerk is a coordinate derivative; framed jerk is spatial."""
+    return (state.owner_type == 'joint' and state.data_type in keys_joint_motion
+            and not (state.data_type == 'jerk' and state.frame_name in ('local', 'world')))
+
+
 def state_output(robot, state: StateType, dim: int = 3) -> StateOutput:
     if state.owner_type not in ('link', 'joint'):
         raise ValueError('state output requires expanded link/joint owners')
@@ -377,7 +383,7 @@ def state_output(robot, state: StateType, dim: int = 3) -> StateOutput:
         raise ValueError(f'Invalid frame: {frame}')
     key = state.data_type
     derivative = state.key_order - 1
-    if state.owner_type == 'joint' and key in keys_joint_motion:
+    if is_joint_coordinate_state(state):
         family, width = 'coordinate', owner.dof
     elif key in keys_momentum:
         family, width = 'momentum', dim_to_dof(dim)

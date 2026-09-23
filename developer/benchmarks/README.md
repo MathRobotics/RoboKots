@@ -591,3 +591,25 @@ serialization plus compilation; it excludes URDF parsing and process/import
 startup. The spatial benchmark separates state computation from dense/JVP/VJP
 calls on already computed states, including warmed derivative caches.
 JSON files retain first calls, raw samples, extension hashes, and output values.
+
+## Native-first Model Input
+
+```bash
+.venv/bin/python -m developer.benchmarks.native_model_input_compare --output developer/benchmarks/results/native_model_input.json
+```
+
+Compares legacy Python model construction and native-first JSON/dictionary/URDF
+input in the same build, using alternating measurement order. Includes model
+preparation, first dynamics, and repeated state/dense/JVP/VJP operations.
+See the [input-path report](results/native_model_input_comparison.md).
+
+## Native World State Values
+
+```bash
+.venv/bin/python -m developer.benchmarks.world_state_values --output developer/benchmarks/results/world_state_after.json
+```
+
+Measures computed world spatial values and cached dense/JVP/VJP separately for
+single and multidimensional batch inputs. `--reference` uses the previous
+Python transform for a comparison on the current dispatch path.
+See the [world-state/API report](results/world_state_comparison.md).
