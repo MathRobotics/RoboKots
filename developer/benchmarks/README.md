@@ -613,3 +613,17 @@ Measures computed world spatial values and cached dense/JVP/VJP separately for
 single and multidimensional batch inputs. `--reference` uses the previous
 Python transform for a comparison on the current dispatch path.
 See the [world-state/API report](results/world_state_comparison.md).
+
+
+### NumPy-only / Rust on-demand computation
+
+```bash
+.venv/bin/python -m developer.benchmarks.numpy_backend_compare
+```
+
+Compares energy values/JVP/VJP and inverse/forward dynamics on identical
+scalar and six-sample inputs. Model construction is excluded; primal/state
+computation and boundary conversions are included. This is a same-build
+backend comparison, not a historical before/after result. Environment,
+first-call times, medians, and absolute/relative errors are saved to
+`results/numpy_backend_compare.json` and `.md`.

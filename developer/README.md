@@ -564,3 +564,31 @@ kinematics and dynamics-only numerical capacities; it excludes model copies,
 object headers, allocator overhead and Python outputs. See
 [allocation and timing measurements](benchmarks/results/shared_workspace.md).
 This does not change the existing cache of workspaces by order and batch shape.
+
+
+### NumPy-only computation
+
+Use `Kots.from_json_file(..., backend="numpy")` (also available for dict and
+URDF input) to select NumPy for state computation and on-demand energy,
+inverse dynamics, forward dynamics, and `create_inward_cache()`. This path
+requires no RoboKots Rust extension. `lib="numpy"` alone selects the array
+library and is not a backend policy.
+
+Energy uses `0.5 * v.T @ I @ v` per rigid link; its analytic JVP/VJP use the
+existing direct kinematics products without constructing a dense Jacobian.
+NumPy inverse dynamics uses the outward recurrence. NumPy forward dynamics
+constructs the mass matrix and solves it with `numpy.linalg.solve`; its cache
+reuses the mass matrix and bias. These are different algorithms from Rust ABA
+and can be substantially slower. Inverse/forward dynamics currently support
+rigid fixed-base models with fixed/revolute/prismatic joints.
+
+For on-demand energy and inward operations, an explicit method `backend`
+argument wins; otherwise the latest successful state computation's backend
+wins, followed by the input backend. Thus `dynamics(backend="numpy")` on a
+native-first instance also makes subsequent energy/inward calls use NumPy.
+State-building methods without a backend argument still follow the input
+backend. An inward cache retains the backend selected at creation.
+For legacy construction without an input backend or any computed state,
+on-demand operations retain the Rust default. `forward_dynamics`'s
+`reference` alias now also uses NumPy inverse dynamics, with no hidden Rust call.
+An explicit `jacobian_autodiff()` still requests JAX.

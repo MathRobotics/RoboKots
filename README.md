@@ -116,6 +116,12 @@ To avoid building the full Python model before using Rust, specify
 when needed. URDF XML parsing still uses the Python reader.
 See [native-first model input](developer/README.md#native-first-model-input).
 
+For NumPy-only computation, pass `backend="numpy"` to the same constructors.
+State/Jacobian calculations, kinetic energy and its products, inverse/forward
+dynamics, and inward caches then run without the RoboKots Rust extension.
+See [NumPy-only computation](developer/README.md#numpy-only-computation) for
+backend selection and performance differences.
+
 The gravity-aware API uses the Rust fixed/revolute/prismatic RNEA backend.
 Higher-order force and torque derivatives can include gravity as well. The
 `dynamics()` default remains zero gravity for backward compatibility:
