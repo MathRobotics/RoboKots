@@ -477,3 +477,169 @@ impl RustCompiledRobot {
         );
     }
 }
+
+// Taylor blocks of Ad(T), not a (6*order)-square CMTM matrix.
+type MotionBlock = [[f64; 6]; 6];
+type MotionSeries = Vec<[f64; 6]>;
+
+/// Cached transform/screw coefficients shared by all RHS directions. These are
+/// route geometry, not an assembled output-by-motion Jacobian.
+pub(crate) struct KinematicRouteWorkspace {
+    outputs: Vec<DynamicsOutput>,
+    adj: Vec<Vec<MotionBlock>>,
+    routes: Vec<Vec<(usize, MotionSeries)>>,
+}
+
+fn motion_adjoint_blocks(primal: &CmtmWorkspace, link: usize, order: usize, inverse: bool) -> Vec<MotionBlock> {
+    let mut blocks = vec![[[0.0; 6]; 6]; order];
+    let mat = mat4_from_flat(&primal.link_mat, link);
+    let vecs = cmtm_vecs_slice(&primal.link_vecs, link, order);
+    if inverse {
+        cmtm_mat_inv_adj_wrench_blocks_into(mat, vecs, order, &primal.factorial, &mut blocks);
+    } else {
+        cmtm_mat_adj_wrench_blocks_into(mat, vecs, order, &primal.factorial, &mut blocks);
+    }
+    for block in &mut blocks {
+        let wrench = *block;
+        for r in 0..6 { for c in 0..6 { block[r][c] = wrench[(r+3)%6][(c+3)%6]; }}
+    }
+    blocks
+}
+
+// Scatter a single six-component column of a route block. Products consume the
+// column immediately; only the explicitly requested dense API stores a Jacobian.
+fn apply_route_column(value: [f64; 6], width: usize, row: usize, input: usize,
+                      input_len: usize, rhs: Option<&[f64]>, cols: usize,
+                      transpose: bool, out: &mut [f64]) {
+    for c in 0..width {
+        let value = value[c];
+        if value == 0.0 { continue; }
+        match rhs {
+            None => out[(row+c)*input_len+input] += value,
+            Some(rhs) => {
+                for col in 0..cols {
+                    if transpose { out[input*cols+col] += value*rhs[(row+c)*cols+col]; }
+                    else { out[(row+c)*cols+col] += value*rhs[input*cols+col]; }
+                }
+            }
+        }
+    }
+}
+
+impl RustCompiledRobot {
+    /// Assemble selected kinematic blocks along ancestor routes. Let eta be a
+    /// body's pose variation. For an ancestor joint j, eta(t) = b_j(t) dq_j(t),
+    /// b_j = Ad(T_body^-1 T_child(j)) S_j. Then dv = eta_dot + [v, eta].
+    /// World absolute motion simplifies to d(Ad(T)v) = Ad(T) eta_dot.
+    /// All series here use Taylor coefficients; public rows/columns are ordinary
+    /// derivatives. No full CMTM, identity seed, or whole-robot Jacobian is built.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn kinematics_route_apply_into(
+        &self, primal: &CmtmWorkspace, outputs: &[DynamicsOutput], order: usize,
+        rhs: Option<&[f64]>, cols: usize, transpose: bool, out: &mut [f64],
+        cache: &mut Option<KinematicRouteWorkspace>,
+    ) {
+        let input_len = self.dof*order;
+        let fact = &primal.factorial;
+        if cache.as_ref().map(|c| c.outputs.as_slice()) != Some(outputs) {
+            let mut active = vec![0; self.dof];
+            for j in 0..self.joint_num { if self.q_index[j] >= 0 { active[self.q_index[j] as usize] = j; }}
+            let mut needed = vec![false; self.link_num];
+            let mut targets = vec![false; self.link_num];
+            for &(owner, id, family, _, world) in outputs {
+                debug_assert!(family >= 3);
+                if owner == 0 || (family == 3 && world) {
+                    let link = if owner == 0 { id } else { self.child_link[id] };
+                    targets[link] = true;
+                    needed[link] = true;
+                    for &qi in &self.link_ancestors[link] { needed[self.child_link[active[qi]]] = true; }
+                }
+            }
+            let adj: Vec<_> = needed.iter().enumerate().map(|(link, needed)| {
+                if *needed { motion_adjoint_blocks(primal, link, order, false) } else { Vec::new() }
+            }).collect();
+            let mut screws = vec![Vec::new(); self.dof];
+            for (qi, &j) in active.iter().enumerate() {
+                let axis = [self.axis[j][0],self.axis[j][1],self.axis[j][2],0.0,0.0,0.0];
+                screws[qi] = adj[self.child_link[j]].iter().map(|a| mat6_vec6(*a, axis)).collect();
+            }
+            let mut routes: Vec<Vec<(usize, MotionSeries)>> = vec![Vec::new(); self.link_num];
+            for link in 0..self.link_num {
+                if !targets[link] { continue; }
+                let inverse = motion_adjoint_blocks(primal, link, order, true);
+                for &qi in &self.link_ancestors[link] {
+                    let mut b = vec![[0.0; 6]; order];
+                    for n in 0..order { for a in 0..=n {
+                        b[n] = add6(b[n], mat6_vec6(inverse[a], screws[qi][n-a]));
+                    }}
+                    routes[link].push((qi, b));
+                }
+            }
+            *cache = Some(KinematicRouteWorkspace { outputs: outputs.to_vec(), adj, routes });
+        }
+        let geometry = cache.as_ref().unwrap();
+        let adj = &geometry.adj;
+        let routes = &geometry.routes;
+        let mut row = 0;
+        for &(owner, id, family, n, world) in outputs {
+            let width = output_width(family);
+            if owner == 1 && (family >= 4 || !world) {
+                // Relative joint pose/motion has no ancestor contribution.
+                if self.q_index[id] >= 0 {
+                    let qi = self.q_index[id] as usize;
+                    let axis = [self.axis[id][0],self.axis[id][1],self.axis[id][2],0.0,0.0,0.0];
+                    let (value, derivative) = if family >= 4 {
+                        let mat = mat4_from_flat(&primal.joint_mat, id);
+                        (pose_tangent(mat, mat4_mul_hat_se3(mat, axis), family, world), 0)
+                    } else { (axis, n+1) };
+                    apply_route_column(value, width, row, qi*order+derivative, input_len, rhs, cols, transpose, out);
+                }
+                row += width;
+                continue;
+            }
+            let link = if owner == 0 { id } else { self.child_link[id] };
+            let mat = mat4_from_flat(&primal.link_mat, link);
+            let velocities = cmtm_vecs_slice(&primal.link_vecs, link, order);
+            for (qi, b) in &routes[link] {
+                if family >= 4 {
+                    let value = pose_tangent(mat, mat4_mul_hat_se3(mat, b[0]), family, world);
+                    apply_route_column(value, width, row, qi*order, input_len, rhs, cols, transpose, out);
+                    continue;
+                }
+                for r in 0..=n+1 {
+                    let mut value = [0.0; 6];
+                    if owner == 1 {
+                        // Relative joint velocity expressed in its child's world
+                        // frame: d(A u) = A ([eta,u] + du). Keep u relative.
+                        let joint_velocities = cmtm_vecs_slice(&primal.joint_vecs, id, order);
+                        if r <= n {
+                            for a in 0..=n-r { for k in r..=n-a {
+                                let u = scale6(vec6_from_flat(joint_velocities, n-a-k), 1.0/fact[n-a-k]);
+                                value = add6(value, mat6_vec6(adj[link][a], hat_adj_motion_vec6(b[k-r], u)));
+                            }}
+                        }
+                    } else if world {
+                        for a in 0..=n {
+                            if n-a+1 >= r {
+                                value = add6(value, scale6(mat6_vec6(adj[link][a], b[n-a+1-r]), (n-a+1) as f64));
+                            }
+                        }
+                    } else {
+                        value = scale6(b[n+1-r], (n+1) as f64);
+                        if r <= n { for k in 0..=n-r {
+                            let v = scale6(vec6_from_flat(velocities, k), 1.0/fact[k]);
+                            value = add6(value, hat_adj_motion_vec6(v, b[n-k-r]));
+                        }}
+                    }
+                    value = scale6(value, fact[n]/fact[r]);
+                    if owner == 1 && self.q_index[id] == *qi as isize && r > 0 {
+                        let axis = [self.axis[id][0],self.axis[id][1],self.axis[id][2],0.0,0.0,0.0];
+                        value = add6(value, scale6(mat6_vec6(adj[link][n+1-r], axis), fact[n]/fact[r-1]));
+                    }
+                    apply_route_column(value, width, row, qi*order+r, input_len, rhs, cols, transpose, out);
+                }
+            }
+            row += width;
+        }
+    }
+}

@@ -15,11 +15,12 @@ class RustDerivativesMixin:
   def _rust_selected_dynamics_specs(self, states, max_order):
     """Select dynamics, spatial motion and pose tangents in public output order.
 
-    Joint motion coordinates are not spatial CMTM entries.
+    Order-three torque products use the cached RNEA linearization. Joint motion
+    coordinates are not spatial CMTM entries.
     """
     if not hasattr(self.outward_state_, "raw_data") or self.dim_ != 3 or max_order < 1:
       return None
-    if not states or all(st.data_type in keys_torque and st.frame_name is None for st in states):
+    if not states or (max_order != 3 and all(st.data_type in keys_torque and st.frame_name is None for st in states)):
       return None
     specs, widths = [], []
     model_info = self._rust_model_info()
@@ -67,14 +68,26 @@ class RustDerivativesMixin:
     return [result[..., offsets[i]:offsets[i + 1], :] if rhs_is_matrix else result[..., offsets[i]:offsets[i + 1]] for i in range(len(widths))]
 
   def _rust_selected_dynamics_jacobian(self, states, max_order, list_output=False):
-    if self._rust_selected_dynamics_specs(states, max_order) is None:
+    spec = self._rust_selected_dynamics_specs(states, max_order)
+    if spec is None:
       return None
-    batch_shape = np.asarray(self.motion(max_order)).shape[:-1]
-    input_dim = self._model_metadata.dof * max_order
-    basis = np.broadcast_to(np.eye(input_dim), batch_shape + (input_dim, input_dim))
-    return self._rust_selected_dynamics_apply(
-      states, max_order, basis, batch_shape, rhs_is_matrix=True, list_output=list_output,
-    )
+    specs, widths = spec
+    motion = np.asarray(self.motion(max_order), dtype=float)
+    batch_shape = motion.shape[:-1]
+    input_dim = self._rust_model_info().dof * max_order
+    batch_size = int(np.prod(batch_shape)) if batch_shape else 1
+    robot = self._rust_compiled_robot()
+    cached = getattr(self, "_rust_selected_workspace_", None)
+    if cached is None or cached[0] is not robot or cached[1] != max_order:
+      cached = (robot, max_order, robot.create_selected_workspace(max_order))
+      self._rust_selected_workspace_ = cached
+    result = np.asarray(cached[2].jacobian(
+      np.ascontiguousarray(motion.reshape(batch_size, input_dim)), specs, gravity=self.gravity_,
+    )).reshape(batch_shape + (sum(widths), input_dim))
+    if not list_output:
+      return result
+    offsets = np.cumsum([0] + widths)
+    return [result[..., offsets[i]:offsets[i+1], :] for i in range(len(widths))]
 
   def _rust_torque_row_parts(self, state_type_list, max_order : int):
     if not hasattr(self.outward_state_, "raw_data"):

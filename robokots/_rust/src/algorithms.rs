@@ -1019,3 +1019,202 @@ fn all_directional_cols(link_num: usize, cols: usize) -> Vec<Vec<usize>> {
     let one: Vec<usize> = (0..cols).collect();
     vec![one; link_num]
 }
+
+impl RustCompiledRobot {
+    /// Cache the local linearization of body-coordinate RNEA. Fixed and
+    /// one-DOF joints have constant body motion subspaces. X' = -ad(S) X.
+    pub(crate) fn prepare_rnea_products(
+        &self,
+        motion: &[f64],
+        gravity: [f64; 3],
+        ws: &mut crate::workspace::RneaProductWorkspace,
+    ) -> bool {
+        if ws.ready && ws.motion == motion && ws.gravity == gravity {
+            return false;
+        }
+        ws.ready = false;
+        ws.v.fill([0.; 6]);
+        ws.a.fill([0.; 6]);
+        ws.f.fill([0.; 6]);
+        ws.a[0] = [0., 0., 0., -gravity[0], -gravity[1], -gravity[2]];
+        for j in 0..self.joint_num {
+            let p = self.parent_link[j];
+            let c = self.child_link[j];
+            let qi = self.q_index[j];
+            let (q, v, a) = if qi >= 0 {
+                let k = qi as usize * 3;
+                (motion[k], motion[k + 1], motion[k + 2])
+            } else {
+                (0., 0., 0.)
+            };
+            let mut s = [0.; 6];
+            if qi >= 0 {
+                let start = if self.is_prismatic[j] { 3 } else { 0 };
+                s[start..start + 3].copy_from_slice(&self.axis[j]);
+            }
+            ws.s[j] = s;
+            let r = if qi >= 0 && !self.is_prismatic[j] {
+                mat3_mul(self.origin_r[j], rot_axis(self.axis[j], q))
+            } else {
+                self.origin_r[j]
+            };
+            let position = if self.is_prismatic[j] {
+                add3(
+                    self.origin_p[j],
+                    mat3_vec(self.origin_r[j], scale3(self.axis[j], q)),
+                )
+            } else {
+                self.origin_p[j]
+            };
+            let wrench = mat_inv_adj_wrench_from_mat4(mat4_from_rot_pos(r, position));
+            for row in 0..6 {
+                for col in 0..6 {
+                    ws.x[j][row][col] = wrench[(row + 3) % 6][(col + 3) % 6];
+                }
+            }
+            let xv = mat6_vec6(ws.x[j], ws.v[p]);
+            let xa = mat6_vec6(ws.x[j], ws.a[p]);
+            let vj = scale6(s, v);
+            ws.v[c] = add6(xv, vj);
+            ws.a[c] = add6(add6(xa, scale6(s, a)), hat_adj_motion_vec6(ws.v[c], vj));
+            let h = mat6_vec6(self.link_inertia[c], ws.v[c]);
+            ws.f[c] = add6(
+                mat6_vec6(self.link_inertia[c], ws.a[c]),
+                hat_adj_wrench_vec6(ws.v[c], h),
+            );
+            ws.q_velocity[j] = scale6(hat_adj_motion_vec6(s, xv), -1.);
+            ws.q_accel[j] = scale6(hat_adj_motion_vec6(s, xa), -1.);
+            ws.v_accel[j] = hat_adj_motion_vec6(ws.v[c], s);
+            for col in 0..6 {
+                let mut e = [0.; 6];
+                e[col] = 1.;
+                let fv = add6(
+                    hat_adj_wrench_vec6(e, h),
+                    hat_adj_wrench_vec6(ws.v[c], mat6_vec6(self.link_inertia[c], e)),
+                );
+                let av = scale6(hat_adj_motion_vec6(vj, e), -1.);
+                for row in 0..6 {
+                    ws.velocity_force[c][row][col] = fv[row];
+                    ws.velocity_accel[j][row][col] = av[row];
+                }
+            }
+        }
+        for j in (0..self.joint_num).rev() {
+            let p = self.parent_link[j];
+            let c = self.child_link[j];
+            ws.q_force[j] = mat6_transpose_vec6(ws.x[j], hat_adj_wrench_vec6(ws.s[j], ws.f[c]));
+            ws.f[p] = add6(ws.f[p], mat6_transpose_vec6(ws.x[j], ws.f[c]));
+        }
+        ws.motion.clear();
+        ws.motion.extend_from_slice(motion);
+        ws.gravity = gravity;
+        ws.ready = true;
+        true
+    }
+
+    /// Direct Jv / J^T v of selected torque rows, including repeated/fixed rows.
+    /// Reverse the force accumulation, then the acceleration/velocity recurrence.
+    /// Forward and reverse products use the same cached local linearization.
+    pub(crate) fn rnea_products_into(
+        &self,
+        outputs: &[crate::dynamics_outputs::DynamicsOutput],
+        rhs: &[f64],
+        cols: usize,
+        transpose: bool,
+        ws: &mut crate::workspace::RneaProductWorkspace,
+        out: &mut [f64],
+    ) {
+        for col in 0..cols {
+            ws.dv.fill([0.; 6]);
+            ws.da.fill([0.; 6]);
+            ws.df.fill([0.; 6]);
+            if transpose {
+                for (row, &(_, j, _, _, _)) in outputs.iter().enumerate() {
+                    let child = self.child_link[j];
+                    ws.df[child] = add6(ws.df[child], scale6(ws.s[j], rhs[row * cols + col]));
+                }
+                for j in 0..self.joint_num {
+                    let p = self.parent_link[j];
+                    let c = self.child_link[j];
+                    if self.q_index[j] >= 0 {
+                        out[self.q_index[j] as usize * 3 * cols + col] +=
+                            aba_dot(ws.q_force[j], ws.df[p]);
+                    }
+                    ws.df[c] = add6(ws.df[c], mat6_vec6(ws.x[j], ws.df[p]));
+                    ws.da[c] = mat6_transpose_vec6(self.link_inertia[c], ws.df[c]);
+                    ws.dv[c] = mat6_transpose_vec6(ws.velocity_force[c], ws.df[c]);
+                }
+                for j in (0..self.joint_num).rev() {
+                    let p = self.parent_link[j];
+                    let c = self.child_link[j];
+                    ws.dv[c] = add6(
+                        ws.dv[c],
+                        mat6_transpose_vec6(ws.velocity_accel[j], ws.da[c]),
+                    );
+                    if self.q_index[j] >= 0 {
+                        let k = self.q_index[j] as usize * 3;
+                        out[k * cols + col] +=
+                            aba_dot(ws.q_accel[j], ws.da[c]) + aba_dot(ws.q_velocity[j], ws.dv[c]);
+                        out[(k + 1) * cols + col] +=
+                            aba_dot(ws.v_accel[j], ws.da[c]) + aba_dot(ws.s[j], ws.dv[c]);
+                        out[(k + 2) * cols + col] += aba_dot(ws.s[j], ws.da[c]);
+                    }
+                    ws.da[p] = add6(ws.da[p], mat6_transpose_vec6(ws.x[j], ws.da[c]));
+                    ws.dv[p] = add6(ws.dv[p], mat6_transpose_vec6(ws.x[j], ws.dv[c]));
+                }
+            } else {
+                for j in 0..self.joint_num {
+                    let p = self.parent_link[j];
+                    let c = self.child_link[j];
+                    let (dq, dv, da) = if self.q_index[j] >= 0 {
+                        let k = self.q_index[j] as usize * 3;
+                        (
+                            rhs[k * cols + col],
+                            rhs[(k + 1) * cols + col],
+                            rhs[(k + 2) * cols + col],
+                        )
+                    } else {
+                        (0., 0., 0.)
+                    };
+                    ws.dv[c] = add6(
+                        mat6_vec6(ws.x[j], ws.dv[p]),
+                        add6(scale6(ws.q_velocity[j], dq), scale6(ws.s[j], dv)),
+                    );
+                    ws.da[c] = add6(
+                        add6(mat6_vec6(ws.x[j], ws.da[p]), scale6(ws.q_accel[j], dq)),
+                        add6(
+                            scale6(ws.s[j], da),
+                            add6(
+                                mat6_vec6(ws.velocity_accel[j], ws.dv[c]),
+                                scale6(ws.v_accel[j], dv),
+                            ),
+                        ),
+                    );
+                    ws.df[c] = add6(
+                        mat6_vec6(self.link_inertia[c], ws.da[c]),
+                        mat6_vec6(ws.velocity_force[c], ws.dv[c]),
+                    );
+                }
+                for j in (0..self.joint_num).rev() {
+                    let p = self.parent_link[j];
+                    let c = self.child_link[j];
+                    let dq = if self.q_index[j] >= 0 {
+                        rhs[self.q_index[j] as usize * 3 * cols + col]
+                    } else {
+                        0.
+                    };
+                    ws.df[p] = add6(
+                        ws.df[p],
+                        add6(
+                            mat6_transpose_vec6(ws.x[j], ws.df[c]),
+                            scale6(ws.q_force[j], dq),
+                        ),
+                    );
+                }
+                for (row, &(_, j, _, _, _)) in outputs.iter().enumerate() {
+                    out[row * cols + col] = aba_dot(ws.s[j], ws.df[self.child_link[j]]);
+                }
+            }
+        }
+    }
+}

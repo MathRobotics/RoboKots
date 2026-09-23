@@ -1116,6 +1116,7 @@ impl RustSelectedWorkspace {
                 })
                 .collect();
             self.tangent = None;
+            self.route_cache = (0..batch).map(|_| None).collect();
             self.ready = false;
         }
         let changed_gravity = dynamic && self.gravity != gravity;
@@ -1125,6 +1126,7 @@ impl RustSelectedWorkspace {
                 || changed_gravity
                 || self.motion[i * input_len..(i + 1) * input_len] != *sample
             {
+                self.route_cache[i] = None;
                 if dynamic {
                     self.robot.dynamics_cmtm_into(
                         sample,
@@ -1146,6 +1148,33 @@ impl RustSelectedWorkspace {
         self.dynamic = dynamic;
         self.ready = true;
         Ok(())
+    }
+
+    /// Dense selected Jacobian. Kinematic outputs use route blocks directly,
+    /// without an identity seed; dynamics retain their existing tangent path.
+    pub fn jacobian(&mut self, motion: &[f64], outputs: &[StateOutput], batch: usize,
+                    gravity: [f64; 3]) -> CoreResult<Vec<f64>> {
+        let packed = outputs.iter().map(StateOutput::raw).collect::<Vec<_>>();
+        self.jacobian_raw(motion, &packed, batch, gravity)
+    }
+
+    pub(crate) fn jacobian_raw(&mut self, motion: &[f64], outputs: &[DynamicsOutput],
+                              batch: usize, gravity: [f64; 3]) -> CoreResult<Vec<f64>> {
+        let rows = self.robot.check_selected_outputs(outputs, self.order)?;
+        let input_len = self.robot.dof * self.order;
+        let size = checked_size(&[batch, rows, input_len])?;
+        if outputs.iter().any(|x| x.2 < 3) {
+            let mut basis = vec![0.0; checked_size(&[batch, input_len, input_len])?];
+            for b in 0..batch { for i in 0..input_len { basis[(b*input_len+i)*input_len+i] = 1.0; }}
+            return self.apply_raw(motion, &basis, outputs, batch, input_len, gravity, false);
+        }
+        self.prepare_selected_primal(motion, outputs, batch, gravity)?;
+        let mut out = vec![0.0; size];
+        for i in 0..batch {
+            self.robot.kinematics_route_apply_into(&self.primal[i].cmtm, outputs, self.order,
+                None, input_len, false, &mut out[i*rows*input_len..(i+1)*rows*input_len], &mut self.route_cache[i]);
+        }
+        Ok(out)
     }
 
     /// Matrix-free selected JVP/VJP. Motion is (batch, dof * order), RHS is
@@ -1188,8 +1217,37 @@ impl RustSelectedWorkspace {
             ));
         }
         checked_size(&[batch, out_rows, cols])?;
+        if self.order == 3 && !outputs.is_empty() && outputs.iter().all(|x| x.2 == 2) {
+            check_gravity(gravity)?;
+            if motion.iter().any(|x| !x.is_finite()) {
+                return Err(Error::new("motion must contain only finite values"));
+            }
+            if self.rnea_products.len() != batch {
+                self.rnea_products = (0..batch).map(|_| crate::workspace::RneaProductWorkspace::new(&self.robot)).collect();
+            }
+            let mut out = vec![0.0; batch*out_rows*cols];
+            for i in 0..batch {
+                let ws = &mut self.rnea_products[i];
+                if self.robot.prepare_rnea_products(&motion[i*input_len..(i+1)*input_len], gravity, ws) {
+                    self.dynamics_evaluations += 1;
+                }
+                self.robot.rnea_products_into(outputs, &rhs[i*rhs_rows*cols..(i+1)*rhs_rows*cols],
+                    cols, transpose, ws, &mut out[i*out_rows*cols..(i+1)*out_rows*cols]);
+            }
+            return Ok(out);
+        }
         self.prepare_selected_primal(motion, outputs, batch, gravity)?;
         let dynamic = outputs.iter().any(|x| x.2 < 3);
+        if !dynamic {
+            let mut out = vec![0.0; batch * out_rows * cols];
+            for i in 0..batch {
+                self.robot.kinematics_route_apply_into(
+                    &self.primal[i].cmtm, outputs, self.order,
+                    Some(&rhs[i*rhs_rows*cols..(i+1)*rhs_rows*cols]), cols, transpose,
+                    &mut out[i*out_rows*cols..(i+1)*out_rows*cols], &mut self.route_cache[i]);
+            }
+            return Ok(out);
+        }
         if !transpose && self.tangent.as_ref().map(|x| x.rhs_cols) != Some(cols) {
             self.tangent = Some(if dynamic {
                 DynamicsCmtmTangentWorkspace::new(&self.robot, self.order - 2, cols)
@@ -1232,7 +1290,7 @@ impl RustSelectedWorkspace {
         (
             self.kinematics_evaluations,
             self.dynamics_evaluations,
-            self.primal.len(),
+            self.primal.len() + self.rnea_products.len(),
         )
     }
 }

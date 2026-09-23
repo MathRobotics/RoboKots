@@ -1841,3 +1841,11 @@ mod tests {
         assert!((lhs - rhs_dual).abs() < 3e-6, "lhs={lhs}, rhs={rhs_dual}");
     }
 }
+
+/// Motion Lie bracket [v, rhs], in angular/linear order.
+pub(crate) fn hat_adj_motion_vec6(v: [f64; 6], rhs: [f64; 6]) -> [f64; 6] {
+    let w = cross([v[0],v[1],v[2]], [rhs[0],rhs[1],rhs[2]]);
+    let u = add3(cross([v[0],v[1],v[2]], [rhs[3],rhs[4],rhs[5]]),
+                 cross([v[3],v[4],v[5]], [rhs[0],rhs[1],rhs[2]]));
+    [w[0],w[1],w[2],u[0],u[1],u[2]]
+}

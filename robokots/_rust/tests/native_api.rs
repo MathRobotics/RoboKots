@@ -360,3 +360,65 @@ fn public_rnea_aba_scalar_batch_and_validation() {
         .forward_dynamics_batch(&q, &v, &[f64::NAN], 1, gravity)
         .is_err());
 }
+
+#[test]
+fn public_dense_kinematic_route_jacobian() {
+    let robot = model();
+    let order = 6;
+    let x = [0.4, -0.2, 0.3, 0.15, -0.11, 0.2];
+    let outputs = [
+        StateOutput::new(StateOwner::Link(2), StateQuantity::Position, 0, ReferenceFrame::World),
+        StateOutput::new(StateOwner::Link(2), StateQuantity::SpatialMotion, 4, ReferenceFrame::World),
+        StateOutput::new(StateOwner::Joint(1), StateQuantity::SpatialMotion, 1, ReferenceFrame::World),
+    ];
+    let rows = 15;
+    let mut ws = robot.create_selected_workspace(order).unwrap();
+    let jac = ws.jacobian(&x, &outputs, 1, [0.; 3]).unwrap();
+    assert_eq!(jac.len(), rows*order);
+    let mut expected = vec![0.; rows*order];
+    expected[0] = -x[0].sin();
+    expected[order] = x[0].cos();
+    expected[5*order+5] = 1.;
+    for (a,b) in jac.iter().zip(&expected) { assert!((a-b).abs() < 1e-12); }
+    let direction = [0.1,0.2,-0.3,0.4,-0.5,0.6];
+    let jvp = ws.apply(&x, &direction, &outputs, 1, 1, [0.;3], false).unwrap();
+    for row in 0..rows {
+        let value: f64 = (0..order).map(|c| jac[row*order+c]*direction[c]).sum();
+        assert!((jvp[row]-value).abs() < 1e-12);
+    }
+    assert_eq!(ws.jacobian(&[], &outputs, 0, [0.;3]).unwrap(), Vec::<f64>::new());
+    assert!(ws.jacobian(&x[..5], &outputs, 1, [0.;3]).is_err());
+    assert!(ws.jacobian(&x, &outputs, 1, [f64::NAN,0.,0.]).is_err());
+}
+
+#[test]
+fn cached_rnea_products_from_native_api() {
+    let robot = model();
+    let mut ws = robot.create_selected_workspace(3).unwrap();
+    let outputs = [StateOutput::new(
+        StateOwner::Joint(0), StateQuantity::Torque, 0, ReferenceFrame::Local,
+    )];
+    let x = [0.4, -0.2, 0.3];
+    let g = [0.2, -0.3, -9.81];
+    let direction = [0.1, -0.3, 0.2];
+    let weight = [0.7];
+    let jvp = ws.apply(&x, &direction, &outputs, 1, 1, g, false).unwrap();
+    let vjp = ws.apply(&x, &weight, &outputs, 1, 1, g, true).unwrap();
+    let mut state = robot.create_outward_data(3).unwrap();
+    let mut expected = 0.0;
+    for col in 0..3 {
+        let mut plus = x;
+        let mut minus = x;
+        plus[col] += 1e-6;
+        minus[col] -= 1e-6;
+        state.compute_dynamics(&plus, g).unwrap();
+        let tp = state.joint_torque(0, 1).unwrap()[0];
+        state.compute_dynamics(&minus, g).unwrap();
+        let tm = state.joint_torque(0, 1).unwrap()[0];
+        let derivative = (tp-tm)/2e-6;
+        expected += derivative*direction[col];
+        assert!((vjp[col]-derivative*weight[0]).abs() < 2e-8);
+    }
+    assert!((jvp[0]-expected).abs() < 2e-8);
+    assert_eq!(ws.cache_info(), (0, 1, 1));
+}

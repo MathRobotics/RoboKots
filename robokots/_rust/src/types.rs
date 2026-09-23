@@ -79,6 +79,8 @@ pub struct RustSelectedWorkspace {
     pub(crate) order: usize,
     pub(crate) primal: Vec<DynamicsCmtmWorkspace>,
     pub(crate) tangent: Option<crate::workspace::DynamicsCmtmTangentWorkspace>,
+    pub(crate) rnea_products: Vec<crate::workspace::RneaProductWorkspace>,
+    pub(crate) route_cache: Vec<Option<crate::dynamics_outputs::KinematicRouteWorkspace>>,
     pub(crate) motion: Vec<f64>,
     pub(crate) gravity: [f64;3],
     pub(crate) dynamic: bool,
@@ -95,6 +97,7 @@ impl RustCompiledRobot {
         if order == 0 { return Err(Error::new("selected workspace order must be positive")); }
         Ok(crate::types::RustSelectedWorkspace {
             robot: self.clone(), order, primal: Vec::new(), tangent: None, motion: Vec::new(),
+            rnea_products: Vec::new(), route_cache: Vec::new(),
             gravity: [0.0;3], dynamic: false, ready: false,
             kinematics_evaluations: 0, dynamics_evaluations: 0,
         })

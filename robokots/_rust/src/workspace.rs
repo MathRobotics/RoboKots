@@ -164,6 +164,8 @@ impl CmtmWorkspace {
     }
 
     pub(crate) fn new(robot: &RustCompiledRobot, order: usize) -> Self {
+        let mut factorial = vec![1.0; order.max(1)];
+        crate::spatial::fill_factorial_table(&mut factorial);
         Self {
             link_mat: vec![0.0; robot.link_num * 16],
             link_vecs: vec![0.0; robot.link_num * (order - 1) * 6],
@@ -175,7 +177,7 @@ impl CmtmWorkspace {
             fast_lin_v: vec![0.0; robot.link_num * 3],
             fast_alpha: vec![0.0; robot.link_num * 3],
             fast_lin_a: vec![0.0; robot.link_num * 3],
-            factorial: vec![1.0; order.max(1)],
+            factorial,
             tmp_rel_vecs: vec![0.0; (order - 1) * 6],
             tmp_out_vecs: vec![0.0; (order - 1) * 6],
             tmp_mat4_blocks_a: vec![[[0.0; 4]; 4]; order],
@@ -479,5 +481,54 @@ impl DynamicsCmtmWorkspace {
         self.tmp_rel_vecs.fill(0.0);
         self.tmp_scaled_vecs.fill(0.0);
         self.cached_motion.fill(0.0);
+    }
+}
+
+/// Order-zero RNEA linearization and reusable product scratch. Storage is
+/// O(links + joints), independent of the number of generalized coordinates
+/// squared. No motion Jacobian or basis seeds are stored.
+pub(crate) struct RneaProductWorkspace {
+    pub(crate) motion: Vec<f64>,
+    pub(crate) gravity: [f64; 3],
+    pub(crate) ready: bool,
+    pub(crate) x: Vec<[[f64; 6]; 6]>,
+    pub(crate) s: Vec<[f64; 6]>,
+    pub(crate) v: Vec<[f64; 6]>,
+    pub(crate) a: Vec<[f64; 6]>,
+    pub(crate) f: Vec<[f64; 6]>,
+    pub(crate) velocity_force: Vec<[[f64; 6]; 6]>,
+    pub(crate) velocity_accel: Vec<[[f64; 6]; 6]>,
+    pub(crate) q_velocity: Vec<[f64; 6]>,
+    pub(crate) q_accel: Vec<[f64; 6]>,
+    pub(crate) v_accel: Vec<[f64; 6]>,
+    pub(crate) q_force: Vec<[f64; 6]>,
+    pub(crate) dv: Vec<[f64; 6]>,
+    pub(crate) da: Vec<[f64; 6]>,
+    pub(crate) df: Vec<[f64; 6]>,
+}
+
+impl RneaProductWorkspace {
+    pub(crate) fn new(robot: &RustCompiledRobot) -> Self {
+        let n = robot.link_num;
+        let j = robot.joint_num;
+        Self {
+            motion: Vec::new(),
+            gravity: [0.; 3],
+            ready: false,
+            x: vec![[[0.; 6]; 6]; j],
+            s: vec![[0.; 6]; j],
+            v: vec![[0.; 6]; n],
+            a: vec![[0.; 6]; n],
+            f: vec![[0.; 6]; n],
+            velocity_force: vec![[[0.; 6]; 6]; n],
+            velocity_accel: vec![[[0.; 6]; 6]; j],
+            q_velocity: vec![[0.; 6]; j],
+            q_accel: vec![[0.; 6]; j],
+            v_accel: vec![[0.; 6]; j],
+            q_force: vec![[0.; 6]; j],
+            dv: vec![[0.; 6]; n],
+            da: vec![[0.; 6]; n],
+            df: vec![[0.; 6]; n],
+        }
     }
 }

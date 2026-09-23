@@ -592,3 +592,47 @@ For legacy construction without an input backend or any computed state,
 on-demand operations retain the Rust default. `forward_dynamics`'s
 `reference` alias now also uses NumPy inverse dynamics, with no hidden Rust call.
 An explicit `jacobian_autodiff()` still requests JAX.
+
+### Rust kinematic Jacobians from ancestor-route blocks
+
+The general selected-kinematics path uses the same route/block structure as
+NumPy's CMTM formulation, without constructing a full CMTM matrix. For each
+selected body and ancestor joint, it computes the Taylor coefficients of
+`b_j = Ad(T_body^-1 T_child(j)) S_j`. The pose variation is
+`eta = sum_j b_j delta_q_j`; body motion varies as
+`delta_v = eta_dot + [v, eta]`. For absolute world motion this simplifies to
+`delta(Ad(T) v) = Ad(T) eta_dot`. Joint relative world motion uses
+`Ad(T_child) ([eta_child, v_joint] + delta_v_joint)` instead, preserving its
+relative-motion meaning. Ordinary input/output derivatives are recovered with
+factorials; the internal coefficient series remain Taylor-normalized.
+
+`RustSelectedWorkspace::jacobian` assembles these small blocks directly for
+kinematic selections, without an identity seed. `apply` and its transpose
+consume the same blocks without a dense Jacobian. The implementation shares
+route coefficients across selected outputs and uses only needed link frames.
+Dedicated low-order local and torque paths remain in place; selections mixed
+with dynamics retain the existing dynamics recurrence. Supported CMTM model
+kinds are unchanged (fixed/revolute).
+
+Reproducible measurements are in
+[the route-block report](benchmarks/results/rust_route_blocks_comparison.md).
+
+### Cached direct Rust Jacobian products
+
+For torque-only selections with motion order 3, `RustSelectedWorkspace::apply`
+uses a body-coordinate RNEA linearization for both Jv and Jᵀv. It propagates
+directions or adjoints directly; it does not construct a dense Jacobian or
+identity seeds. The local derivative blocks and scratch require storage linear
+in the number of links and joints per batch sample. A motion or gravity change
+invalidates that sample's linearization. Repeated, reordered, and fixed-joint
+output rows preserve the selected-output contract.
+
+Kinematic products cache the ancestor-route coefficients described above.
+Motion, output selection, or batch-size changes invalidate the affected cache.
+The kinematic cache size depends on the selected ancestor routes and motion
+order. High-order torque and mixed dynamics selections retain their existing
+direct-product algorithms.
+
+The [Jv/Jᵀv comparison](benchmarks/results/rust_products_comparison.md) separates
+warmed state reuse from state updates. The largest improvement is torque Jᵀv;
+state-inclusive Jv is approximately unchanged in the seven-DOF measurement.

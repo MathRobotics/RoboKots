@@ -627,3 +627,43 @@ computation and boundary conversions are included. This is a same-build
 backend comparison, not a historical before/after result. Environment,
 first-call times, medians, and absolute/relative errors are saved to
 `results/numpy_backend_compare.json` and `.md`.
+
+### NumPy / Rust analytical Jacobians
+
+```bash
+.venv/bin/python -m developer.benchmarks.numpy_rust_jacobian_compare
+```
+
+Measures dense Jacobians, JVP, and VJP separately on the three-DOF branched
+fixed-joint model. Kinematics, torque, mixed world outputs, six-sample batches,
+and order-six inputs are included. `state_ready` reuses computed state;
+`including_state` alternates two motions to force recomputation and includes
+motion import. Cross-backend fallbacks are blocked. Timing samples,
+environment, absolute/relative errors, and the summary are saved to
+`results/numpy_rust_jacobian_compare.json` and `.md`.
+
+Use `--output PATH.json` to retain separate runs of the Jacobian comparison.
+The `.md` summary is written beside the JSON. The paired route-block runs are
+`results/rust_route_blocks_before.json` and `results/rust_route_blocks_after.json`;
+[their comparison](results/rust_route_blocks_comparison.md) uses a fresh baseline.
+
+For world position only (a 3×3 Jacobian on this model), use
+`--case position --output developer/benchmarks/results/numpy_rust_position_jacobian.json`.
+This uses motion order 1; the state-inclusive measurement computes poses only.
+
+Use `--case pose --output developer/benchmarks/results/numpy_rust_pose_jacobian.json`
+for world position plus rotation (6×3, motion order 1). Rotation rows use the
+three-component spatial rotation tangent, not flattened rotation-matrix entries.
+
+Add `--serial-dof 7` with `--case pose` to measure a synthetic seven-revolute-joint
+serial chain and fixed tool (6×7 Jacobian). This is not a Panda/iiwa model.
+The complete generated model is included in the result JSON. Example:
+
+```bash
+.venv/bin/python -m developer.benchmarks.numpy_rust_jacobian_compare --case pose --serial-dof 7 --output developer/benchmarks/results/numpy_rust_pose_7dof.json
+```
+
+The [direct Jv/Jᵀv comparison](results/rust_products_comparison.md) records fresh
+before/after runs for seven-DOF torque and world kinematics (`--case torque` and
+`--case kinematics`). It separates reuse of cached local derivatives from motion
+updates that require recomputation; both cases include the Python API boundary.

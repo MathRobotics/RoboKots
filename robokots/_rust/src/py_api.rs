@@ -3243,6 +3243,21 @@ fn mat4_from_slice(slice: &[f64]) -> [[f64; 4]; 4] {
 
 #[pymethods]
 impl RustSelectedWorkspace {
+    #[pyo3(signature = (motions, outputs, gravity = None))]
+    fn jacobian<'py>(
+        &mut self, py: Python<'py>, motions: PyReadonlyArray2<'py, f64>,
+        outputs: Vec<DynamicsOutput>, gravity: Option<PyReadonlyArray1<'py, f64>>,
+    ) -> PyResult<Bound<'py, PyArray3<f64>>> {
+        let rows = self.inner.robot.check_selected_outputs(&outputs, self.inner.order)?;
+        let input_len = self.inner.robot.dof * self.inner.order;
+        let batch = motions.shape()[0];
+        if motions.shape()[1] != input_len {
+            return Err(PyValueError::new_err("selected workspace motion shape is invalid"));
+        }
+        let out = self.inner.jacobian_raw(motions.as_slice()?, &outputs, batch, gravity_vec3(gravity)?)?;
+        Ok(out.into_pyarray(py).reshape([batch, rows, input_len])?)
+    }
+
     /// Number of actual primal evaluations (kinematics-only, dynamics, cached samples).
     fn cache_info(&self) -> (usize, usize, usize) {
         self.inner.cache_info()
