@@ -11,4 +11,16 @@ __all__ = [
     "outward",
     "inward",
     "robot_io",
+    "PerturbationSpec",
+    "PerturbationReport",
+    "apply_perturbation",
+    "NoiseSpec",
+    "ParameterPerturbation",
 ]
+
+
+def __getattr__(name):
+    if name in {"PerturbationSpec", "PerturbationReport", "apply_perturbation", "NoiseSpec", "ParameterPerturbation"}:
+        from . import perturbation
+        return getattr(perturbation, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

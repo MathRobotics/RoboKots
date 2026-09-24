@@ -43,6 +43,10 @@ Developer-only benchmarks live under `developer/benchmarks`; see
 
 ## Batch Shapes and Axis-Aware Data
 
+Robot model parameter randomization (mass, rigid/soft link lengths, joint
+placement, zero offsets, CoG and physically consistent inertia) is described in
+[the perturbation guide](docs/perturbation.md).
+
 Motion can be supplied either in the historical flat backend layout or in the
 recommended explicit-axis layout:
 
