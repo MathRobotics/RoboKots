@@ -1,0 +1,24 @@
+# Used by: uv run python main.py (inside this directory)
+# A standalone spec. Standard deviations below are in log space.
+seed = 42
+mass_relative_std = 0.05
+link_length_relative_std = 0.01
+scale_inertia_with_mass = true
+
+# Optional independent CoG offsets, in metres, for all eligible links.
+[[rules]]
+parameter = "cog_translation"
+[rules.noise]
+distribution = "normal"
+mode = "additive"
+std = 0.001
+
+# Explicit rules run AFTER the simple fields above, in file order.
+# To use uniform mass scaling instead, remove mass_relative_std above and add:
+# [[rules]]
+# parameter = "mass"
+# [rules.noise]
+# distribution = "uniform"
+# mode = "scale"
+# low = 0.8
+# high = 1.2

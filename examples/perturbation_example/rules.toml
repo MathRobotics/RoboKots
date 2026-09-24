@@ -1,0 +1,36 @@
+seed = 42
+scale_inertia_with_mass = true
+
+[[rules]]
+parameter = "mass"
+names = ["arm1", "arm2"]
+groups = [["arm1", "arm2"]]
+[rules.noise]
+distribution = "uniform"
+mode = "scale"
+low = 0.9
+high = 1.1
+
+# arm1 -> joint2 distance; the direction is preserved.
+[[rules]]
+parameter = "link_length"
+names = ["arm1"]
+[rules.noise]
+distribution = "normal"
+mode = "additive"
+std = 0.002
+
+[[rules]]
+parameter = "joint_offset"
+names = ["joint1", "joint2"]
+[rules.noise]
+distribution = "normal"
+std = 0.001
+
+[[rules]]
+parameter = "inertia"
+names = ["arm1", "arm2"]
+[rules.noise]
+distribution = "lognormal"
+mode = "scale"
+std = 0.05

@@ -80,6 +80,7 @@ TOML文字列は `PerturbationSpec.from_toml(text)` で読み込めます。
 `PerturbationSpec.from_dict(tomllib.loads(text)["perturbation"])` を使います。
 ファイル読込エラーとTOML構文エラーは、そのまま呼び出し側に通知します。
 
+設定例と比較スクリプトは [examples/perturbation_example](../examples/perturbation_example/README.md) にあります。
 
 ## Pythonによる詳細指定
 

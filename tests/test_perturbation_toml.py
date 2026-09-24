@@ -77,3 +77,11 @@ def test_defaults_syntax_and_missing_file(tmp_path):
     PerturbationSpec.from_toml('seed = [')
   with pytest.raises(FileNotFoundError):
     PerturbationSpec.from_toml_file(tmp_path / "missing.toml")
+
+
+def test_shipped_example_loads_and_applies():
+  root = Path(__file__).resolve().parents[1]
+  spec = PerturbationSpec.from_toml_file(root / "examples/perturbation_example/perturbation.toml")
+  nominal = Kots.from_urdf_file(str(root / "tests/test_model/branched_fixed.urdf"))
+  perturbed = apply_perturbation(nominal, spec)
+  assert perturbed.robot_.to_dict() != nominal.robot_.to_dict()
