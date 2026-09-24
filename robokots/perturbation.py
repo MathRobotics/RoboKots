@@ -5,7 +5,9 @@ import copy
 import json
 import math
 import numbers
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
+from pathlib import Path
+import tomllib
 from types import MappingProxyType
 from typing import Mapping, Sequence
 
@@ -58,6 +60,57 @@ class PerturbationSpec:
   scale_inertia_with_mass: bool = True
   link_names: tuple[str, ...] | None = None
   rules: tuple[ParameterPerturbation, ...] = ()
+
+  @classmethod
+  def from_dict(cls, data: dict) -> PerturbationSpec:
+    """Load a configuration dictionary, rejecting misspelled/unknown keys.
+
+    Rules are dictionaries with a nested ``noise`` dictionary. Validation
+    errors include the offending configuration path. Input is not modified.
+    """
+    def table(value, model, path):
+      if not isinstance(value, dict):
+        raise ValueError(f"{path}: expected a table")
+      unknown = set(value) - {f.name for f in fields(model) if f.init}
+      if unknown:
+        raise ValueError(f"{path}: unknown key(s): {', '.join(sorted(map(str, unknown)))}")
+      for name in ("names", "link_names", "groups"):
+        if name in value and not isinstance(value[name], (list, tuple)):
+          raise ValueError(f"{path}.{name}: expected an array")
+      if "groups" in value and any(not isinstance(g, (list, tuple)) for g in value["groups"]):
+        raise ValueError(f"{path}.groups: expected an array of arrays")
+      return copy.deepcopy(value)
+
+    def construct(model, values, path):
+      try:
+        return model(**values)
+      except (TypeError, ValueError) as exc:
+        raise ValueError(f"{path}: {exc}") from exc
+
+    values = table(data, cls, "spec")
+    raw_rules = values.pop("rules", [])
+    if not isinstance(raw_rules, (list, tuple)):
+      raise ValueError("spec.rules: expected an array of tables")
+    rules = []
+    for index, value in enumerate(raw_rules):
+      path = f"spec.rules[{index}]"
+      rule = table(value, ParameterPerturbation, path)
+      noise = table(rule.get("noise"), NoiseSpec, f"{path}.noise")
+      rule["noise"] = construct(NoiseSpec, noise, f"{path}.noise")
+      rules.append(construct(ParameterPerturbation, rule, path))
+    values["rules"] = tuple(rules)
+    return construct(cls, values, "spec")
+
+  @classmethod
+  def from_toml(cls, text: str) -> PerturbationSpec:
+    """Parse TOML text with spec fields at the document root."""
+    return cls.from_dict(tomllib.loads(text))
+
+  @classmethod
+  def from_toml_file(cls, path: str | Path) -> PerturbationSpec:
+    """Read a UTF-8 TOML configuration file (str or pathlib.Path)."""
+    with open(path, "rb") as stream:
+      return cls.from_dict(tomllib.load(stream))
 
   def __post_init__(self) -> None:
     if self.seed is not None:

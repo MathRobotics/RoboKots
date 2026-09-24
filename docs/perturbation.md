@@ -24,6 +24,63 @@ perturbed, report = apply_perturbation(
 中央値が1、平均値は `exp(std²/2)` です。厳密な「相対標準偏差」や平均1では
 ありません。質量0のリンクは簡易指定では質量0のままです。
 
+## TOMLファイルからの指定
+
+Pythonでのコンストラクタ指定に加えて、設定をTOMLに保存できます。
+追加依存は不要です（Python 3.11以降の標準 `tomllib` を使用）。
+
+```toml
+# perturbation.toml
+seed = 42
+mass_relative_std = 0.05
+link_length_relative_std = 0.01
+scale_inertia_with_mass = true
+```
+
+```python
+spec = PerturbationSpec.from_toml_file("perturbation.toml")
+perturbed, report = apply_perturbation(nominal, spec, return_report=True)
+```
+
+詳細指定は `[[rules]]` と `[rules.noise]` で表現します。
+次は上の簡易設定とは独立した、別の設定ファイルの例です。
+
+```toml
+seed = 42
+
+[[rules]]
+parameter = "mass"
+[rules.noise]
+distribution = "uniform"
+mode = "scale"
+low = 0.8
+high = 1.2
+
+[[rules]]
+parameter = "link_length"
+names = ["left_thigh", "right_thigh"]
+groups = [["left_thigh", "right_thigh"]]
+[rules.noise]
+distribution = "normal"
+mode = "additive"
+std = 0.0003  # m
+```
+
+`names` は実モデルに合わせて置き換えてください。`names` と `groups` は
+`[rules.noise]` **より前**に記述します。後に置くとnoise内の未知キーとして
+エラーになります。単純指定と明示ルールを両方書くと累積適用されます。
+
+設定はルート直下に記述します。未知キーは無視せず例外にし、
+`spec.rules[0].noise` などの位置を表示します。省略フィールドにはPython APIと
+同じ既定値を使います。`seed` や `names` の `None` 相当はキーを省略します。
+空の `names = []` は対象なしです。
+
+TOML文字列は `PerturbationSpec.from_toml(text)` で読み込めます。
+既存のTOMLに `[perturbation]` セクションとして格納する場合は、
+`PerturbationSpec.from_dict(tomllib.loads(text)["perturbation"])` を使います。
+ファイル読込エラーとTOML構文エラーは、そのまま呼び出し側に通知します。
+
+
 ## Pythonによる詳細指定
 
 ```python
