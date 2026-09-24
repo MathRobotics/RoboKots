@@ -557,8 +557,8 @@ class RobotStruct:
 
         pos, quat = joint.origin.pos_quaternion()
         origin_dict = {
-            "position": pos,
-            "orientation": quat
+            "position": pos.tolist() if hasattr(pos, "tolist") else list(pos),
+            "orientation": quat.tolist() if hasattr(quat, "tolist") else list(quat),
         }
         joint_dict["origin"] = origin_dict
 
