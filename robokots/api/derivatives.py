@@ -112,11 +112,22 @@ class DerivativesMixin:
     offsets = np.cumsum([0] + sizes)
     return [jacobian[..., offsets[i]:offsets[i + 1], :] for i in range(len(states))]
 
-  def _jacobian_numerical(self, state_type_list, max_order : int, list_output : bool = False):
+  def _jacobian_numerical(self, state_type_list, max_order : int, list_output : bool = False, eps: float = 1e-8):
+    if hasattr(self.outward_state_, "raw_data"):
+      result = self._rust_numerical_jacobian(state_type_list, max_order, eps=eps)
+      if result is None:
+        raise NotImplementedError(
+          "Rust numerical Jacobian is unavailable for the selected outputs"
+        )
+      if not list_output:
+        return result
+      sizes = [self._jacobian_output_dim([state]) for state in state_type_list]
+      offsets = np.cumsum([0] + sizes)
+      return [result[..., offsets[i]:offsets[i + 1], :] for i in range(len(sizes))]
     if not self.motions_.is_batched():
       jacobs = [
         outward_api.jacobian_numerical(
-          self.robot_, self.motions_, st, max_order, gravity=self.gravity_
+          self.robot_, self.motions_, st, max_order, gravity=self.gravity_, eps=eps
         )
         for st in state_type_list
       ]
@@ -126,7 +137,7 @@ class DerivativesMixin:
     sample_results = [
       [
         outward_api.jacobian_numerical(
-          self.robot_, self._sample_motions(x, max_order), st, max_order, gravity=self.gravity_
+          self.robot_, self._sample_motions(x, max_order), st, max_order, gravity=self.gravity_, eps=eps
         )
         for st in state_type_list
       ]
@@ -198,11 +209,11 @@ class DerivativesMixin:
       len(state_type_list),
     )
 
-  def _jacobian_matvec_numerical(self, state_type_list, max_order : int, vec, list_output : bool = False):
+  def _jacobian_matvec_numerical(self, state_type_list, max_order : int, vec, list_output : bool = False, eps: float = 1e-8):
     if not self.motions_.is_batched():
       results = [
         outward_api.jacobian_numerical(
-          self.robot_, self.motions_, st, max_order, gravity=self.gravity_
+          self.robot_, self.motions_, st, max_order, gravity=self.gravity_, eps=eps
         ) @ vec
         for st in state_type_list
       ]
@@ -214,7 +225,7 @@ class DerivativesMixin:
       sample_motions = self._sample_motions(x, max_order)
       parts = [
         outward_api.jacobian_numerical(
-          self.robot_, sample_motions, st, max_order, gravity=self.gravity_
+          self.robot_, sample_motions, st, max_order, gravity=self.gravity_, eps=eps
         ) @ v
         for st in state_type_list
       ]
@@ -360,16 +371,20 @@ class DerivativesMixin:
       ]
     return np.stack(column_results, axis=-1)
 
-  def _jacobian_mul_numerical(self, state_type_list, max_order : int, rhs, rhs_is_matrix : bool, list_output : bool = False):
-    if not rhs_is_matrix:
-      return self._jacobian_matvec_numerical(state_type_list, max_order, rhs, list_output)
-
-    rhs_count = rhs.shape[-1]
-    column_results = [
-      self._jacobian_matvec_numerical(state_type_list, max_order, rhs[..., i], list_output)
-      for i in range(rhs_count)
-    ]
-    return self._stack_mul_columns(column_results, list_output, len(state_type_list))
+  def _jacobian_mul_numerical(self, state_type_list, max_order : int, rhs, rhs_is_matrix : bool, list_output : bool = False, eps: float = 1e-8):
+    jacob = self._jacobian_numerical(state_type_list, max_order, eps=eps)
+    batch_shape = self.batch_shape_ if self.batch_shape_ else self.motions_.batch_shape()
+    if batch_shape:
+      rhs = rhs.reshape(batch_shape + rhs.shape[-(2 if rhs_is_matrix else 1):])
+    if rhs_is_matrix:
+      applied = jacob @ rhs
+    else:
+      applied = (jacob @ rhs[..., None])[..., 0]
+    if not list_output:
+      return applied
+    sizes = [self._jacobian_output_dim([state]) for state in state_type_list]
+    offsets = np.cumsum([0] + sizes)
+    return [applied[..., offsets[i]:offsets[i + 1], ...] for i in range(len(sizes))]
 
   def _jacobian_mul_from_state(self, state, state_type_list, max_order : int, rhs, batch_shape : tuple, rhs_is_matrix : bool, list_output : bool = False):
     if not rhs_is_matrix:
@@ -411,24 +426,9 @@ class DerivativesMixin:
         raise ValueError(f"Unsupported data_type: {st.data_type}")
     return output_dim
 
-  def _jacobian_transpose_matvec_numerical(self, state_type_list, max_order : int, vec):
-    if not self.motions_.is_batched():
-      jacob = self._jacobian_numerical(state_type_list, max_order)
-      return jacob.T @ vec
-
-    flat_motion, batch_shape = batch_shapes.flatten_feature_batch(self.motion(max_order))
-    sample_results = []
-    for x, v in zip(flat_motion, vec):
-      sample_motions = self._sample_motions(x, max_order)
-      parts = [
-        outward_api.jacobian_numerical(
-          self.robot_, sample_motions, st, max_order, gravity=self.gravity_
-        )
-        for st in state_type_list
-      ]
-      jacob = np.vstack(parts)
-      sample_results.append(jacob.T @ v)
-    return batch_shapes.stack_sample_results(sample_results, batch_shape)
+  def _jacobian_transpose_matvec_numerical(self, state_type_list, max_order : int, vec, eps: float = 1e-8):
+    jacob = self._jacobian_numerical(state_type_list, max_order, eps=eps)
+    return (np.swapaxes(jacob, -1, -2) @ vec[..., None])[..., 0]
 
   def _jacobian_transpose_matvec_from_state(self, state, state_type_list, max_order : int, vec, batch_shape : tuple):
     fast = self._rust_selected_dynamics_apply(
@@ -542,16 +542,14 @@ class DerivativesMixin:
     ]
     return batch_shapes.stack_sample_results(sample_results, batch_shape)
 
-  def _jacobian_transpose_mul_numerical(self, state_type_list, max_order : int, rhs, rhs_is_matrix : bool):
-    if not rhs_is_matrix:
-      return self._jacobian_transpose_matvec_numerical(state_type_list, max_order, rhs)
-
-    rhs_count = rhs.shape[-1]
-    column_results = [
-      self._jacobian_transpose_matvec_numerical(state_type_list, max_order, rhs[..., i])
-      for i in range(rhs_count)
-    ]
-    return np.stack(column_results, axis=-1)
+  def _jacobian_transpose_mul_numerical(self, state_type_list, max_order : int, rhs, rhs_is_matrix : bool, eps: float = 1e-8):
+    jacob = self._jacobian_numerical(state_type_list, max_order, eps=eps)
+    batch_shape = self.batch_shape_ if self.batch_shape_ else self.motions_.batch_shape()
+    if batch_shape:
+      rhs = rhs.reshape(batch_shape + rhs.shape[-(2 if rhs_is_matrix else 1):])
+    if rhs_is_matrix:
+      return np.swapaxes(jacob, -1, -2) @ rhs
+    return (np.swapaxes(jacob, -1, -2) @ rhs[..., None])[..., 0]
 
   def _jacobian_transpose_mul_from_state(self, state, state_type_list, max_order : int, rhs, batch_shape : tuple, rhs_is_matrix : bool):
     if not rhs_is_matrix:
@@ -662,13 +660,13 @@ class DerivativesMixin:
     ]
     return np.stack(column_results, axis=-1)
 
-  def jacobian(self, state_type, numerical : bool = False, list_output : bool = False):
+  def jacobian(self, state_type, numerical : bool = False, list_output : bool = False, eps: float = 1e-8):
     state_type_list = self._state_type_list(state_type)
     if any(self._is_total_body_kinetic_energy(st) for st in state_type_list) and not all(self._is_total_body_kinetic_energy(st) for st in state_type_list):
       max_order = StateType.max_time_order(state_type_list)
       parts = []
       for st in state_type_list:
-        part = self.jacobian(st, numerical=numerical)
+        part = self.jacobian(st, numerical=numerical, eps=eps)
         source_order = StateType.max_time_order([st])
         parts.append(self._embed_motion_order_jacobian(np.asarray(part), source_order, max_order))
       return parts if list_output else np.concatenate(parts, axis=-2)
@@ -682,12 +680,12 @@ class DerivativesMixin:
       return parts if list_output else np.concatenate(parts, axis=-2)
     max_order = StateType.max_time_order(state_type_list)
     if numerical:
-      return self._jacobian_numerical(state_type_list, max_order, list_output)
+      return self._jacobian_numerical(state_type_list, max_order, list_output, eps=eps)
 
     state = self._state_for_direct_read()
     return self._jacobian_from_state(state, state_type_list, max_order, list_output)
 
-  def jacobian_mul(self, state_type, rhs : np.ndarray, numerical : bool = False, list_output : bool = False):
+  def jacobian_mul(self, state_type, rhs : np.ndarray, numerical : bool = False, list_output : bool = False, eps: float = 1e-8):
     """
     Compute J @ rhs for the Jacobian of ``state_type``.
 
@@ -706,7 +704,7 @@ class DerivativesMixin:
       for st in state_type_list:
         source_order = StateType.max_time_order([st])
         part_rhs = self._select_motion_order_rhs(rhs, source_order, max_order, rhs_is_matrix)
-        parts.append(self.jacobian_mul(st, part_rhs, numerical=numerical))
+        parts.append(self.jacobian_mul(st, part_rhs, numerical=numerical, eps=eps))
       return parts if list_output else np.concatenate(parts, axis=-2 if rhs_is_matrix else -1)
 
     if state_type_list and all(self._is_total_body_kinetic_energy(st) for st in state_type_list):
@@ -719,12 +717,12 @@ class DerivativesMixin:
       return np.concatenate(parts, axis=-2 if rhs_is_matrix else -1)
 
     if numerical:
-      return self._jacobian_mul_numerical(state_type_list, max_order, rhs, rhs_is_matrix, list_output)
+      return self._jacobian_mul_numerical(state_type_list, max_order, rhs, rhs_is_matrix, list_output, eps=eps)
 
     state = self._state_for_direct_read()
     return self._jacobian_mul_from_state(state, state_type_list, max_order, rhs, batch_shape, rhs_is_matrix, list_output)
 
-  def jacobian_transpose_mul(self, state_type, rhs : np.ndarray, numerical : bool = False):
+  def jacobian_transpose_mul(self, state_type, rhs : np.ndarray, numerical : bool = False, eps: float = 1e-8):
     """
     Compute J.T @ rhs for the Jacobian of ``state_type``.
 
@@ -745,7 +743,7 @@ class DerivativesMixin:
         width = self._jacobian_output_dim([st])
         part_rhs = rhs[..., row:row + width, :] if rhs_is_matrix else rhs[..., row:row + width]
         source_order = StateType.max_time_order([st])
-        part = self.jacobian_transpose_mul(st, part_rhs, numerical=numerical)
+        part = self.jacobian_transpose_mul(st, part_rhs, numerical=numerical, eps=eps)
         out += self._embed_motion_order_rhs(np.asarray(part), source_order, max_order, rhs_is_matrix)
         row += width
       return out
@@ -757,12 +755,12 @@ class DerivativesMixin:
       return self.kinetic_energy_jacobian_transpose_mul(energy_rhs)
 
     if numerical:
-      return self._jacobian_transpose_mul_numerical(state_type_list, max_order, rhs, rhs_is_matrix)
+      return self._jacobian_transpose_mul_numerical(state_type_list, max_order, rhs, rhs_is_matrix, eps=eps)
 
     state = self._state_for_direct_read()
     return self._jacobian_transpose_mul_from_state(state, state_type_list, max_order, rhs, batch_shape, rhs_is_matrix)
 
-  def jacobian_transpose_mul_many(self, state_rhs_pairs, numerical : bool = False):
+  def jacobian_transpose_mul_many(self, state_rhs_pairs, numerical : bool = False, eps: float = 1e-8):
     """Fuse VJPs for several state references into one reverse pass.
 
     ``state_rhs_pairs`` is a non-empty sequence of ``(state_type, rhs)``
@@ -825,7 +823,7 @@ class DerivativesMixin:
       if energy_rhs_parts:
         raise NotImplementedError("numerical Jacobian is not implemented for total_body kinetic_energy")
       fused_rhs = np.concatenate(rhs_parts, axis=-2 if rhs_is_matrix else -1)
-      return self._jacobian_transpose_mul_numerical(state_type_list, max_order, fused_rhs, rhs_is_matrix)
+      return self._jacobian_transpose_mul_numerical(state_type_list, max_order, fused_rhs, rhs_is_matrix, eps=eps)
 
     energy_rhs = None
     if energy_rhs_parts:

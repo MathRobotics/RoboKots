@@ -12,6 +12,103 @@ _logger = logging.getLogger(__name__)
 
 
 class RustDerivativesMixin:
+  def _rust_numerical_values(self, state, states, pose_reference=None):
+    """Return selected Rust state values in the public row order."""
+    values = []
+    for index, st in enumerate(states):
+      if st.data_type not in keys_kinematics + keys_momentum + keys_force + keys_torque:
+        raise NotImplementedError(
+          f"Rust numerical Jacobian does not support {st.data_type!r} output"
+        )
+      if st.data_type not in ("pos", "rot", "frame"):
+        values.append(np.asarray(state.state_value(st)).reshape(state.batch_shape + (-1,)))
+        continue
+
+      # Pose rows use the same fixed-base tangent convention as the existing
+      # numerical path. The reference pose is evaluated once, outside the
+      # perturbation batches.
+      matrix = np.asarray(state.cmtm(st.owner_type, st.owner_name, 1).elem_mat())
+      reference = pose_reference[index]
+      tangent = matrix @ np.linalg.inv(reference) if st.frame_name == "world" else np.linalg.inv(reference) @ matrix
+      angular = np.stack((
+        tangent[..., 2, 1] - tangent[..., 1, 2],
+        tangent[..., 0, 2] - tangent[..., 2, 0],
+        tangent[..., 1, 0] - tangent[..., 0, 1],
+      ), axis=-1) / 2
+      if st.data_type == "pos":
+        value = matrix[..., :3, 3] if st.frame_name == "world" else tangent[..., :3, 3]
+      elif st.data_type == "rot":
+        value = angular
+      else:
+        value = np.concatenate((angular, tangent[..., :3, 3]), axis=-1)
+      values.append(np.asarray(value).reshape(state.batch_shape + (-1,)))
+    return np.concatenate(values, axis=-1) if values else np.zeros(state.batch_shape + (0,))
+
+  def _rust_numerical_jacobian(self, state_type_list, max_order, eps=1e-8, chunk_size=4096):
+    """Central-difference selected outputs using shared Rust dynamics calls."""
+    if not hasattr(self.outward_state_, "raw_data"):
+      return None
+    if eps <= 0 or not np.isfinite(eps):
+      raise ValueError("eps must be a positive finite number")
+    if not state_type_list:
+      raise ValueError("numerical Jacobian requires at least one dynamics state")
+    if any(st.owner_type not in ("link", "joint") for st in state_type_list):
+      raise NotImplementedError("Rust numerical Jacobian supports link/joint outputs only")
+
+    motion = np.asarray(self.motion(max_order), dtype=float)
+    input_dim = self._rust_model_info().dof * max_order
+    if motion.shape[-1] != input_dim:
+      raise ValueError(f"motion must have shape (..., {input_dim}), got {motion.shape}")
+    batch_shape = motion.shape[:-1]
+    flat_motion = np.ascontiguousarray(motion.reshape((-1, input_dim)))
+    sample_count = flat_motion.shape[0]
+    output_dim = self._jacobian_output_dim(state_type_list)
+    result = np.empty((sample_count, output_dim, input_dim), dtype=float)
+    pose_indices = [i for i, st in enumerate(state_type_list) if st.data_type in ("pos", "rot", "frame")]
+
+    from ..outward.rust.data import create_rust_batch_outward_state
+    robot = self._rust_compiled_robot()
+    gravity = np.ascontiguousarray(np.asarray(self.gravity_, dtype=float))
+    pose_reference = None
+    if pose_indices:
+      base_state = create_rust_batch_outward_state(
+        self._rust_model_info(), max_order, (sample_count,), compiled_robot=robot,
+      )
+      base_state.compute_dynamics(flat_motion, gravity)
+      pose_reference = [
+        np.asarray(base_state.cmtm(st.owner_type, st.owner_name, 1).elem_mat())
+        if st.data_type in ("pos", "rot", "frame") else None
+        for st in state_type_list
+      ]
+
+    per_sample = max(1, int(chunk_size) // max(2 * input_dim, 1))
+    for start in range(0, sample_count, per_sample):
+      stop = min(sample_count, start + per_sample)
+      centers = flat_motion[start:stop]
+      count = stop - start
+      evaluations = np.repeat(centers, 2 * input_dim, axis=0)
+      steps = eps * np.maximum(1.0, np.abs(centers))
+      for column in range(input_dim):
+        plus = np.arange(count) * (2 * input_dim) + 2 * column
+        minus = plus + 1
+        evaluations[plus, column] += steps[:, column]
+        evaluations[minus, column] -= steps[:, column]
+
+      workspace = create_rust_batch_outward_state(
+        self._rust_model_info(), max_order, (evaluations.shape[0],), compiled_robot=robot,
+      )
+      workspace.compute_dynamics(np.ascontiguousarray(evaluations), gravity)
+      chunk_pose_reference = None if pose_reference is None else [
+        None if reference is None else np.repeat(reference[start:stop], 2 * input_dim, axis=0)
+        for reference in pose_reference
+      ]
+      values = self._rust_numerical_values(workspace, state_type_list, pose_reference=chunk_pose_reference)
+      values = values.reshape((count, 2 * input_dim, output_dim))
+      differences = values[:, 0::2, :] - values[:, 1::2, :]
+      result[start:stop] = np.swapaxes(differences / (2 * steps[..., None]), -1, -2)
+
+    return result.reshape(batch_shape + (output_dim, input_dim))
+
   def _rust_selected_dynamics_specs(self, states, max_order):
     """Select dynamics, spatial motion and pose tangents in public output order.
 

@@ -154,6 +154,7 @@ def jacobian_numerical(
   state_type : StateType,
   input_motion_order = None,
   gravity=(0.0, 0.0, 0.0),
+  eps=1e-8,
 ) -> np.ndarray:
   def func(x):
     return compute_outward_value(
@@ -193,9 +194,10 @@ def jacobian_numerical(
       if state_type.data_type == "rot":
         return angular
       return np.concatenate([angular, tangent[:3,3]])
-    return numerical_grad(x=motion, func=pose_coordinates)
+    return numerical_grad(x=motion, func=pose_coordinates, eps=eps)
 
   return numerical_grad(
             x = motion, 
             func = func, 
-            sub_func = data_type_to_sub_func(state_type.data_type))
+            sub_func = data_type_to_sub_func(state_type.data_type),
+            eps=eps)
