@@ -14,12 +14,38 @@ from ..core.state.tensor import JacobianTensor
 _logger = logging.getLogger(__name__)
 
 
+def _jax_static_array_key(value):
+  """Make a stable, hashable key for a model constant used by JAX."""
+  array = np.asarray(value)
+  return array.dtype.str, array.shape, array.tobytes()
+
+
+def _jax_model_key(robot):
+  """Detect model mutations without putting the mutable robot in a cache key."""
+  links = tuple(
+    (link.name, link.dof, float(link.mass), _jax_static_array_key(link.inertia),
+     _jax_static_array_key(link.cog))
+    for link in robot.links
+  )
+  joints = tuple(
+    (joint.name, joint.type, joint.parent_link_id, joint.child_link_id,
+     joint.dof, joint.dof_index, _jax_static_array_key(joint.axis),
+     _jax_static_array_key(joint.origin.mat()),
+     _jax_static_array_key(joint.select_mat))
+    for joint in robot.joints
+  )
+  return links, joints
+
+
 class DerivativesMixin:
-  def jacobian_autodiff(self, state_type, list_output: bool = False, *, mode: str = "forward"):
-    """Differentiate rigid-body dynamics with JAX AD (without JIT).
+  def jacobian_autodiff(self, state_type, list_output: bool = False, *, mode: str = "forward", jit: bool = True):
+    """Differentiate rigid-body dynamics with cached JAX AD.
 
     mode='forward' uses jacfwd (default); mode='reverse' uses jacrev.
-    Both return NumPy arrays with the same output and motion axes.
+    Both return NumPy arrays with the same output and motion axes. By default
+    the differentiated function, including batch ``vmap``, is JIT compiled
+    and cached. Set ``jit=False`` to use the uncompiled path for debugging or
+    to avoid the initial compilation cost.
 
     Supports link/joint momentum, force, torque and their time derivatives,
     local/world spatial outputs, and the same batch/motion axes as jacobian().
@@ -37,14 +63,48 @@ class DerivativesMixin:
       raise ValueError("jacobian_autodiff requires at least one dynamics state.")
     order = StateType.max_time_order(states)
     motion = jnp.asarray(self.motion(order))
-    def value(x):
-      return dynamics_state_vector_jax(self.robot_, x, states, order, self.gravity_)
-    derivative = (jax.jacfwd if mode == "forward" else jax.jacrev)(value)
-    if motion.ndim == 1:
-      jacobian = np.asarray(derivative(motion))
+    if motion.ndim < 1:
+      raise ValueError("motion must have at least one dimension")
+
+    state_key = tuple(
+      (state.owner_type, state.owner_name, state.data_type, state.frame_name,
+       state.time_order, state.key_order)
+      for state in states
+    )
+    dtype_key = np.dtype(motion.dtype).str
+    batch_shape = tuple(motion.shape[:-1])
+    cache_key = (
+      _jax_model_key(self.robot_), state_key, order, mode, dtype_key,
+      batch_shape, int(motion.shape[-1]),
+    )
+
+    # Gravity is deliberately an argument of value(), rather than a closed
+    # over constant. This keeps cached executables valid after dynamics() or
+    # another caller changes gravity.
+    def value(x, gravity):
+      return dynamics_state_vector_jax(self.robot_, x, states, order, gravity)
+
+    derivative_builder = jax.jacfwd if mode == "forward" else jax.jacrev
+    if jit:
+      cache = getattr(self, "_jax_autodiff_cache_", None)
+      if cache is None:
+        cache = self._jax_autodiff_cache_ = {}
+      derivative = cache.get(cache_key)
+      if derivative is None:
+        derivative = derivative_builder(value, argnums=0)
+        derivative = jax.jit(derivative) if not batch_shape else jax.jit(jax.vmap(derivative, in_axes=(0, None)))
+        cache[cache_key] = derivative
+    else:
+      derivative = derivative_builder(value, argnums=0)
+      if batch_shape:
+        derivative = jax.vmap(derivative, in_axes=(0, None))
+
+    gravity = jnp.asarray(self.gravity_, dtype=motion.dtype)
+    if not batch_shape:
+      jacobian = np.asarray(derivative(motion, gravity))
     else:
       flat = motion.reshape((-1, motion.shape[-1]))
-      jacobian = np.asarray(jax.vmap(derivative)(flat))
+      jacobian = np.asarray(derivative(flat, gravity))
       jacobian = jacobian.reshape(motion.shape[:-1] + jacobian.shape[-2:])
     if not list_output:
       return jacobian

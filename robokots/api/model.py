@@ -29,6 +29,8 @@ class ModelInputMixin:
   @robot_.setter
   def robot_(self, robot):
     self._python_robot_ = robot
+    if hasattr(self, "_jax_autodiff_cache_"):
+      self._jax_autodiff_cache_.clear()
 
   @property
   def _model_metadata(self):

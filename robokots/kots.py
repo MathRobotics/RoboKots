@@ -88,6 +88,7 @@ class Kots(ModelInputMixin, DerivativesMixin, RustDerivativesMixin, FastDerivati
     self._rust_inverse_dynamics_robot_ = None
     self._rust_outward_data_cache_ = {}
     self._rust_outward_data_cache_state_ = {}
+    self._jax_autodiff_cache_ = {}
     self.gravity_ = np.zeros(3, dtype=float)
 
   def set_order(self, order: int):
@@ -109,6 +110,7 @@ class Kots(ModelInputMixin, DerivativesMixin, RustDerivativesMixin, FastDerivati
       self._rust_inverse_dynamics_robot_ = None
     self._rust_outward_data_cache_ = {}
     self._rust_outward_data_cache_state_ = {}
+    self._jax_autodiff_cache_ = {}
     self.gravity_ = np.zeros(3, dtype=float)
 
   @staticmethod
