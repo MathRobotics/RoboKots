@@ -92,15 +92,18 @@ def test_workspace_owner_changes_with_model_and_order():
     assert k._rust_selected_workspace_[2] is not previous[2]
 
 
-def test_momentum_only_order_two():
-    rust=Kots.from_urdf_file(str(MODEL),order=3)
-    numpy=Kots.from_urdf_file(str(MODEL),order=3)
-    x=np.random.default_rng(11).normal(size=rust.dof()*3)*.2
+@pytest.mark.parametrize('order', [2, 3])
+@pytest.mark.parametrize('shape', [(), (2, 1)])
+@pytest.mark.parametrize('gravity', [[0., 0., 0.], [.3, -.4, -9.81]])
+def test_momentum_only_order_two(order, shape, gravity):
+    rust=Kots.from_urdf_file(str(MODEL),order=order)
+    numpy=Kots.from_urdf_file(str(MODEL),order=order)
+    x=np.random.default_rng(11).normal(size=shape+(rust.dof()*order,))*.2
     states=[StateType('link','a_tip','momentum','world'),StateType('joint','a_elbow','momentum')]
     for k,backend in [(rust,'rust'),(numpy,'numpy')]:
-        k.import_motions(x);k.dynamics(backend=backend)
+        k.import_motions(x);k.dynamics(backend=backend,gravity=gravity)
     jac=numpy.jacobian(states)
     np.testing.assert_allclose(rust.jacobian(states),jac,atol=1e-11)
     v=np.ones(jac.shape[-1]);w=np.ones(jac.shape[-2])
     np.testing.assert_allclose(rust.jacobian_mul(states,v),jac@v,atol=1e-11)
-    np.testing.assert_allclose(rust.jacobian_transpose_mul(states,w),jac.T@w,atol=1e-11)
+    np.testing.assert_allclose(rust.jacobian_transpose_mul(states,w),np.swapaxes(jac,-1,-2)@w,atol=1e-11)

@@ -436,6 +436,11 @@ pub(crate) fn cmtm_apply_mat_adj_wrench_tangent_into(
     rhs: &[f64], drhs: &[f64], order: usize, fact: &[f64],
     blocks: &mut [[[f64; 6]; 6]], dblocks: &mut [[[f64; 6]; 6]], out: &mut [f64], dout: &mut [f64],
 ) {
+    // Momentum-only dynamics (motion order 2) has an empty force series.
+    // Match the primal/reverse transport helpers: no blocks to differentiate.
+    if order == 0 {
+        return;
+    }
     cmtm_mat_adj_wrench_blocks_into(mat, vecs, order, fact, blocks);
     dblocks[0] = mat_adj_wrench_tangent_from_mat4(mat, dmat);
     for k in 1..order {
@@ -1760,6 +1765,15 @@ pub(crate) fn set_jac(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn empty_wrench_transport_tangent_is_noop() {
+        // Empty dynamics series are valid when only momentum is requested.
+        cmtm_apply_mat_adj_wrench_tangent_into(
+            [[0.0; 4]; 4], &[], [[0.0; 4]; 4], &[], &[], &[], 0, &[],
+            &mut [], &mut [], &mut [], &mut [],
+        );
+    }
 
     #[test]
     fn force_series_reverse_satisfies_directional_duality() {
