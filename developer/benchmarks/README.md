@@ -3,6 +3,28 @@
 These scripts are for local performance investigation and are not part of the
 normal RoboKots runtime path.
 
+## Dense Rust dynamics: dedicated assembly vs identity-seeded JVP
+
+Rebuild the installed Rust extension from the current sources before measuring:
+
+```bash
+VIRTUAL_ENV="$PWD/.venv" uvx maturin develop --release --manifest-path robokots/_rust/Cargo.toml
+.venv/bin/python -u -m developer.benchmarks.rust_dense_dynamics_compare --baseline-ref 932a426
+```
+
+Builds the baseline revision in a temporary directory without replacing the
+installed extension. Fresh workers use both the baseline Python package and its
+release extension, or both current implementations. Three sequential rounds
+alternate variant order. Measures all active-joint momentum, force and torque
+derivatives 0–4 on synthetic 7-/16-DOF serial chains, plus world and batch cases.
+State-ready and state-inclusive scopes are separate; the latter alternates
+motions to invalidate caches. NumPy derivative fallback is blocked.
+
+The [report](results/rust_dense_dynamics.md) and
+[raw samples](results/rust_dense_dynamics.json) retain repeat counts, first calls,
+environment, source/binary hashes and errors for two independent motions.
+Only dense Rust analytical Jacobians are timed; no AD/JIT or numerical timing.
+
 ## Kernel Layout
 
 Measure before moving `core/models`, then run the same workload after moving it:

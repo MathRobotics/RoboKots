@@ -341,8 +341,8 @@ cargo tree --offline --manifest-path robokots/_rust/Cargo.toml --no-default-feat
 Native state operations are now public: outward/batch compute methods, local
 matrix/vector and local/world motion/wrench getters, selected JVP/VJP application,
 and ABA preparation/solve. Selected inputs and outputs use flattened row-major
-arrays, with explicit batch size and RHS column count. Dense Jacobians can be
-obtained by supplying an identity RHS; product methods do not build one.
+arrays, with explicit batch size and RHS column count. Dense Jacobians use
+`RustSelectedWorkspace::jacobian`; callers do not need an identity RHS.
 See [the external-crate integration tests](../robokots/_rust/tests/native_api.rs)
 for a complete model/state/finite-difference/JVP/VJP/ABA example without Python.
 
@@ -447,8 +447,8 @@ ABA solves; these convenience methods allocate temporary workspaces.
 
 ### Selected Rust dynamics derivatives
 
-For dynamics requests with motion order at least 3, the Rust derivative adapter
-can select link/joint momentum and force in local or world coordinates together
+For momentum requests with motion order at least 2 (force/torque at least 3),
+the Rust derivative adapter can select link/joint momentum and force in local or world coordinates together
 with joint torque, local/world spatial velocity and its higher time derivatives,
 and position/orientation/frame tangents.
 `None` and `"local"` denote local spatial outputs. Mixed owners, frames,
@@ -460,7 +460,7 @@ and tangent recurrence used by the torque-series API. World JVPs include both
 wrench and moving-transform derivatives. World VJP seeds are accumulated with
 local force/momentum/torque seeds before the common dynamics and kinematics
 reverse pass. `jacobian_mul()` and `jacobian_transpose_mul()` use direct products;
-only `jacobian()` supplies a full input basis to materialize a dense Jacobian.
+`jacobian()` uses the coordinate-derivative assembly described below.
 Spatial outputs use the same tangent buffers; their VJP seeds join the
 same reverse pass. Joint spatial motion uses relative joint CMTM vectors,
 not child-link motion. The existing pure-torque and pure-kinematics dispatch
@@ -616,6 +616,54 @@ kinds are unchanged (fixed/revolute).
 
 Reproducible measurements are in
 [the route-block report](benchmarks/results/rust_route_blocks_comparison.md).
+
+### Dense Rust dynamics Jacobians
+
+`robokots/_rust/src/dynamics_jacobian.rs` assembles motion-coordinate columns
+directly for selected momentum, force, torque and mixed spatial/pose outputs.
+Pure order-three torque retains the dedicated RNEA dense implementation;
+higher-order torque uses the selected dense workspace. Neither path sends an
+identity matrix through the general JVP API. JVP/VJP retain their direct kernels.
+
+For a parent/child edge, let `X[t]` be the factorial-normalized coefficient of
+the inverse motion adjoint, and `S` the constant revolute screw. The dense
+kinematic recurrence differentiates
+
+```text
+T_child = T_parent T_relative
+V_child^(k) = sum_{t=0}^k k!/(k-t)! X[t] V_parent^(k-t) + S q^(k+1)
+Xdot = -ad(S qdot) X
+```
+
+Ancestor columns propagate through `X`; derivatives of `X` contribute only to
+the edge's own joint columns. Pose columns depend only on `q`, and velocity
+derivative `k` only on input derivatives through `k+1`. The implementation
+uses these structural zeros instead of propagating arbitrary seed directions.
+Output coefficients and motion columns remain ordinary time derivatives;
+factorials are restored explicitly at coefficient-series products.
+
+The dense and directional paths share the subsequent analytic dynamics
+propagation and output projection, including moving-frame gravity and world
+transform derivatives. They share derivative-buffer storage, but the dense
+path has its own kinematic assembly. Reusing a workspace across dense/JVP/VJP
+calls resets the derivative buffers; the primal follows motion, gravity and
+batch invalidation. Dense derivatives themselves are recomputed on each call.
+
+For fixed time order and O(d) links/joints, full dynamics Jacobians use O(d²)
+work and storage. With motion order p and L links/joints, the series recurrences
+have an O(L d p³) upper bound and O(L d p²) derivative storage, for O(L) selected
+outputs. This is an operation-count bound, not a measured speedup. The CMTM
+model scope remains rigid links and fixed/revolute joints.
+
+Regression coverage includes minimum motion orders for derivatives 0–4,
+local/world, link/joint, branches, fixed joints, zero poses, nonzero gravity,
+multidimensional batches, repeated/reordered outputs, and product/workspace
+transitions. See `tests/outward/test_rust_minimum_dynamics_order.py` and
+`tests/outward/test_rust_dense_dynamics.py`.
+
+The [dense dynamics comparison](benchmarks/results/rust_dense_dynamics.md)
+records timings against the previous implementation, including state-ready and
+state-inclusive measurements and numerical agreement.
 
 ### Cached direct Rust Jacobian products
 

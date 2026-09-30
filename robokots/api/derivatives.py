@@ -165,9 +165,6 @@ class DerivativesMixin:
     fast = self._rust_torque_jacobian(state_type_list, max_order, list_output=list_output)
     if fast is not None:
       return fast
-    fast = self._rust_cmtm_torque_jacobian(state_type_list, max_order, list_output=list_output)
-    if fast is not None:
-      return fast
     fast = self._rust_link_local_jacobian(state_type_list, max_order, list_output=list_output)
     if fast is not None:
       return fast

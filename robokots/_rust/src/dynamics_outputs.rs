@@ -109,6 +109,17 @@ impl RustCompiledRobot {
         } else {
             self.kinematics_cmtm_tangent_from_state_into(motion, directions, kin_order, &mut primal.cmtm, tangent);
         }
+        self.selected_derivatives_into(outputs, kin_order, primal, tangent, out);
+    }
+
+    /// Project computed derivative columns into the requested output order.
+    /// Includes the derivative of the local/world transform itself.
+    pub(crate) fn selected_derivatives_into(
+        &self, outputs: &[DynamicsOutput], kin_order: usize,
+        primal: &DynamicsCmtmWorkspace, tangent: &DynamicsCmtmTangentWorkspace,
+        out: &mut [f64],
+    ) {
+        let dynamics_order = kin_order.saturating_sub(2);
         let cols = tangent.rhs_cols;
         let mut row = 0;
         for &(owner, id, family, time, world) in outputs {

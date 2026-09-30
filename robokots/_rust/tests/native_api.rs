@@ -82,12 +82,8 @@ fn external_crate_model_state_and_matrix_free_products() {
         ),
     ];
     let mut selected = robot.create_selected_workspace(4).unwrap();
-    let mut identity = vec![0.0; 16];
-    for i in 0..4 {
-        identity[i * 4 + i] = 1.0;
-    }
     let jac = selected
-        .apply(&x, &identity, &outputs, 1, 4, g, false)
+        .jacobian(&x, &outputs, 1, g)
         .unwrap();
     let eps = 1e-6;
     for col in 0..4 {

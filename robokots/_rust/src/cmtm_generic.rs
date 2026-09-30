@@ -618,7 +618,7 @@ pub(crate) fn tangent_mat4(flat: &[f64], index: usize, rhs_cols: usize, rhs_col:
     out
 }
 
-fn set_tangent_mat4(
+pub(crate) fn set_tangent_mat4(
     flat: &mut [f64], index: usize, rhs_cols: usize, rhs_col: usize, mat: [[f64; 4]; 4],
 ) {
     for row in 0..4 {

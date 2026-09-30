@@ -519,7 +519,6 @@ impl RustCompiledRobot {
         tangent: &mut DynamicsCmtmTangentWorkspace,
     ) {
         let kin_order = dynamics_order + 2;
-        let momentum_order = dynamics_order + 1;
         self.kinematics_cmtm_tangent_from_state_into(
             motion,
             motion_tangent,
@@ -527,6 +526,20 @@ impl RustCompiledRobot {
             &mut primal.cmtm,
             tangent,
         );
+        self.dynamics_derivatives_from_kinematics_into(dynamics_order, gravity, primal, tangent);
+    }
+
+    /// Shared analytic dynamics propagation over derivative columns. Columns
+    /// may be motion coordinates (dense) or caller-supplied directions (JVP).
+    pub(crate) fn dynamics_derivatives_from_kinematics_into(
+        &self,
+        dynamics_order: usize,
+        gravity: [f64; 3],
+        primal: &DynamicsCmtmWorkspace,
+        tangent: &mut DynamicsCmtmTangentWorkspace,
+    ) {
+        let kin_order = dynamics_order + 2;
+        let momentum_order = dynamics_order + 1;
         for link in 0..self.link_num {
             let vel = cmtm_vecs_slice(&primal.cmtm.link_vecs, link, kin_order);
             for rhs_col in 0..tangent.rhs_cols {

@@ -34,6 +34,7 @@ use pyo3::prelude::*;
 mod algorithms;
 mod cmtm_generic;
 mod cmtm_series;
+mod dynamics_jacobian;
 mod dynamics_outputs;
 pub mod error;
 pub mod model;

@@ -109,15 +109,16 @@ class RustDerivativesMixin:
 
     return result.reshape(batch_shape + (output_dim, input_dim))
 
-  def _rust_selected_dynamics_specs(self, states, max_order):
+  def _rust_selected_dynamics_specs(self, states, max_order, *, dense=False):
     """Select dynamics, spatial motion and pose tangents in public output order.
 
     Order-three torque products use the cached RNEA linearization. Joint motion
-    coordinates are not spatial CMTM entries.
+    coordinates are not spatial CMTM entries. Higher-order pure torque retains
+    its specialised product dispatch, while dense=True selects native assembly.
     """
     if not hasattr(self.outward_state_, "raw_data") or self.dim_ != 3 or max_order < 1:
       return None
-    if not states or (max_order != 3 and all(st.data_type in keys_torque and st.frame_name is None for st in states)):
+    if not states or (not dense and max_order != 3 and all(st.data_type in keys_torque and st.frame_name is None for st in states)):
       return None
     specs, widths = [], []
     model_info = self._rust_model_info()
@@ -165,7 +166,7 @@ class RustDerivativesMixin:
     return [result[..., offsets[i]:offsets[i + 1], :] if rhs_is_matrix else result[..., offsets[i]:offsets[i + 1]] for i in range(len(widths))]
 
   def _rust_selected_dynamics_jacobian(self, states, max_order, list_output=False):
-    spec = self._rust_selected_dynamics_specs(states, max_order)
+    spec = self._rust_selected_dynamics_specs(states, max_order, dense=True)
     if spec is None:
       return None
     specs, widths = spec
@@ -666,56 +667,6 @@ class RustDerivativesMixin:
       else:
         return None
     return dynamics_order, parts
-
-  def _rust_cmtm_torque_jacobian(self, state_type_list, max_order : int, list_output : bool = False):
-    """Materialize higher-order torque Jacobians through the Rust CMTM Jv.
-
-    This is only used by ``jacobian()``; product APIs retain the cheaper
-    directional kernel.  A full input basis is sent as one RHS block, so a
-    trajectory batch still crosses the Python/Rust boundary once.
-    """
-    if not hasattr(self.outward_state_, "raw_data"):
-      return None
-    spec = self._rust_cmtm_torque_row_parts(state_type_list, max_order)
-    if spec is None:
-      return None
-    dynamics_order, part_specs = spec
-    motion = np.asarray(self.motion(max_order), dtype=float)
-    batch_shape = motion.shape[:-1] if motion.ndim > 1 else ()
-    input_len = self._rust_model_info().dof * max_order
-    if motion.shape[-1] != input_len:
-      return None
-    robot = self._rust_compiled_robot()
-    scalar_kernel = getattr(robot, "dynamics_joint_torque_series_tangent", None)
-    batch_kernel = getattr(robot, "dynamics_joint_torque_series_tangent_batch", None)
-    if scalar_kernel is None and batch_kernel is None:
-      return None
-    try:
-      basis = np.eye(input_len)
-      if batch_shape:
-        flat_motion = np.ascontiguousarray(motion.reshape((-1, input_len)))
-        flat_basis = np.broadcast_to(basis, (flat_motion.shape[0], input_len, input_len)).copy()
-        if batch_kernel is not None:
-          applied = np.asarray(batch_kernel(flat_motion, flat_basis, dynamics_order, gravity=self.gravity_))
-        else:
-          applied = np.stack([
-            np.asarray(scalar_kernel(sample, basis, dynamics_order, gravity=self.gravity_))
-            for sample in flat_motion
-          ])
-        applied = applied.reshape(batch_shape + applied.shape[-3:])
-      else:
-        applied = np.asarray(scalar_kernel(np.ascontiguousarray(motion), basis, dynamics_order, gravity=self.gravity_))
-    except NotImplementedError as exc:
-      _logger.debug("Unsupported Rust derivative path; trying next implementation: %s", exc)
-      return None
-    selected_parts = []
-    for rows, _ in part_specs:
-      selected_parts.append(np.stack(
-        [applied[..., joint_id, time_order, :] for joint_id, time_order in rows], axis=-2,
-      ))
-    if list_output:
-      return selected_parts
-    return np.concatenate(selected_parts, axis=-2)
 
   def _rust_cmtm_torque_jacobian_apply(self, state_type_list, max_order : int, rhs, batch_shape : tuple, rhs_is_matrix : bool, list_output : bool = False):
     """Apply the analytic higher-order CMTM torque tangent without a Jacobian.

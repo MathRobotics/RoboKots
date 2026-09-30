@@ -53,6 +53,9 @@ class FastDerivativesMixin:
     fast = self._rust_torque_jacobian(states, max_order, list_output=True)
     if fast is not None:
       return fast
+    fast = self._rust_selected_dynamics_jacobian(states, max_order, list_output=True)
+    if fast is not None:
+      return fast
     return outward_api.outward_jacobian(
       self.robot_,
       state,

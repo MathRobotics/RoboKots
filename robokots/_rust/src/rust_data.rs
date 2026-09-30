@@ -1150,8 +1150,8 @@ impl RustSelectedWorkspace {
         Ok(())
     }
 
-    /// Dense selected Jacobian. Kinematic outputs use route blocks directly,
-    /// without an identity seed; dynamics retain their existing tangent path.
+    /// Dense selected Jacobian. Kinematics uses route blocks; dynamics uses
+    /// direct motion-coordinate derivatives. Neither constructs an identity RHS.
     pub fn jacobian(&mut self, motion: &[f64], outputs: &[StateOutput], batch: usize,
                     gravity: [f64; 3]) -> CoreResult<Vec<f64>> {
         let packed = outputs.iter().map(StateOutput::raw).collect::<Vec<_>>();
@@ -1163,13 +1163,21 @@ impl RustSelectedWorkspace {
         let rows = self.robot.check_selected_outputs(outputs, self.order)?;
         let input_len = self.robot.dof * self.order;
         let size = checked_size(&[batch, rows, input_len])?;
-        if outputs.iter().any(|x| x.2 < 3) {
-            let mut basis = vec![0.0; checked_size(&[batch, input_len, input_len])?];
-            for b in 0..batch { for i in 0..input_len { basis[(b*input_len+i)*input_len+i] = 1.0; }}
-            return self.apply_raw(motion, &basis, outputs, batch, input_len, gravity, false);
-        }
         self.prepare_selected_primal(motion, outputs, batch, gravity)?;
         let mut out = vec![0.0; size];
+        if outputs.iter().any(|x| x.2 < 3) {
+            if self.tangent.as_ref().map(|x| x.rhs_cols) != Some(input_len) {
+                self.tangent = Some(DynamicsCmtmTangentWorkspace::new(&self.robot, self.order - 2, input_len));
+            }
+            for i in 0..batch {
+                self.robot.dynamics_jacobian_from_state_into(
+                    &motion[i*input_len..(i+1)*input_len], outputs, self.order,
+                    gravity, &self.primal[i], self.tangent.as_mut().unwrap(),
+                    &mut out[i*rows*input_len..(i+1)*rows*input_len],
+                );
+            }
+            return Ok(out);
+        }
         for i in 0..batch {
             self.robot.kinematics_route_apply_into(&self.primal[i].cmtm, outputs, self.order,
                 None, input_len, false, &mut out[i*rows*input_len..(i+1)*rows*input_len], &mut self.route_cache[i]);
