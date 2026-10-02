@@ -8,7 +8,7 @@ Dense Jacobians, single sample, gravity [0.3, -0.4, -9.81]. Momentum/force selec
 
 ## Median execution time (ms)
 
-Full analytic timings include motion import, dynamics state computation (without dictionary materialization), and Jacobian computation. Cached timings exclude state computation. JAX JIT timings include input conversion, synchronized execution and NumPy output conversion. JIT compilation is reported separately; a compiled function must be reused. The public jacobian_autodiff() is the eager column, not the JIT column.
+Full analytic timings include motion import, dynamics state computation (without dictionary materialization), and Jacobian computation. Cached timings exclude state computation. JAX JIT timings include input conversion, synchronized execution and NumPy output conversion. JIT compilation is reported separately; a compiled function must be reused. At the measurement date, the public jacobian_autodiff() used the uncompiled path shown in the eager column. The current public API defaults to jit=True with compilation caching; jit=False explicitly selects the uncompiled path. The timings below remain the historical measurements.
 
 NumPy/Rust labels indicate the requested dynamics-state backend. With the nonzero gravity used here, link momentum/force dense Jacobians fall back to the Python analytic path even after Rust state computation. The torque cases use Rust RNEA/CMTM derivative kernels.
 

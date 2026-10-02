@@ -52,7 +52,7 @@ NumPyによる解析計算、JAXによる自動微分、PyO3経由のRust実装�
 
 - 動力学の自動微分本体は `robokots/outward/diff/dynamics_jax.py`、公開入口は `Kots.jacobian_autodiff()`。
 - 現行の動力学ADは剛体リンクと固定・回転・直動関節に対応する。柔軟リンク、球面・浮遊関節は明示的な未対応。拡張する場合は対応範囲とテストを一緒に更新する。
-- 現行の `jacobian_autodiff()` はJITなしでNumPy配列を返す。JIT測定には純粋なJAX関数を使う。この違いを説明とベンチマークで明記する。
+- `jacobian_autodiff()` は既定の `jit=True` で微分関数をJITコンパイルしてキャッシュし、NumPy配列を返す。JITなしの測定は `jit=False` を明示する。公開APIと純粋なJAX関数の計測を区別し、初回コンパイル込み・コンパイル済みの費用を説明とベンチマークで明記する。
 - トレース対象の値を `np.asarray`、Pythonの `float`、データ依存のPython分岐に通さない。静的なモデル定数と動的な入力を分ける。
 - JITではmotionを実行時引数として渡す。測定対象のmotionをクロージャ内の定数にしない。
 - 微分比較はfloat64で行い、ゼロ姿勢でも有限値になることを確認する。異なる入力でもコンパイル済み関数を検証する。

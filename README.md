@@ -172,6 +172,7 @@ kots.dynamics(gravity=[0, 0, -9.81])
 state = StateType("total_joint", "total_joint", "torque_diff2")
 jac_ad = kots.jacobian_autodiff(state)
 jac_reverse = kots.jacobian_autodiff(state, mode="reverse")
+jac_eager = kots.jacobian_autodiff(state, jit=False)
 jac_analytic = kots.jacobian(state)
 ```
 
@@ -182,7 +183,14 @@ world frames. The API preserves batch axes and accepts `list_output=True`,
 using the same row and motion-column ordering as `jacobian()`. Gravity follows
 the last `dynamics()` call and defaults to zero.
 `mode="forward"` uses `jax.jacfwd`; `mode="reverse"` uses `jax.jacrev`.
-Both return NumPy arrays without JIT; neither mode changes the output layout.
+Both return NumPy arrays and preserve the output layout. By default,
+`jit=True` compiles the differentiated function, including batched evaluation,
+and caches it on the `Kots` instance. The first call includes tracing and
+compilation; subsequent calls with the same configuration reuse the compiled
+function with new motion and gravity inputs. Changes to the model, selected
+outputs, mode, dtype or batch shape can require a new compilation.
+Use `jit=False` for the uncompiled path, for example when debugging or avoiding
+the initial compilation cost.
 
 The JAX implementation supports rigid links with fixed, revolute and prismatic
 joints, including branched trees. Flexible links and spherical/floating joints
@@ -190,8 +198,10 @@ raise `NotImplementedError`. This is inverse dynamics, not forward dynamics.
 `jacobian()` and `dynamics()` retain their existing backend selection;
 `jacobian_autodiff()` explicitly selects this independent JAX calculation.
 
-For JIT or differentiable optimization code, use the pure
-array function directly (the `Kots` wrapper returns NumPy arrays):
+For JAX-array outputs or composition with other JAX transformations, use the
+pure array function directly (the `Kots` wrapper returns NumPy arrays).
+Keep the compiled function for repeated evaluations and pass motion as a
+runtime argument:
 
 ```python
 import jax.numpy as jnp
@@ -201,7 +211,8 @@ states = [StateType("joint", "joint1", "torque")]
 value = lambda x: dynamics_state_vector_jax(
     kots.robot_, x, states, order=3, gravity=[0, 0, -9.81]
 )
-jac = jax.jit(jax.jacfwd(value))(jnp.asarray(kots.motion(3)))
+jacobian_fn = jax.jit(jax.jacfwd(value))
+jac = jacobian_fn(jnp.asarray(kots.motion(3)))
 ```
 
 Run `python -m developer.benchmarks.jacobian_compare` to compare the analytic,

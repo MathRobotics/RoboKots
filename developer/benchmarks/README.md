@@ -415,9 +415,13 @@ interrupted reports explicitly show missing cells as `pending`.
 The public dynamics API also supports both modes:
 `kots.jacobian_autodiff(state, mode="forward")` (default) and
 `kots.jacobian_autodiff(state, mode="reverse")`. Both support batching and
-`list_output=True`, return NumPy arrays, and do not use JIT. The table benchmark
-additionally differentiates the internal velocity series; the public AD API
-remains limited to dynamics quantities.
+`list_output=True`, return NumPy arrays, and default to `jit=True` with the
+compiled differentiated function cached on the `Kots` instance. The first call
+includes tracing and compilation; subsequent calls with the same configuration
+reuse it. Pass `jit=False` explicitly for uncompiled public-API measurements.
+The table benchmark uses pure JAX functions without JIT and additionally
+differentiates the internal velocity series; the public AD API remains limited
+to dynamics quantities.
 
 ```bash
 uv run python -m developer.benchmarks.jacobian_compare
@@ -436,14 +440,18 @@ sweep currently measures the velocity, acceleration and jerk cases only.
 
 `dynamics_autodiff_compare` measures dense dynamics Jacobians with NumPy/Rust
 analytic derivatives, the existing numerical-difference API, eager JAX and
-JIT-compiled JAX. It separates cached analytic timings, state-inclusive timings,
-and first-call JIT cost, synchronizes JAX results, and writes a Markdown report
+JIT-compiled JAX. The eager column explicitly uses the public API with
+`jit=False`; the JIT columns use a reusable compiled pure JAX function and
+include input conversion, synchronized execution and NumPy output conversion.
+It separates cached analytic timings, state-inclusive timings,
+and first-call JIT cost, and writes a Markdown report
 and raw JSON to `developer/benchmarks/results/dynamics_autodiff.*`. Models cover
 the sample arm, a branched tree, and generated 8/16-DOF arms. Use `--repeats`
 to change analytic repetitions and `--output` to change the output prefix.
 
 The [recorded comparison](results/dynamics_autodiff.md) includes the measurement
-environment; [raw measurements](results/dynamics_autodiff.json) are stored alongside
+environment and describes the API at its measurement date;
+[raw measurements](results/dynamics_autodiff.json) are stored alongside
 it. These values are a measurement snapshot, not performance requirements.
 
 ## Pinocchio Comparison
