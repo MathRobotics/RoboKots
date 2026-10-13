@@ -93,7 +93,7 @@ def evaluate(model_name, data_type, repeats):
 
     def eager():
         kots.import_motions(motion)
-        return kots.jacobian_autodiff(state)
+        return kots.jacobian_autodiff(state, jit=False)
     values["jax_eager"], timing["jax_eager"] = measure(eager, 3, warmup=1)
 
     # x is a runtime argument: do not capture the evaluated motion as a constant.
@@ -143,11 +143,15 @@ def write_report(path, metadata, results):
         "Cached timings exclude state computation. JAX JIT timings include input "
         "conversion, synchronized execution and NumPy output conversion. "
         "JIT compilation is reported separately; a compiled function must be reused. "
-        "The public jacobian_autodiff() is the eager column, not the JIT column.", "",
+        "The eager column explicitly calls jacobian_autodiff(jit=False); "
+        "the public API now defaults to jit=True. Full analytic calls reuse the "
+        "same motion values, so backend primal caches may be reused; use "
+        "dynamics_complexity for alternating-input scaling measurements.", "",
         "NumPy/Rust labels indicate the requested dynamics-state backend. "
-        "With the nonzero gravity used here, link momentum/force dense Jacobians "
-        "fall back to the Python analytic path even after Rust state computation. "
-        "The torque cases use Rust RNEA/CMTM derivative kernels.", "",
+        "Current Rust link momentum/force dense Jacobians use the dedicated "
+        "analytic Rust implementation, including nonzero gravity. Ordinary "
+        "torque uses Rust RNEA and high-order torque uses the dense CMTM path. "
+        "Historical saved reports describe the implementation at their measurement date.", "",
         "| Model | Output | Shape | NumPy full | Rust full | NumPy cached | Rust cached | Numerical | JAX eager | JAX JIT warm | JIT first (ms) |",
         "|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]

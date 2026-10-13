@@ -3,6 +3,56 @@
 These scripts are for local performance investigation and are not part of the
 normal RoboKots runtime path.
 
+## NumPy analytical Jacobian breakdown
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 .venv/bin/python -u -m developer.benchmarks.analytic_breakdown
+```
+
+Measures motion import, fresh outward state calculation and the first dense
+all-joint torque Jacobian after that state calculation, for derivatives 0/2
+and 4/8/16/32/64 DOF. Each baseline phase is measured before and after profiling
+(five samples per side, two warmups). Profiles three samples after one warmup,
+separating matrix/geometry construction routines, explicit NumPy matrix
+products, gravity routines, assembly and output dispatch. Profiling rewrites
+function code only inside the benchmark process and restores it afterward;
+library source files remain unchanged. Instrumented totals include overhead
+and are reported separately from production timings. Construction includes
+internal MathRobo work; it is not a pure allocation measurement.
+
+The [report](results/analytic_breakdown.md) and
+[raw profiles](results/analytic_breakdown.json) retain product dimensions,
+counts, estimated dense FLOPs, routine hotspots, repeat counts and environment.
+Both motion inputs must produce bit-for-bit identical Jacobians with and
+without instrumentation. CLI options control sizes and measurement counts.
+
+The saved profile was measured on October 1, 2026. Its recorded benchmark
+script SHA-256 differs from the current script; the recorded instrumented
+library source hashes match the sources included here. The original script
+revision is not retained, so these timings remain historical measurements
+rather than a verified run of the current benchmark script.
+
+## Dense dynamics complexity audit
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 .venv/bin/python -u -m developer.benchmarks.dynamics_complexity
+```
+
+Measures all-joint dense torque Jacobians at time derivative orders 0 and 2,
+holding motion order fixed while sweeping 4/8/16/32 DOF on the same serial-chain
+model family. NumPy/Rust analytic state-ready and state-inclusive scopes,
+NumPy/Rust central differences, forward/reverse AD without JIT, first JIT and
+warm JIT are separated. Full calls alternate inputs; Rust analytic fallback is
+blocked. The default numerical/AD limit is 16 DOF; numerical uses one timed call
+and must be interpreted accordingly. Analytic uses seven samples ready/eight
+full, eager three, warm JIT thirty. CLI options control limits and repeats.
+
+The [report](results/dynamics_complexity.md) and
+[JSON](results/dynamics_complexity.json) record timings, adjacent-size effective
+exponents, errors, environment and repeat counts. Finite-size timing exponents
+are distinguished from arithmetic complexity; changes in time derivative
+order and historical reports from different implementations are not pooled.
+
 ## Dense Rust dynamics: dedicated assembly vs identity-seeded JVP
 
 Rebuild the installed Rust extension from the current sources before measuring:
