@@ -156,6 +156,37 @@ comparison and validation. `jacobian_mul()` applies the gravity CMTM variation
 directly for vector and matrix right-hand sides, without assembling the dense
 gravity Jacobian.
 
+NumPy dynamics keeps momentum, force, gravity corrections, and subtree
+accumulation in factorial-normalized CM coefficients. For momentum coefficients
+`p_bar[k] = p^(k) / k!`, the force derivative term is `(k + 1) * p_bar[k + 1]`.
+Joint torques are also stored as CM coefficients. Ordinary derivatives are
+reconstructed only when requested through public state outputs; output units
+and derivative conventions are unchanged.
+
+Rust stores kinematic motion, momentum, force, moving-frame gravity, and joint torque as CM
+coefficients throughout the persistent dynamics workspace. Tangent/reverse
+kernels read those coefficients directly; their public Jacobians and products
+retain ordinary physical-output units. Ordinary result values are reconstructed
+only by public output getters, including the legacy bulk-array APIs. Native CM
+series getters feed the Python Rust-vector adapter without an ordinary-value
+round trip. `truncate()` shares a coefficient prefix and `vecs()` reconstructs a
+detached ordinary-derivative array. Native world getters transform CM coefficients
+and reconstruct only the requested derivative row. The specialized low-order
+fast paths remain in use, where the relevant factorial factors are all one.
+
+CMTM objects and Rust CMTM adapters retain only normalized motion coefficients.
+Array-backed states also retain CM series; their ordinary array properties
+reconstruct detached output arrays. Batch sample selection shares coefficient
+slices directly, including torque, without ordinary-value serialization.
+NumPy torque mappings reconstruct ordinary arrays on read and normalize arrays
+assigned by callers. Native bulk APIs keep their existing ordinary output default;
+`cm_coefficients=True` lets internal array-state builders transfer CM data directly.
+
+World-frame state queries transform normalized coefficients and reconstruct only
+the requested derivative row. Spatial Jacobian and direct-product operators reuse
+the same CM series without converting through ordinary derivatives. Dictionary
+world-frame outputs follow the same conversion path and preserve batch axes.
+
 ## JAX Automatic Differentiation of Dynamics
 
 `jacobian_autodiff()` computes dynamics Jacobians independently with JAX
