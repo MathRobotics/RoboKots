@@ -1628,8 +1628,10 @@ def _batch_selected_coord_to_joint_momentum_grad_mat(
         cmtm_wrench = state_cmtm_wrench(state, child_link.name, "link", order - 1)
         block_world = factorial @ cmtm_wrench.mat_inv_adj() @ factorial_inv
         local_joint_momentum = state_cmvec(state, joint.name, "joint", "momentum", order - 1)
-        world_vec = _batched_matvec(factorial, apply_mat_adj(cmtm_wrench, local_joint_momentum.cm_vec()))
-        world_joint_momentum = CMVector(world_vec.reshape(world_vec.shape[:-1] + (order - 1, -1)))
+        world_cm = apply_mat_adj(cmtm_wrench, local_joint_momentum.cm_vec())
+        world_joint_momentum = CMVector.set_cmvecs(
+            world_cm.reshape(world_cm.shape[:-1] + (order - 1, -1))
+        )
         block_tan = factorial @ cmtm_wrench.mat_inv_var_x_arb_vec_jacob(world_joint_momentum, frame="bframe")
         mat[..., row:row+n_m, :] = (
             block_world @ mat_world_joint_mom[..., row:row+n_m, :]
@@ -1878,9 +1880,8 @@ def _selected_coord_to_joint_momentum_grad_mat(
         cmtm_wrench = state_cmtm_wrench(state, child_link.name, "link", order - 1)
         block_world = factorial @ cmtm_wrench.mat_inv_adj() @ factorial_inv
         local_joint_momentum = state_cmvec(state, joint.name, "joint", "momentum", order - 1)
-        world_joint_momentum = CMVector(
-            (factorial @ apply_mat_adj(cmtm_wrench, local_joint_momentum.cm_vec())).reshape(order - 1, -1)
-        )
+        world_cm = apply_mat_adj(cmtm_wrench, local_joint_momentum.cm_vec())
+        world_joint_momentum = CMVector.set_cmvecs(world_cm.reshape(order - 1, -1))
         block_tan = factorial @ cmtm_wrench.mat_inv_var_x_arb_vec_jacob(world_joint_momentum, frame="bframe")
         mat[row:row+n_m, :] = (
             block_world @ mat_world_joint_mom[row:row+n_m, :]

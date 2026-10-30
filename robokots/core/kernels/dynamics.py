@@ -5,7 +5,7 @@
 
 import numpy as np
 
-from mathrobo import CMVector, Factorial
+from mathrobo import CMVector
 from mathrobo import SE3, SE3wrench, CMTM
 
 from robokots.core import JointStruct
@@ -90,40 +90,36 @@ def link_momentum_cmvec(inertia : np.ndarray, vel : CMVector) -> CMVector:
         inertia (numpy.ndarray): 6x6 spatial inertia matrix of the link.
         vel (CMVector): nx6 spatial vectors of the link.
     Returns:
-        numpy.ndarray: 6n spatial momentum vectors of the link.
+        CMVector: momentum coefficients with the same row count as vel.
     """
-    vecs = vel.vecs() @ inertia.T
-    return CMVector(vecs)
+    return CMVector.set_cmvecs(vel.cm_vecs() @ inertia.T)
 
-def link_force_cmvec(vel : CMVector, momentum : CMVector, dim : int = 6) -> np.ndarray:
+def link_force_cmvec(vel: CMVector, momentum: CMVector, dim: int = 6) -> CMVector:
+    """Compute force coefficients directly from velocity and momentum series.
+
+    For normalized coefficients p_bar[k] = p^(k) / k!, the derivative
+    contributes (k + 1) * p_bar[k + 1]. The cross term is a convolution
+    of the velocity and momentum coefficients. The result has one fewer
+    row than momentum, and preserves broadcast batch axes.
     """
-    Calculate the link force and centripetal momentum.
-    Args:
-        vecs (numpy.ndarray): dim x n spatial vectors of the link.
-        momentums (numpy.ndarray): dim x n+1 spatial momentum vectors of the link.
-    Returns:
-        numpy.ndarray: dim x n spatial force vectors of the link.
-    Note:    
-        o : inv_factorials(n, dim)
-        v : spatial velocity vectors 
-        f : spatial force vectors
-        m : spatial momentum vectors
-    Then,
-        o @ f = d/dt(o @ m) + hat_cadj(o @ v) @ (o @ m)
-        f = o_inv @ d/dt(o @ m) + o_inv @ hat_cadj(o @ v) @ (o @ m)
-          = d/dt(m) + o_inv @ hat_cadj(o @ v) @ (o @ m)
-          = mom_diff + v_x_mom
-    """
+    momentum_cm = momentum.cm_vecs()
     force_order = momentum._n - 1
-    mom_diff = momentum.vecs()[..., 1:, :].reshape(momentum.vecs().shape[:-2] + (force_order * dim,))
+    if force_order < 0:
+        raise ValueError("Momentum must contain at least one row")
+    if vel._n < force_order:
+        raise ValueError("Velocity must contain at least as many rows as the force")
+    if momentum_cm.shape[-1] != dim:
+        raise ValueError("Momentum dimension must match dim")
+
+    derivative_cm = momentum_cm[..., 1:, :] * np.arange(1, force_order + 1)[:, None]
     vel_hat = CMTM.hat_adj(SE3wrench, vel.cm_vecs()[..., :force_order, :])
-    momentum_cm = momentum.cm_vecs()[..., :force_order, :].reshape(momentum.cm_vecs().shape[:-2] + (force_order * dim,))
-    v_x_mom = (vel_hat @ momentum_cm[..., None])[..., 0]
-    factorial = Factorial.mat(force_order, dim)
-    v_x_mom = v_x_mom @ factorial.T
-    # CMVector expects (order, dim) rows; passing a flat vector makes mathrobo
-    # interpret it as dim=1 and breaks higher-order factorial scaling.
-    return CMVector((mom_diff + v_x_mom).reshape(momentum.vecs().shape[:-2] + (force_order, dim)))
+    momentum_flat = momentum_cm[..., :force_order, :].reshape(
+        momentum_cm.shape[:-2] + (force_order * dim,)
+    )
+    cross_cm = (vel_hat @ momentum_flat[..., None])[..., 0]
+    force_cm = derivative_cm + cross_cm.reshape(cross_cm.shape[:-1] + (force_order, dim))
+    return CMVector.set_cmvecs(force_cm)
+
 
 def link_dynamics_cmvec(inertia : np.ndarray, vecs : np.ndarray) -> np.ndarray:
     """
