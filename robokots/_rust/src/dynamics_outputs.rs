@@ -180,7 +180,8 @@ impl RustCompiledRobot {
                 let mut dblocks = vec![[[0.0; 6]; 6]; order];
                 let mut value = vec![0.0; order * 6];
                 let mut derivative = vec![0.0; order * 6];
-                cmtm_apply_mat_adj_wrench_tangent_into(
+                let apply = cmtm_apply_mat_adj_wrench_cm_rhs_tangent_into;
+                apply(
                     mat, &vecs[..vec_len], dmat, &dvecs[..vec_len],
                     &values[..order * 6], &derivatives[..order * 6], order, &primal.cmtm.factorial,
                     &mut blocks, &mut dblocks, &mut value, &mut derivative,
@@ -288,7 +289,8 @@ impl RustCompiledRobot {
                 let mut ab = vec![[[0.0; 3]; 3]; order];
                 let mut cb = vec![[[0.0; 3]; 3]; order];
                 let mut scaled = vec![0.0; transport_vec_len];
-                cmtm_accumulate_mat_adj_wrench_series_reverse_accumulate_into(
+                let reverse = cmtm_accumulate_mat_adj_wrench_cm_rhs_reverse_accumulate_into;
+                reverse(
                     mat, &vecs[..transport_vec_len], &values[..order * 6], &seed,
                     order, &primal.cmtm.factorial, &mut scaled, &mut a, &mut c, &mut ab, &mut cb,
                     &mut local_seed, &mut vec_seed, &mut mat_seed,
@@ -419,7 +421,7 @@ impl RustCompiledRobot {
                     let mut a_bar = vec![[[0.0; 3]; 3]; order];
                     let mut c_bar = vec![[[0.0; 3]; 3]; order];
                     let mut scaled = vec![0.0; order.saturating_sub(1) * 6];
-                    cmtm_accumulate_mat_adj_wrench_series_reverse_accumulate_into(
+                    cmtm_accumulate_mat_adj_wrench_cm_rhs_reverse_accumulate_into(
                         mat, &vecs[..order.saturating_sub(1) * 6], raw_rhs, &target_bar,
                         order, &primal.factorial, &mut scaled, &mut a, &mut c_blocks,
                         &mut a_bar, &mut c_bar, &mut rhs_bar, &mut vec_bar, &mut mat_bar,
@@ -625,7 +627,7 @@ impl RustCompiledRobot {
                         let joint_velocities = cmtm_vecs_slice(&primal.joint_vecs, id, order);
                         if r <= n {
                             for a in 0..=n-r { for k in r..=n-a {
-                                let u = scale6(vec6_from_flat(joint_velocities, n-a-k), 1.0/fact[n-a-k]);
+                                let u = vec6_from_flat(joint_velocities, n-a-k);
                                 value = add6(value, mat6_vec6(adj[link][a], hat_adj_motion_vec6(b[k-r], u)));
                             }}
                         }
@@ -638,7 +640,7 @@ impl RustCompiledRobot {
                     } else {
                         value = scale6(b[n+1-r], (n+1) as f64);
                         if r <= n { for k in 0..=n-r {
-                            let v = scale6(vec6_from_flat(velocities, k), 1.0/fact[k]);
+                            let v = vec6_from_flat(velocities, k);
                             value = add6(value, hat_adj_motion_vec6(v, b[n-k-r]));
                         }}
                     }

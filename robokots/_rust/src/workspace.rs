@@ -203,6 +203,9 @@ impl CmtmWorkspace {
     }
 }
 
+/// Persistent dynamics series are canonical CM coefficients (row k divided by k!).
+/// Kinematic velocities also use canonical CM coefficients.
+/// Tangent arrays describe derivatives of public ordinary outputs, not copies of state values.
 pub(crate) struct DynamicsCmtmWorkspace {
     pub(crate) cmtm: CmtmWorkspace,
     pub(crate) link_momentum: Vec<f64>,
@@ -210,7 +213,7 @@ pub(crate) struct DynamicsCmtmWorkspace {
     pub(crate) joint_momentum: Vec<f64>,
     pub(crate) joint_force: Vec<f64>,
     pub(crate) joint_gravity_force: Vec<f64>,
-    /// World gravity expressed in each link frame and its time derivatives.
+    /// World gravity expressed in each link frame, stored as CM coefficients.
     ///
     /// This is primal data for the CMTM reverse pass.  Keeping it per-link is
     /// important: the old `tmp_local_gravity` scratch is overwritten while

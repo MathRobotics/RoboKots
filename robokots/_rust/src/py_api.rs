@@ -989,11 +989,13 @@ impl RustCompiledRobot {
         self.link_local_jacobian_matmul_rhs(py, q, v, a, rhs, link_ids, data_codes)
     }
 
+    #[pyo3(signature = (motion, order, cm_coefficients=false))]
     fn kinematics_cmtm<'py>(
         &self,
         py: Python<'py>,
         motion: PyReadonlyArray1<'py, f64>,
         order: usize,
+        cm_coefficients: bool,
     ) -> PyResult<(
         Bound<'py, PyArray3<f64>>,
         Bound<'py, PyArray3<f64>>,
@@ -1011,23 +1013,25 @@ impl RustCompiledRobot {
             ws.link_mat
                 .into_pyarray(py)
                 .reshape([self.link_num, 4, 4])?,
-            ws.link_vecs
+            export_series(&ws.link_vecs, order - 1, 6, cm_coefficients)
                 .into_pyarray(py)
                 .reshape([self.link_num, order - 1, 6])?,
             ws.joint_mat
                 .into_pyarray(py)
                 .reshape([self.joint_num, 4, 4])?,
-            ws.joint_vecs
+            export_series(&ws.joint_vecs, order - 1, 6, cm_coefficients)
                 .into_pyarray(py)
                 .reshape([self.joint_num, order - 1, 6])?,
         ))
     }
 
+    #[pyo3(signature = (motions, order, cm_coefficients=false))]
     fn kinematics_cmtm_batch<'py>(
         &self,
         py: Python<'py>,
         motions: PyReadonlyArray2<'py, f64>,
         order: usize,
+        cm_coefficients: bool,
     ) -> PyResult<(
         Bound<'py, PyArray4<f64>>,
         Bound<'py, PyArray4<f64>>,
@@ -1065,12 +1069,10 @@ impl RustCompiledRobot {
             );
             link_mat[sample * link_mat_len..(sample + 1) * link_mat_len]
                 .copy_from_slice(&ws.link_mat);
-            link_vecs[sample * link_vec_len..(sample + 1) * link_vec_len]
-                .copy_from_slice(&ws.link_vecs);
+            copy_export_series_into(&ws.link_vecs, order - 1, 6, &mut link_vecs[sample * link_vec_len..(sample + 1) * link_vec_len], cm_coefficients);
             joint_mat[sample * joint_mat_len..(sample + 1) * joint_mat_len]
                 .copy_from_slice(&ws.joint_mat);
-            joint_vecs[sample * joint_vec_len..(sample + 1) * joint_vec_len]
-                .copy_from_slice(&ws.joint_vecs);
+            copy_export_series_into(&ws.joint_vecs, order - 1, 6, &mut joint_vecs[sample * joint_vec_len..(sample + 1) * joint_vec_len], cm_coefficients);
         }
 
         Ok((
@@ -1089,13 +1091,14 @@ impl RustCompiledRobot {
         ))
     }
 
-    #[pyo3(signature = (motion, dynamics_order, gravity = None))]
+    #[pyo3(signature = (motion, dynamics_order, gravity = None, cm_coefficients = false))]
     fn dynamics_cmtm<'py>(
         &self,
         py: Python<'py>,
         motion: PyReadonlyArray1<'py, f64>,
         dynamics_order: usize,
         gravity: Option<PyReadonlyArray1<'py, f64>>,
+        cm_coefficients: bool,
     ) -> PyResult<(
         Bound<'py, PyArray3<f64>>,
         Bound<'py, PyArray3<f64>>,
@@ -1110,19 +1113,19 @@ impl RustCompiledRobot {
         let mut ws = DynamicsCmtmWorkspace::new(self, dynamics_order);
         self.dynamics_cmtm_into(motion, dynamics_order, gravity, &mut ws);
         Ok((
-            ws.link_momentum
+            export_series(&ws.link_momentum, dynamics_order + 1, 6, cm_coefficients)
                 .into_pyarray(py)
                 .reshape([self.link_num, dynamics_order + 1, 6])?,
-            ws.link_force
+            export_series(&ws.link_force, dynamics_order, 6, cm_coefficients)
                 .into_pyarray(py)
                 .reshape([self.link_num, dynamics_order, 6])?,
-            ws.joint_momentum
+            export_series(&ws.joint_momentum, dynamics_order + 1, 6, cm_coefficients)
                 .into_pyarray(py)
                 .reshape([self.joint_num, dynamics_order + 1, 6])?,
-            ws.joint_force
+            export_series(&ws.joint_force, dynamics_order, 6, cm_coefficients)
                 .into_pyarray(py)
                 .reshape([self.joint_num, dynamics_order, 6])?,
-            ws.joint_torque
+            export_series(&ws.joint_torque, dynamics_order, 1, cm_coefficients)
                 .into_pyarray(py)
                 .reshape([self.joint_num, dynamics_order, 1])?,
         ))
@@ -1994,13 +1997,14 @@ impl RustCompiledRobot {
         Ok(out.into_pyarray(py).reshape([batch, input_len, rhs_cols])?)
     }
 
-    #[pyo3(signature = (motion, dynamics_order, gravity = None))]
+    #[pyo3(signature = (motion, dynamics_order, gravity = None, cm_coefficients = false))]
     fn dynamics_outward_cmtm<'py>(
         &self,
         py: Python<'py>,
         motion: PyReadonlyArray1<'py, f64>,
         dynamics_order: usize,
         gravity: Option<PyReadonlyArray1<'py, f64>>,
+        cm_coefficients: bool,
     ) -> PyResult<(
         Bound<'py, PyArray3<f64>>,
         Bound<'py, PyArray3<f64>>,
@@ -2023,43 +2027,42 @@ impl RustCompiledRobot {
                 .link_mat
                 .into_pyarray(py)
                 .reshape([self.link_num, 4, 4])?,
-            ws.cmtm
-                .link_vecs
+            export_series(&ws.cmtm.link_vecs, kin_order - 1, 6, cm_coefficients)
                 .into_pyarray(py)
                 .reshape([self.link_num, kin_order - 1, 6])?,
             ws.cmtm
                 .joint_mat
                 .into_pyarray(py)
                 .reshape([self.joint_num, 4, 4])?,
-            ws.cmtm
-                .joint_vecs
+            export_series(&ws.cmtm.joint_vecs, kin_order - 1, 6, cm_coefficients)
                 .into_pyarray(py)
                 .reshape([self.joint_num, kin_order - 1, 6])?,
-            ws.link_momentum
+            export_series(&ws.link_momentum, dynamics_order + 1, 6, cm_coefficients)
                 .into_pyarray(py)
                 .reshape([self.link_num, dynamics_order + 1, 6])?,
-            ws.link_force
+            export_series(&ws.link_force, dynamics_order, 6, cm_coefficients)
                 .into_pyarray(py)
                 .reshape([self.link_num, dynamics_order, 6])?,
-            ws.joint_momentum
+            export_series(&ws.joint_momentum, dynamics_order + 1, 6, cm_coefficients)
                 .into_pyarray(py)
                 .reshape([self.joint_num, dynamics_order + 1, 6])?,
-            ws.joint_force
+            export_series(&ws.joint_force, dynamics_order, 6, cm_coefficients)
                 .into_pyarray(py)
                 .reshape([self.joint_num, dynamics_order, 6])?,
-            ws.joint_torque
+            export_series(&ws.joint_torque, dynamics_order, 1, cm_coefficients)
                 .into_pyarray(py)
                 .reshape([self.joint_num, dynamics_order, 1])?,
         ))
     }
 
-    #[pyo3(signature = (motions, dynamics_order, gravity = None))]
+    #[pyo3(signature = (motions, dynamics_order, gravity = None, cm_coefficients = false))]
     fn dynamics_cmtm_batch<'py>(
         &self,
         py: Python<'py>,
         motions: PyReadonlyArray2<'py, f64>,
         dynamics_order: usize,
         gravity: Option<PyReadonlyArray1<'py, f64>>,
+        cm_coefficients: bool,
     ) -> PyResult<(
         Bound<'py, PyArray4<f64>>,
         Bound<'py, PyArray4<f64>>,
@@ -2098,16 +2101,11 @@ impl RustCompiledRobot {
                 gravity,
                 &mut ws,
             );
-            link_momentum[sample * link_momentum_len..(sample + 1) * link_momentum_len]
-                .copy_from_slice(&ws.link_momentum);
-            link_force[sample * link_force_len..(sample + 1) * link_force_len]
-                .copy_from_slice(&ws.link_force);
-            joint_momentum[sample * joint_momentum_len..(sample + 1) * joint_momentum_len]
-                .copy_from_slice(&ws.joint_momentum);
-            joint_force[sample * joint_force_len..(sample + 1) * joint_force_len]
-                .copy_from_slice(&ws.joint_force);
-            joint_torque[sample * joint_torque_len..(sample + 1) * joint_torque_len]
-                .copy_from_slice(&ws.joint_torque);
+            copy_export_series_into(&ws.link_momentum, dynamics_order + 1, 6, &mut link_momentum[sample * link_momentum_len..(sample + 1) * link_momentum_len], cm_coefficients);
+            copy_export_series_into(&ws.link_force, dynamics_order, 6, &mut link_force[sample * link_force_len..(sample + 1) * link_force_len], cm_coefficients);
+            copy_export_series_into(&ws.joint_momentum, dynamics_order + 1, 6, &mut joint_momentum[sample * joint_momentum_len..(sample + 1) * joint_momentum_len], cm_coefficients);
+            copy_export_series_into(&ws.joint_force, dynamics_order, 6, &mut joint_force[sample * joint_force_len..(sample + 1) * joint_force_len], cm_coefficients);
+            copy_export_series_into(&ws.joint_torque, dynamics_order, 1, &mut joint_torque[sample * joint_torque_len..(sample + 1) * joint_torque_len], cm_coefficients);
         }
 
         Ok((
@@ -2154,8 +2152,7 @@ impl RustCompiledRobot {
         self.check_cmtm_motion(motion, kin_order)?;
         let mut ws = DynamicsCmtmWorkspace::new(self, dynamics_order);
         self.dynamics_cmtm_into(motion, dynamics_order, gravity, &mut ws);
-        Ok(ws
-            .joint_torque
+        Ok(ordinary_series(&ws.joint_torque, dynamics_order, 1)
             .into_pyarray(py)
             .reshape([self.joint_num, dynamics_order])?)
     }
@@ -2190,19 +2187,19 @@ impl RustCompiledRobot {
                 gravity,
                 &mut ws,
             );
-            out[sample * torque_len..(sample + 1) * torque_len]
-                .copy_from_slice(&ws.joint_torque);
+            copy_ordinary_series_into(&ws.joint_torque, dynamics_order, 1, &mut out[sample * torque_len..(sample + 1) * torque_len]);
         }
         Ok(out.into_pyarray(py).reshape([batch, self.joint_num, dynamics_order])?)
     }
 
-    #[pyo3(signature = (motions, dynamics_order, gravity = None))]
+    #[pyo3(signature = (motions, dynamics_order, gravity = None, cm_coefficients = false))]
     fn dynamics_outward_cmtm_batch<'py>(
         &self,
         py: Python<'py>,
         motions: PyReadonlyArray2<'py, f64>,
         dynamics_order: usize,
         gravity: Option<PyReadonlyArray1<'py, f64>>,
+        cm_coefficients: bool,
     ) -> PyResult<(
         Bound<'py, PyArray4<f64>>,
         Bound<'py, PyArray4<f64>>,
@@ -2255,22 +2252,15 @@ impl RustCompiledRobot {
             );
             link_mat[sample * link_mat_len..(sample + 1) * link_mat_len]
                 .copy_from_slice(&ws.cmtm.link_mat);
-            link_vecs[sample * link_vec_len..(sample + 1) * link_vec_len]
-                .copy_from_slice(&ws.cmtm.link_vecs);
+            copy_export_series_into(&ws.cmtm.link_vecs, kin_order - 1, 6, &mut link_vecs[sample * link_vec_len..(sample + 1) * link_vec_len], cm_coefficients);
             joint_mat[sample * joint_mat_len..(sample + 1) * joint_mat_len]
                 .copy_from_slice(&ws.cmtm.joint_mat);
-            joint_vecs[sample * joint_vec_len..(sample + 1) * joint_vec_len]
-                .copy_from_slice(&ws.cmtm.joint_vecs);
-            link_momentum[sample * link_momentum_len..(sample + 1) * link_momentum_len]
-                .copy_from_slice(&ws.link_momentum);
-            link_force[sample * link_force_len..(sample + 1) * link_force_len]
-                .copy_from_slice(&ws.link_force);
-            joint_momentum[sample * joint_momentum_len..(sample + 1) * joint_momentum_len]
-                .copy_from_slice(&ws.joint_momentum);
-            joint_force[sample * joint_force_len..(sample + 1) * joint_force_len]
-                .copy_from_slice(&ws.joint_force);
-            joint_torque[sample * joint_torque_len..(sample + 1) * joint_torque_len]
-                .copy_from_slice(&ws.joint_torque);
+            copy_export_series_into(&ws.cmtm.joint_vecs, kin_order - 1, 6, &mut joint_vecs[sample * joint_vec_len..(sample + 1) * joint_vec_len], cm_coefficients);
+            copy_export_series_into(&ws.link_momentum, dynamics_order + 1, 6, &mut link_momentum[sample * link_momentum_len..(sample + 1) * link_momentum_len], cm_coefficients);
+            copy_export_series_into(&ws.link_force, dynamics_order, 6, &mut link_force[sample * link_force_len..(sample + 1) * link_force_len], cm_coefficients);
+            copy_export_series_into(&ws.joint_momentum, dynamics_order + 1, 6, &mut joint_momentum[sample * joint_momentum_len..(sample + 1) * joint_momentum_len], cm_coefficients);
+            copy_export_series_into(&ws.joint_force, dynamics_order, 6, &mut joint_force[sample * joint_force_len..(sample + 1) * joint_force_len], cm_coefficients);
+            copy_export_series_into(&ws.joint_torque, dynamics_order, 1, &mut joint_torque[sample * joint_torque_len..(sample + 1) * joint_torque_len], cm_coefficients);
         }
 
         Ok((
@@ -2555,6 +2545,14 @@ impl RustOutwardData {
         Ok(self.inner.joint_mat(joint_id)?.into_pyarray(py).reshape([4, 4])?)
     }
 
+    fn link_vecs_cm<'py>(&self, py: Python<'py>, id: usize) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        Ok(self.inner.kinematics_cm_series(false, id)?.into_pyarray(py).reshape([self.inner.order - 1, 6])?)
+    }
+
+    fn joint_vecs_cm<'py>(&self, py: Python<'py>, id: usize) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        Ok(self.inner.kinematics_cm_series(true, id)?.into_pyarray(py).reshape([self.inner.order - 1, 6])?)
+    }
+
     fn link_vec<'py>(
         &self,
         py: Python<'py>,
@@ -2571,6 +2569,22 @@ impl RustOutwardData {
         key_order: usize,
     ) -> PyResult<Bound<'py, PyArray1<f64>>> {
         Ok(self.inner.joint_vec(joint_id, key_order)?.into_pyarray(py))
+    }
+
+    fn link_momentum_cm<'py>(&self, py: Python<'py>, id: usize) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        Ok(self.inner.dynamics_cm_series(false, id, true)?.into_pyarray(py).reshape([self.inner.dynamics_order + 1, 6])?)
+    }
+
+    fn link_force_cm<'py>(&self, py: Python<'py>, id: usize) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        Ok(self.inner.dynamics_cm_series(false, id, false)?.into_pyarray(py).reshape([self.inner.dynamics_order, 6])?)
+    }
+
+    fn joint_momentum_cm<'py>(&self, py: Python<'py>, id: usize) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        Ok(self.inner.dynamics_cm_series(true, id, true)?.into_pyarray(py).reshape([self.inner.dynamics_order + 1, 6])?)
+    }
+
+    fn joint_force_cm<'py>(&self, py: Python<'py>, id: usize) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        Ok(self.inner.dynamics_cm_series(true, id, false)?.into_pyarray(py).reshape([self.inner.dynamics_order, 6])?)
     }
 
     fn link_momentum<'py>(
@@ -2645,6 +2659,13 @@ impl RustOutwardData {
         Ok(self.inner.joint_force(joint_id, key_order)?.into_pyarray(py))
     }
 
+    fn joint_torque_cm<'py>(&self, py: Python<'py>, id: usize) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        self.inner.check_joint_id(id)?;
+        self.inner.check_dynamics_computed()?;
+        let order = self.inner.dynamics_order;
+        Ok(self.inner.dynamics.joint_torque[id * order..(id + 1) * order].to_vec().into_pyarray(py).reshape([order, 1])?)
+    }
+
     fn joint_torque<'py>(
         &self,
         py: Python<'py>,
@@ -2654,6 +2675,7 @@ impl RustOutwardData {
         Ok(self.inner.joint_torque(joint_id, key_order)?.into_pyarray(py))
     }
 
+    #[pyo3(signature = (elem_mat, elem_vecs, arb_cm_vecs, rhs, inverse, transpose, cm_coefficients=false))]
     fn cmtm_wrench_var_jacob_matvec<'py>(
         &self,
         py: Python<'py>,
@@ -2663,6 +2685,7 @@ impl RustOutwardData {
         rhs: PyReadonlyArray1<'py, f64>,
         inverse: bool,
         transpose: bool,
+        cm_coefficients: bool,
     ) -> PyResult<Bound<'py, PyArray1<f64>>> {
         let elem_shape = elem_mat.shape();
         let vec_shape = elem_vecs.shape();
@@ -2691,7 +2714,8 @@ impl RustOutwardData {
         }
 
         let elem_mat = mat4_from_slice(elem_mat.as_slice()?);
-        let elem_vecs = elem_vecs.as_slice()?;
+        let elem_vecs_cm = input_series(elem_vecs.as_slice()?, vec_shape[0], cm_coefficients);
+        let elem_vecs = elem_vecs_cm.as_slice();
         let arb_cm_vecs = arb_cm_vecs.as_slice()?;
         let rhs = rhs.as_slice()?;
         let mut fact = vec![1.0; order.max(1)];
@@ -2717,6 +2741,7 @@ impl RustOutwardData {
         Ok(out.into_pyarray(py))
     }
 
+    #[pyo3(signature = (elem_mat, elem_vecs, arb_cm_vecs, rhs, inverse, cm_coefficients=false))]
     fn cmtm_wrench_var_jacob_matmul_rhs<'py>(
         &self,
         py: Python<'py>,
@@ -2725,6 +2750,7 @@ impl RustOutwardData {
         arb_cm_vecs: PyReadonlyArray2<'py, f64>,
         rhs: PyReadonlyArray2<'py, f64>,
         inverse: bool,
+        cm_coefficients: bool,
     ) -> PyResult<Bound<'py, PyArray2<f64>>> {
         let elem_shape = elem_mat.shape();
         let vec_shape = elem_vecs.shape();
@@ -2758,7 +2784,8 @@ impl RustOutwardData {
 
         let rhs_dim = rhs_shape[1];
         let elem_mat = mat4_from_slice(elem_mat.as_slice()?);
-        let elem_vecs = elem_vecs.as_slice()?;
+        let elem_vecs_cm = input_series(elem_vecs.as_slice()?, vec_shape[0], cm_coefficients);
+        let elem_vecs = elem_vecs_cm.as_slice();
         let arb_cm_vecs = arb_cm_vecs.as_slice()?;
         let rhs = rhs.as_slice()?;
         let mut fact = vec![1.0; order.max(1)];
@@ -2887,6 +2914,22 @@ impl RustBatchOutwardData {
         Ok(out.into_pyarray(py).reshape([self.inner.batch, 4, 4])?)
     }
 
+    fn link_vecs_cm<'py>(&self, py: Python<'py>, id: usize) -> PyResult<Bound<'py, PyArray3<f64>>> {
+        self.check_link_id(id)?;
+        if !self.inner.has_kinematics { return Err(PyValueError::new_err("compute_kinematics or compute_dynamics required")); }
+        let mut out = Vec::new();
+        for sample in 0..self.inner.batch { out.extend(self.inner.kinematics_cm_series(sample, false, id)?); }
+        Ok(out.into_pyarray(py).reshape([self.inner.batch, self.inner.order - 1, 6])?)
+    }
+
+    fn joint_vecs_cm<'py>(&self, py: Python<'py>, id: usize) -> PyResult<Bound<'py, PyArray3<f64>>> {
+        self.check_joint_id(id)?;
+        if !self.inner.has_kinematics { return Err(PyValueError::new_err("compute_kinematics or compute_dynamics required")); }
+        let mut out = Vec::new();
+        for sample in 0..self.inner.batch { out.extend(self.inner.kinematics_cm_series(sample, true, id)?); }
+        Ok(out.into_pyarray(py).reshape([self.inner.batch, self.inner.order - 1, 6])?)
+    }
+
     fn link_vec<'py>(
         &self,
         py: Python<'py>,
@@ -2915,6 +2958,44 @@ impl RustBatchOutwardData {
             out.extend(self.inner.joint_vec(sample, joint_id, key_order)?);
         }
         Ok(out.into_pyarray(py).reshape([self.inner.batch, 6])?)
+    }
+
+    fn link_momentum_cm<'py>(&self, py: Python<'py>, id: usize) -> PyResult<Bound<'py, PyArray3<f64>>> {
+        self.check_link_id(id)?;
+        self.check_dynamics_computed()?;
+        if !self.inner.has_full_dynamics { return Err(PyValueError::new_err("compute_dynamics required for full CM values")); }
+        let mut out = Vec::new();
+        for sample in 0..self.inner.batch { out.extend(self.inner.dynamics_cm_series(sample, false, id, true)?); }
+        Ok(out.into_pyarray(py).reshape([self.inner.batch, self.inner.dynamics_order + 1, 6])?)
+    }
+
+    fn link_force_cm<'py>(&self, py: Python<'py>, id: usize) -> PyResult<Bound<'py, PyArray3<f64>>> {
+        if self.inner.dynamics_order == 0 { return Err(PyValueError::new_err("force is unavailable for dynamics order zero")); }
+        self.check_link_id(id)?;
+        self.check_dynamics_computed()?;
+        if !self.inner.has_full_dynamics { return Err(PyValueError::new_err("compute_dynamics required for full CM values")); }
+        let mut out = Vec::new();
+        for sample in 0..self.inner.batch { out.extend(self.inner.dynamics_cm_series(sample, false, id, false)?); }
+        Ok(out.into_pyarray(py).reshape([self.inner.batch, self.inner.dynamics_order, 6])?)
+    }
+
+    fn joint_momentum_cm<'py>(&self, py: Python<'py>, id: usize) -> PyResult<Bound<'py, PyArray3<f64>>> {
+        self.check_joint_id(id)?;
+        self.check_dynamics_computed()?;
+        if !self.inner.has_full_dynamics { return Err(PyValueError::new_err("compute_dynamics required for full CM values")); }
+        let mut out = Vec::new();
+        for sample in 0..self.inner.batch { out.extend(self.inner.dynamics_cm_series(sample, true, id, true)?); }
+        Ok(out.into_pyarray(py).reshape([self.inner.batch, self.inner.dynamics_order + 1, 6])?)
+    }
+
+    fn joint_force_cm<'py>(&self, py: Python<'py>, id: usize) -> PyResult<Bound<'py, PyArray3<f64>>> {
+        if self.inner.dynamics_order == 0 { return Err(PyValueError::new_err("force is unavailable for dynamics order zero")); }
+        self.check_joint_id(id)?;
+        self.check_dynamics_computed()?;
+        if !self.inner.has_full_dynamics { return Err(PyValueError::new_err("compute_dynamics required for full CM values")); }
+        let mut out = Vec::new();
+        for sample in 0..self.inner.batch { out.extend(self.inner.dynamics_cm_series(sample, true, id, false)?); }
+        Ok(out.into_pyarray(py).reshape([self.inner.batch, self.inner.dynamics_order, 6])?)
     }
 
     fn link_momentum<'py>(
@@ -3045,6 +3126,15 @@ impl RustBatchOutwardData {
         Ok(out.into_pyarray(py).reshape([self.inner.batch, 6])?)
     }
 
+    fn joint_torque_cm<'py>(&self, py: Python<'py>, id: usize) -> PyResult<Bound<'py, PyArray3<f64>>> {
+        self.check_joint_id(id)?;
+        self.check_dynamics_computed()?;
+        let order = self.inner.dynamics_order;
+        let mut out = Vec::new();
+        for ws in &self.inner.dynamics { out.extend_from_slice(&ws.joint_torque[id * order..(id + 1) * order]); }
+        Ok(out.into_pyarray(py).reshape([self.inner.batch, order, 1])?)
+    }
+
     fn joint_torque<'py>(
         &self,
         py: Python<'py>,
@@ -3061,6 +3151,7 @@ impl RustBatchOutwardData {
         Ok(out.into_pyarray(py).reshape([self.inner.batch, 1])?)
     }
 
+    #[pyo3(signature = (elem_mat, elem_vecs, arb_cm_vecs, rhs, inverse, transpose, cm_coefficients=false))]
     fn cmtm_wrench_var_jacob_matvec<'py>(
         &self,
         py: Python<'py>,
@@ -3070,6 +3161,7 @@ impl RustBatchOutwardData {
         rhs: PyReadonlyArray2<'py, f64>,
         inverse: bool,
         transpose: bool,
+        cm_coefficients: bool,
     ) -> PyResult<Bound<'py, PyArray2<f64>>> {
         let elem_shape = elem_mat.shape();
         let vec_shape = elem_vecs.shape();
@@ -3106,7 +3198,8 @@ impl RustBatchOutwardData {
         }
 
         let elem_mat = elem_mat.as_slice()?;
-        let elem_vecs = elem_vecs.as_slice()?;
+        let elem_vecs_cm = input_series(elem_vecs.as_slice()?, vec_shape[1], cm_coefficients);
+        let elem_vecs = elem_vecs_cm.as_slice();
         let arb_cm_vecs = arb_cm_vecs.as_slice()?;
         let rhs = rhs.as_slice()?;
         let elem_mat_len = 16;
@@ -3142,6 +3235,7 @@ impl RustBatchOutwardData {
         Ok(out.into_pyarray(py).reshape([self.inner.batch, order * 6])?)
     }
 
+    #[pyo3(signature = (elem_mat, elem_vecs, arb_cm_vecs, rhs, inverse, cm_coefficients=false))]
     fn cmtm_wrench_var_jacob_matmul_rhs<'py>(
         &self,
         py: Python<'py>,
@@ -3150,6 +3244,7 @@ impl RustBatchOutwardData {
         arb_cm_vecs: PyReadonlyArray3<'py, f64>,
         rhs: PyReadonlyArray3<'py, f64>,
         inverse: bool,
+        cm_coefficients: bool,
     ) -> PyResult<Bound<'py, PyArray3<f64>>> {
         let elem_shape = elem_mat.shape();
         let vec_shape = elem_vecs.shape();
@@ -3187,7 +3282,8 @@ impl RustBatchOutwardData {
 
         let rhs_dim = rhs_shape[2];
         let elem_mat = elem_mat.as_slice()?;
-        let elem_vecs = elem_vecs.as_slice()?;
+        let elem_vecs_cm = input_series(elem_vecs.as_slice()?, vec_shape[1], cm_coefficients);
+        let elem_vecs = elem_vecs_cm.as_slice();
         let arb_cm_vecs = arb_cm_vecs.as_slice()?;
         let rhs = rhs.as_slice()?;
         let elem_mat_len = 16;

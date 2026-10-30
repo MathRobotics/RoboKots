@@ -20,13 +20,13 @@ def build_kinematics_outward_state_rust(
   motion = np.asarray(motions, dtype=float)
   if motion.ndim == 1:
     _validate_motion_length(robot, motion, order)
-    arrays = rust_robot.kinematics_cmtm(motion, order)
+    arrays = rust_robot.kinematics_cmtm(motion, order, cm_coefficients=True)
     batch_shape = ()
   else:
     flat_motion, batch_shape = batch_shapes.flatten_feature_batch(motion)
     if flat_motion.shape[-1] != robot.dof * order:
       raise ValueError(f"Invalid motion length: {flat_motion.shape[-1]}. Must be {robot.dof * order}.")
-    arrays = rust_robot.kinematics_cmtm_batch(flat_motion, order)
+    arrays = rust_robot.kinematics_cmtm_batch(flat_motion, order, cm_coefficients=True)
     arrays = _reshape_batch_arrays(arrays, batch_shape)
 
   return _kinematics_outward_state_from_arrays(robot, arrays, order)
@@ -53,12 +53,12 @@ def build_dynamics_outward_state_rust(
   motion = np.asarray(motions, dtype=float)
   if motion.ndim == 1:
     _validate_motion_length(robot, motion, kin_order)
-    arrays = rust_robot.dynamics_outward_cmtm(motion, dynamics_order, gravity)
+    arrays = rust_robot.dynamics_outward_cmtm(motion, dynamics_order, gravity, cm_coefficients=True)
   else:
     flat_motion, batch_shape = batch_shapes.flatten_feature_batch(motion)
     if flat_motion.shape[-1] != robot.dof * kin_order:
       raise ValueError(f"Invalid motion length: {flat_motion.shape[-1]}. Must be {robot.dof * kin_order}.")
-    arrays = rust_robot.dynamics_outward_cmtm_batch(flat_motion, dynamics_order, gravity)
+    arrays = rust_robot.dynamics_outward_cmtm_batch(flat_motion, dynamics_order, gravity, cm_coefficients=True)
     arrays = _reshape_batch_arrays(arrays, batch_shape)
 
   state = _dynamics_outward_state_from_arrays(robot, arrays, kin_order)
@@ -88,6 +88,7 @@ def _kinematics_outward_state_from_arrays(
   link_mat, link_vecs, joint_mat, joint_vecs = arrays
   return ArrayOutwardState(
     order=order,
+    cm_storage=True,
     link_names=tuple(link.name for link in robot.links),
     joint_names=tuple(joint.name for joint in robot.joints),
     joint_dofs=tuple(joint.dof for joint in robot.joints),
@@ -126,6 +127,7 @@ def _dynamics_outward_state_from_arrays(
   ) = arrays
   return ArrayOutwardState(
     order=order,
+    cm_storage=True,
     link_names=tuple(link.name for link in robot.links),
     joint_names=tuple(joint.name for joint in robot.joints),
     joint_dofs=tuple(joint.dof for joint in robot.joints),

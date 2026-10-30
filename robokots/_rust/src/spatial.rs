@@ -285,7 +285,7 @@ pub(crate) fn cmtm_mat_blocks_tangent_into(
     for k in 1..order {
         let mut acc = [[0.0; 4]; 4];
         for i in 0..k {
-            let vec = scale6(vec6_from_flat(vecs, i), 1.0 / fact[i]);
+            let vec = vec6_from_flat(vecs, i);
             let dvec = scale6(vec6_from_flat(dvecs, i), 1.0 / fact[i]);
             acc = add_mat4(acc, mat4_mul_hat_se3(dblocks[k - i - 1], vec));
             acc = add_mat4(acc, mat4_mul_hat_se3(blocks[k - i - 1], dvec));
@@ -314,7 +314,7 @@ pub(crate) fn cmtm_from_mat_blocks_tangent_into(
         let mut m_tmp = [[0.0; 4]; 4];
         let mut dm_tmp = [[0.0; 4]; 4];
         for j in 0..i {
-            let vec = scale6(vec6_from_flat(out_vecs, j), 1.0 / fact[j]);
+            let vec = vec6_from_flat(out_vecs, j);
             let dvec = scale6(vec6_from_flat(dout_vecs, j), 1.0 / fact[j]);
             m_tmp = add_mat4(m_tmp, mat4_mul_hat_se3(blocks[i - j], vec));
             dm_tmp = add_mat4(dm_tmp, mat4_mul_hat_se3(dblocks[i - j], vec));
@@ -369,7 +369,7 @@ pub(crate) fn cmtm_mat_blocks_into(
     elem_mat: [[f64; 4]; 4],
     vecs: &[f64],
     order: usize,
-    fact: &[f64],
+    _fact: &[f64],
     blocks: &mut [[[f64; 4]; 4]],
 ) {
     if order == 0 {
@@ -379,7 +379,7 @@ pub(crate) fn cmtm_mat_blocks_into(
     for k in 1..order {
         let mut acc = [[0.0; 4]; 4];
         for i in 0..k {
-            let cm_vec = scale6(vec6_from_flat(vecs, i), 1.0 / fact[i]);
+            let cm_vec = vec6_from_flat(vecs, i);
             acc = add_mat4(acc, mat4_mul_hat_se3(blocks[k - i - 1], cm_vec));
         }
         blocks[k] = scale_mat4(acc, 1.0 / k as f64);
@@ -391,7 +391,7 @@ pub(crate) fn cmtm_mat_inv_blocks_into(
     elem_mat: [[f64; 4]; 4],
     vecs: &[f64],
     order: usize,
-    fact: &[f64],
+    _fact: &[f64],
     blocks: &mut [[[f64; 4]; 4]],
 ) {
     if order == 0 {
@@ -401,7 +401,7 @@ pub(crate) fn cmtm_mat_inv_blocks_into(
     for k in 1..order {
         let mut acc = [[0.0; 4]; 4];
         for i in 0..k {
-            let cm_vec = scale6(vec6_from_flat(vecs, i), 1.0 / fact[i]);
+            let cm_vec = vec6_from_flat(vecs, i);
             acc = sub_mat4(acc, mat4_mul(hat_se3(cm_vec), blocks[k - i - 1]));
         }
         blocks[k] = scale_mat4(acc, 1.0 / k as f64);
@@ -412,7 +412,7 @@ pub(crate) fn cmtm_mat_adj_wrench_blocks_into(
     elem_mat: [[f64; 4]; 4],
     vecs: &[f64],
     order: usize,
-    fact: &[f64],
+    _fact: &[f64],
     blocks: &mut [[[f64; 6]; 6]],
 ) {
     if order == 0 {
@@ -422,7 +422,7 @@ pub(crate) fn cmtm_mat_adj_wrench_blocks_into(
     for k in 1..order {
         let mut acc = [[0.0; 6]; 6];
         for i in 0..k {
-            let cm_vec = scale6(vec6_from_flat(vecs, i), 1.0 / fact[i]);
+            let cm_vec = vec6_from_flat(vecs, i);
             acc = add_mat6(acc, mat6_mul(blocks[k - i - 1], hat_adj_wrench(cm_vec)));
         }
         blocks[k] = scale_mat6(acc, 1.0 / k as f64);
@@ -431,6 +431,7 @@ pub(crate) fn cmtm_mat_adj_wrench_blocks_into(
 
 /// Apply a CMTM wrench transform and its analytic directional derivative.
 #[allow(clippy::too_many_arguments)]
+#[cfg(test)]
 pub(crate) fn cmtm_apply_mat_adj_wrench_tangent_into(
     mat: [[f64; 4]; 4], vecs: &[f64], dmat: [[f64; 4]; 4], dvecs: &[f64],
     rhs: &[f64], drhs: &[f64], order: usize, fact: &[f64],
@@ -446,7 +447,7 @@ pub(crate) fn cmtm_apply_mat_adj_wrench_tangent_into(
     for k in 1..order {
         let mut acc = [[0.0; 6]; 6];
         for i in 0..k {
-            let v = scale6(vec6_from_flat(vecs, i), 1.0 / fact[i]);
+            let v = vec6_from_flat(vecs, i);
             let dv = scale6(vec6_from_flat(dvecs, i), 1.0 / fact[i]);
             acc = add_mat6(acc, mat6_mul(dblocks[k-i-1], hat_adj_wrench(v)));
             acc = add_mat6(acc, mat6_mul(blocks[k-i-1], hat_adj_wrench(dv)));
@@ -470,6 +471,44 @@ pub(crate) fn cmtm_apply_mat_adj_wrench_tangent_into(
     }
 }
 
+/// CM primal values, ordinary output sensitivities. Transform velocities are ordinary.
+pub(crate) fn cmtm_apply_mat_adj_wrench_cm_rhs_tangent_into(
+    mat: [[f64; 4]; 4], vecs: &[f64], dmat: [[f64; 4]; 4], dvecs: &[f64],
+    rhs: &[f64], drhs: &[f64], order: usize, fact: &[f64],
+    blocks: &mut [[[f64; 6]; 6]], dblocks: &mut [[[f64; 6]; 6]], out: &mut [f64], dout: &mut [f64],
+) {
+    // Momentum-only dynamics (motion order 2) has an empty force series.
+    // Match the primal/reverse transport helpers: no blocks to differentiate.
+    if order == 0 {
+        return;
+    }
+    cmtm_mat_adj_wrench_blocks_into(mat, vecs, order, fact, blocks);
+    dblocks[0] = mat_adj_wrench_tangent_from_mat4(mat, dmat);
+    for k in 1..order {
+        let mut acc = [[0.0; 6]; 6];
+        for i in 0..k {
+            let v = vec6_from_flat(vecs, i);
+            let dv = scale6(vec6_from_flat(dvecs, i), 1.0 / fact[i]);
+            acc = add_mat6(acc, mat6_mul(dblocks[k-i-1], hat_adj_wrench(v)));
+            acc = add_mat6(acc, mat6_mul(blocks[k-i-1], hat_adj_wrench(dv)));
+        }
+        dblocks[k] = scale_mat6(acc, 1.0 / k as f64);
+    }
+    for k in 0..order {
+        let mut value = [0.0; 6]; let mut dvalue = [0.0; 6];
+        for i in 0..=k {
+            // Primal RHS is CM; drhs/dout are sensitivities of ordinary outputs.
+            let rhs_cm = vec6_from_flat(rhs, k - i);
+            let drhs_cm = scale6(vec6_from_flat(drhs, k - i), 1.0 / fact[k - i]);
+            value = add6(value, mat6_vec6(blocks[i], rhs_cm));
+            dvalue = add6(dvalue, mat6_vec6(dblocks[i], rhs_cm));
+            dvalue = add6(dvalue, mat6_vec6(blocks[i], drhs_cm));
+        }
+        set_vec6_flat(out, k, value);
+        set_vec6_flat(dout, k, scale6(dvalue, fact[k]));
+    }
+}
+
 fn mat_adj_wrench_tangent_from_mat4(mat: [[f64; 4]; 4], dmat: [[f64; 4]; 4]) -> [[f64; 6]; 6] {
     let r = mat3_from_mat4(mat); let dr = mat3_from_mat4(dmat);
     let p = [mat[0][3], mat[1][3], mat[2][3]];
@@ -484,7 +523,7 @@ pub(crate) fn cmtm_mat_inv_adj_wrench_blocks_into(
     elem_mat: [[f64; 4]; 4],
     vecs: &[f64],
     order: usize,
-    fact: &[f64],
+    _fact: &[f64],
     blocks: &mut [[[f64; 6]; 6]],
 ) {
     if order == 0 {
@@ -494,30 +533,10 @@ pub(crate) fn cmtm_mat_inv_adj_wrench_blocks_into(
     for k in 1..order {
         let mut acc = [[0.0; 6]; 6];
         for i in 0..k {
-            let cm_vec = scale6(vec6_from_flat(vecs, i), 1.0 / fact[i]);
+            let cm_vec = vec6_from_flat(vecs, i);
             acc = sub_mat6(acc, mat6_mul(hat_adj_wrench(cm_vec), blocks[k - i - 1]));
         }
         blocks[k] = scale_mat6(acc, 1.0 / k as f64);
-    }
-}
-
-pub(crate) fn cmtm_apply_mat_adj_wrench_with_blocks_into(
-    elem_mat: [[f64; 4]; 4],
-    vecs: &[f64],
-    cm_rhs: &[f64],
-    order: usize,
-    fact: &[f64],
-    blocks: &mut [[[f64; 6]; 6]],
-    out: &mut [f64],
-) {
-    cmtm_mat_adj_wrench_blocks_into(elem_mat, vecs, order, fact, blocks);
-    out[..order * 6].fill(0.0);
-    for k in 0..order {
-        let mut acc = [0.0; 6];
-        for i in 0..=k {
-            acc = add6(acc, mat6_vec6(blocks[i], vec6_from_flat(cm_rhs, k - i)));
-        }
-        set_vec6_flat(out, k, acc);
     }
 }
 
@@ -527,7 +546,7 @@ pub(crate) fn cmtm_apply_mat_adj_wrench_series_into(
     vecs: &[f64],
     cm_rhs: &[f64],
     order: usize,
-    fact: &[f64],
+    _fact: &[f64],
     a_blocks: &mut [[[f64; 3]; 3]],
     c_blocks: &mut [[[f64; 3]; 3]],
     out: &mut [f64],
@@ -549,7 +568,7 @@ pub(crate) fn cmtm_apply_mat_adj_wrench_series_into(
         let mut acc_a = [[0.0; 3]; 3];
         let mut acc_c = [[0.0; 3]; 3];
         for i in 0..k {
-            let cm_vec = scale6(vec6_from_flat(vecs, i), 1.0 / fact[i]);
+            let cm_vec = vec6_from_flat(vecs, i);
             let w_hat = skew([cm_vec[0], cm_vec[1], cm_vec[2]]);
             let v_hat = skew([cm_vec[3], cm_vec[4], cm_vec[5]]);
             let prev = k - i - 1;
@@ -592,16 +611,10 @@ pub(crate) fn cmtm_apply_mat_adj_wrench_series_into(
     }
 }
 
-pub(crate) fn cmtm_accumulate_mat_adj_wrench_series_into(
-    elem_mat: [[f64; 4]; 4],
-    vecs: &[f64],
-    raw_rhs: &[f64],
-    order: usize,
-    fact: &[f64],
-    scaled_vecs: &mut [f64],
-    a_blocks: &mut [[[f64; 3]; 3]],
+fn prepare_wrench_blocks_into(
+    elem_mat: [[f64; 4]; 4], vecs: &[f64], order: usize, _fact: &[f64],
+    scaled_vecs: &mut [f64], a_blocks: &mut [[[f64; 3]; 3]],
     c_blocks: &mut [[[f64; 3]; 3]],
-    raw_target: &mut [f64],
 ) {
     if order == 0 {
         return;
@@ -617,7 +630,7 @@ pub(crate) fn cmtm_accumulate_mat_adj_wrench_series_into(
     c_blocks[0] = mat3_mul(skew(p), r);
 
     for i in 0..order - 1 {
-        let scale = 1.0 / fact[i];
+        let scale = 1.0;
         let start = i * 6;
         for j in 0..6 {
             scaled_vecs[start + j] = vecs[start + j] * scale;
@@ -645,15 +658,48 @@ pub(crate) fn cmtm_accumulate_mat_adj_wrench_series_into(
         a_blocks[k] = scale_mat3(acc_a, scale);
         c_blocks[k] = scale_mat3(acc_c, scale);
     }
+}
 
+#[cfg(test)]
+pub(crate) fn cmtm_accumulate_mat_adj_wrench_series_into(
+    elem_mat: [[f64; 4]; 4],
+    vecs: &[f64],
+    raw_rhs: &[f64],
+    order: usize,
+    fact: &[f64],
+    scaled_vecs: &mut [f64],
+    a_blocks: &mut [[[f64; 3]; 3]],
+    c_blocks: &mut [[[f64; 3]; 3]],
+    raw_target: &mut [f64],
+) {
+    prepare_wrench_blocks_into(elem_mat, vecs, order, fact, scaled_vecs, a_blocks, c_blocks);
     cmtm_accumulate_wrench_series_from_blocks_into(
         raw_rhs, order, fact, a_blocks, c_blocks, raw_target,
+    );
+}
+
+/// Accumulate normalized RHS coefficients; transform velocities remain ordinary derivatives.
+pub(crate) fn cmtm_accumulate_mat_adj_wrench_cm_into(
+    elem_mat: [[f64; 4]; 4],
+    vecs: &[f64],
+    cm_rhs: &[f64],
+    order: usize,
+    fact: &[f64],
+    scaled_vecs: &mut [f64],
+    a_blocks: &mut [[[f64; 3]; 3]],
+    c_blocks: &mut [[[f64; 3]; 3]],
+    cm_target: &mut [f64],
+) {
+    prepare_wrench_blocks_into(elem_mat, vecs, order, fact, scaled_vecs, a_blocks, c_blocks);
+    cmtm_accumulate_wrench_cm_from_blocks_into(
+        cm_rhs, order, a_blocks, c_blocks, cm_target,
     );
 }
 
 /// Apply a prefix of already prepared factorial-scaled wrench blocks to an
 /// ordinary derivative series. This permits momentum and gravity transport
 /// across the same joint to share blocks without caching another transform.
+#[cfg(test)]
 pub(crate) fn cmtm_accumulate_wrench_series_from_blocks_into(
     raw_rhs: &[f64],
     order: usize,
@@ -690,6 +736,41 @@ pub(crate) fn cmtm_accumulate_wrench_series_from_blocks_into(
     }
 }
 
+/// Apply normalized transform blocks directly to normalized RHS coefficients.
+pub(crate) fn cmtm_accumulate_wrench_cm_from_blocks_into(
+    cm_rhs: &[f64],
+    order: usize,
+    a_blocks: &[[[f64; 3]; 3]],
+    c_blocks: &[[[f64; 3]; 3]],
+    cm_target: &mut [f64],
+) {
+    for k in 0..order {
+        let mut acc = [0.0; 6];
+        for i in 0..=k {
+            let rhs = vec6_from_flat(cm_rhs, k - i);
+            let torque = [rhs[0], rhs[1], rhs[2]];
+            let force = [rhs[3], rhs[4], rhs[5]];
+            let out_torque = add3(mat3_vec(a_blocks[i], torque), mat3_vec(c_blocks[i], force));
+            let out_force = mat3_vec(a_blocks[i], force);
+            acc = add6(
+                acc,
+                [
+                    out_torque[0],
+                    out_torque[1],
+                    out_torque[2],
+                    out_force[0],
+                    out_force[1],
+                    out_force[2],
+                ],
+            );
+        }
+        let start = k * 6;
+        for i in 0..6 {
+            cm_target[start + i] += acc[i];
+        }
+    }
+}
+
 /// Accumulate the reverse of [`cmtm_accumulate_mat_adj_wrench_series_into`].
 ///
 /// All series use raw time derivatives, exactly as the forward routine does.
@@ -698,6 +779,7 @@ pub(crate) fn cmtm_accumulate_wrench_series_from_blocks_into(
 /// block pairs are caller-owned scratch, which lets a dynamics reverse pass
 /// reuse its forward workspace without allocating per tree edge.
 #[allow(clippy::too_many_arguments)]
+#[cfg(test)]
 pub(crate) fn cmtm_accumulate_mat_adj_wrench_series_reverse_accumulate_into(
     elem_mat: [[f64; 4]; 4],
     vecs: &[f64],
@@ -726,7 +808,7 @@ pub(crate) fn cmtm_accumulate_mat_adj_wrench_series_reverse_accumulate_into(
     a_blocks[0] = r;
     c_blocks[0] = mat3_mul(skew(p), r);
     for i in 0..order - 1 {
-        let scale = 1.0 / fact[i];
+        let scale = 1.0;
         for d in 0..6 { scaled_vecs[i * 6 + d] = vecs[i * 6 + d] * scale; }
     }
     for k in 1..order {
@@ -753,6 +835,112 @@ pub(crate) fn cmtm_accumulate_mat_adj_wrench_series_reverse_accumulate_into(
         for i in 0..=k {
             let j = k - i;
             let rhs = scale6(vec6_from_flat(raw_rhs, j), 1.0 / fact[j]);
+            let tau = [rhs[0], rhs[1], rhs[2]];
+            let force = [rhs[3], rhs[4], rhs[5]];
+            a_bar[i] = add_mat3(a_bar[i], outer3(y_tau, tau));
+            a_bar[i] = add_mat3(a_bar[i], outer3(y_force, force));
+            c_bar[i] = add_mat3(c_bar[i], outer3(y_tau, force));
+            let tau_bar = mat3_vec(mat3_transpose(a_blocks[i]), y_tau);
+            let force_bar = add3(
+                mat3_vec(mat3_transpose(c_blocks[i]), y_tau),
+                mat3_vec(mat3_transpose(a_blocks[i]), y_force),
+            );
+            for d in 0..3 {
+                raw_rhs_bar[j * 6 + d] += tau_bar[d] / fact[j];
+                raw_rhs_bar[j * 6 + 3 + d] += force_bar[d] / fact[j];
+            }
+        }
+    }
+
+    // Reverse the block recurrences in dependency order.
+    for k in (1..order).rev() {
+        let ab = scale_mat3(a_bar[k], 1.0 / k as f64);
+        let cb = scale_mat3(c_bar[k], 1.0 / k as f64);
+        for i in 0..k {
+            let prev = k - i - 1;
+            let x = vec6_from_flat(scaled_vecs, i);
+            let w = [x[0], x[1], x[2]];
+            let v = [x[3], x[4], x[5]];
+            a_bar[prev] = add_mat3(a_bar[prev], mat3_mul(ab, mat3_transpose(skew(w))));
+            let wb_a = mat3_skew_right_reverse(a_blocks[prev], ab);
+            a_bar[prev] = add_mat3(a_bar[prev], mat3_mul(cb, mat3_transpose(skew(v))));
+            let vb = mat3_skew_right_reverse(a_blocks[prev], cb);
+            c_bar[prev] = add_mat3(c_bar[prev], mat3_mul(cb, mat3_transpose(skew(w))));
+            let wb_c = mat3_skew_right_reverse(c_blocks[prev], cb);
+            for d in 0..3 {
+                vecs_bar[i * 6 + d] += (wb_a[d] + wb_c[d]) / fact[i];
+                vecs_bar[i * 6 + 3 + d] += vb[d] / fact[i];
+            }
+        }
+    }
+
+    // A_0 = R, C_0 = skew(p) R.
+    let mut r_bar = a_bar[0];
+    r_bar = add_mat3(r_bar, mat3_mul(mat3_transpose(skew(p)), c_bar[0]));
+    let p_bar = skew_left_reverse(r, c_bar[0]);
+    for row in 0..3 {
+        for col in 0..3 { elem_mat_bar[row][col] += r_bar[row][col]; }
+        elem_mat_bar[row][3] += p_bar[row];
+    }
+}
+
+/// CM primal RHS; seeds and returned RHS cotangents refer to ordinary outputs.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn cmtm_accumulate_mat_adj_wrench_cm_rhs_reverse_accumulate_into(
+    elem_mat: [[f64; 4]; 4],
+    vecs: &[f64],
+    raw_rhs: &[f64],
+    raw_target_bar: &[f64],
+    order: usize,
+    fact: &[f64],
+    scaled_vecs: &mut [f64],
+    a_blocks: &mut [[[f64; 3]; 3]],
+    c_blocks: &mut [[[f64; 3]; 3]],
+    a_bar: &mut [[[f64; 3]; 3]],
+    c_bar: &mut [[[f64; 3]; 3]],
+    raw_rhs_bar: &mut [f64],
+    vecs_bar: &mut [f64],
+    elem_mat_bar: &mut [[f64; 4]; 4],
+) {
+    if order == 0 { return; }
+    debug_assert!(vecs.len() >= order.saturating_sub(1) * 6);
+    debug_assert!(raw_rhs.len() >= order * 6);
+    debug_assert!(raw_target_bar.len() >= order * 6);
+    debug_assert!(raw_rhs_bar.len() >= order * 6);
+    debug_assert!(vecs_bar.len() >= order.saturating_sub(1) * 6);
+
+    let r = mat3_from_mat4(elem_mat);
+    let p = [elem_mat[0][3], elem_mat[1][3], elem_mat[2][3]];
+    a_blocks[0] = r;
+    c_blocks[0] = mat3_mul(skew(p), r);
+    for i in 0..order - 1 {
+        let scale = 1.0;
+        for d in 0..6 { scaled_vecs[i * 6 + d] = vecs[i * 6 + d] * scale; }
+    }
+    for k in 1..order {
+        let mut a = [[0.0; 3]; 3];
+        let mut c = [[0.0; 3]; 3];
+        for i in 0..k {
+            let x = vec6_from_flat(scaled_vecs, i);
+            let prev = k - i - 1;
+            a = add_mat3(a, mat3_mul_skew_right(a_blocks[prev], [x[0], x[1], x[2]]));
+            c = add_mat3(c, mat3_mul_skew_right(a_blocks[prev], [x[3], x[4], x[5]]));
+            c = add_mat3(c, mat3_mul_skew_right(c_blocks[prev], [x[0], x[1], x[2]]));
+        }
+        a_blocks[k] = scale_mat3(a, 1.0 / k as f64);
+        c_blocks[k] = scale_mat3(c, 1.0 / k as f64);
+    }
+    a_bar[..order].fill([[0.0; 3]; 3]);
+    c_bar[..order].fill([[0.0; 3]; 3]);
+
+    // Reverse the factorial-scaled lower Toeplitz wrench application.
+    for k in 0..order {
+        let y = scale6(vec6_from_flat(raw_target_bar, k), fact[k]);
+        let y_tau = [y[0], y[1], y[2]];
+        let y_force = [y[3], y[4], y[5]];
+        for i in 0..=k {
+            let j = k - i;
+            let rhs = vec6_from_flat(raw_rhs, j);
             let tau = [rhs[0], rhs[1], rhs[2]];
             let force = [rhs[3], rhs[4], rhs[5]];
             a_bar[i] = add_mat3(a_bar[i], outer3(y_tau, tau));
@@ -985,7 +1173,7 @@ pub(crate) fn apply_hat_cm_commute_wrench_transpose(
 pub(crate) fn cmtm_from_mat_blocks_into(
     blocks: &[[[f64; 4]; 4]],
     order: usize,
-    fact: &[f64],
+    _fact: &[f64],
     _hats: &mut [[[f64; 4]; 4]],
     out_vecs: &mut [f64],
 ) -> [[f64; 4]; 4] {
@@ -995,7 +1183,7 @@ pub(crate) fn cmtm_from_mat_blocks_into(
     for i in 0..order - 1 {
         let mut m_tmp = [[0.0; 4]; 4];
         for j in 0..i {
-            let cm_vec = scale6(vec6_from_flat(out_vecs, j), 1.0 / fact[j]);
+            let cm_vec = vec6_from_flat(out_vecs, j);
             m_tmp = add_mat4(m_tmp, mat4_mul_hat_se3(blocks[i - j], cm_vec));
         }
         let delta = mat4_mul_cmtm_block(
@@ -1003,11 +1191,52 @@ pub(crate) fn cmtm_from_mat_blocks_into(
             sub_mat4(scale_mat4(blocks[i + 1], (i + 1) as f64), m_tmp),
             true,
         );
-        let raw = scale6(vee_se3(delta), fact[i]);
+        let raw = vee_se3(delta);
         set_vec6_flat(out_vecs, i, raw);
     }
 
     elem_mat
+}
+
+/// Scale for an ordinary derivative reconstructed from a CM coefficient.
+pub(crate) fn factorial_scale(order: usize) -> f64 {
+    const FACTORIALS: [f64; 11] = [1.0, 1.0, 2.0, 6.0, 24.0, 120.0,
+        720.0, 5040.0, 40320.0, 362880.0, 3628800.0];
+    if order < FACTORIALS.len() { return FACTORIALS[order]; }
+    (11..=order).fold(FACTORIALS[10], |value, k| value * k as f64)
+}
+
+/// Reconstruct into a public output buffer, without modifying the CM state.
+pub(crate) fn copy_ordinary_series_into(cm: &[f64], order: usize, width: usize, out: &mut [f64]) {
+    if order == 0 { return; }
+    for (row, (source, target)) in cm.chunks_exact(width).zip(out.chunks_exact_mut(width)).enumerate() {
+        let scale = factorial_scale(row % order);
+        for (value, output) in source.iter().zip(target) { *output = value * scale; }
+    }
+}
+
+pub(crate) fn ordinary_series(cm: &[f64], order: usize, width: usize) -> Vec<f64> {
+    let mut out = vec![0.0; cm.len()];
+    copy_ordinary_series_into(cm, order, width, &mut out);
+    out
+}
+
+pub(crate) fn input_series(values: &[f64], order: usize, cm: bool) -> Vec<f64> {
+    if cm { return values.to_vec(); }
+    let mut out = values.to_vec();
+    if order > 0 { for (row, values) in out.chunks_exact_mut(6).enumerate() {
+        let scale = factorial_scale(row % order);
+        for value in values { *value /= scale; }
+    }}
+    out
+}
+
+pub(crate) fn export_series(values: &[f64], order: usize, width: usize, cm: bool) -> Vec<f64> {
+    if cm { values.to_vec() } else { ordinary_series(values, order, width) }
+}
+
+pub(crate) fn copy_export_series_into(values: &[f64], order: usize, width: usize, out: &mut [f64], cm: bool) {
+    if cm { out.copy_from_slice(values); } else { copy_ordinary_series_into(values, order, width, out); }
 }
 
 pub(crate) fn fill_factorial_table(fact: &mut [f64]) {
@@ -1032,6 +1261,7 @@ pub(crate) fn momentum_from_velocity_into(
     }
 }
 
+#[cfg(test)]
 pub(crate) fn force_from_velocity_momentum_into(
     vel: &[f64],
     momentum: &[f64],
@@ -1052,7 +1282,23 @@ pub(crate) fn force_from_velocity_momentum_into(
     }
 }
 
+/// Force coefficients: f_bar[k] = (k+1) p_bar[k+1] + sum_i v_bar[i] x* p_bar[k-i].
+pub(crate) fn force_from_velocity_momentum_cm_into(
+    vel: &[f64], momentum: &[f64], force_order: usize, out: &mut [f64],
+) {
+    for k in 0..force_order {
+        let mut force = scale6(vec6_from_flat(momentum, k + 1), (k + 1) as f64);
+        for i in 0..=k {
+            force = add6(force, hat_adj_wrench_vec6(
+                vec6_from_flat(vel, i), vec6_from_flat(momentum, k - i),
+            ));
+        }
+        set_vec6_flat(out, k, force);
+    }
+}
+
 /// Analytic directional derivative of `force_from_velocity_momentum_into`.
+#[cfg(test)]
 pub(crate) fn force_from_velocity_momentum_tangent_into(
     vel: &[f64],
     dvel: &[f64],
@@ -1087,6 +1333,41 @@ pub(crate) fn force_from_velocity_momentum_tangent_into(
     }
 }
 
+/// CM primal momentum, ordinary velocity and output sensitivities.
+pub(crate) fn force_from_velocity_momentum_cm_rhs_tangent_into(
+    vel: &[f64],
+    dvel: &[f64],
+    momentum: &[f64],
+    dmomentum: &[f64],
+    force_order: usize,
+    fact: &[f64],
+    out: &mut [f64],
+) {
+    out[..force_order * 6].fill(0.0);
+    for k in 0..force_order {
+        let mut conv = [0.0; 6];
+        for i in 0..=k {
+            let vel_cm = vec6_from_flat(vel, i);
+            let dvel_cm = scale6(vec6_from_flat(dvel, i), 1.0 / fact[i]);
+            let mom_cm = vec6_from_flat(momentum, k - i);
+            let dmom_cm = scale6(
+                vec6_from_flat(dmomentum, k - i),
+                1.0 / fact[k - i],
+            );
+            conv = add6(conv, hat_adj_wrench_vec6(dvel_cm, mom_cm));
+            conv = add6(conv, hat_adj_wrench_vec6(vel_cm, dmom_cm));
+        }
+        set_vec6_flat(
+            out,
+            k,
+            add6(
+                vec6_from_flat(dmomentum, k + 1),
+                scale6(conv, fact[k]),
+            ),
+        );
+    }
+}
+
 /// Reverse-mode counterpart of [`force_from_velocity_momentum_into`].
 ///
 /// `force_bar` is accumulated into the cotangents of the raw (rather than
@@ -1094,6 +1375,7 @@ pub(crate) fn force_from_velocity_momentum_tangent_into(
 /// in the spatial module is important: every CMTM dynamics VJP uses the same
 /// bilinear `v ×* h` convolution, and expressing its adjoint here avoids
 /// falling back to one forward tangent per input coordinate.
+#[cfg(test)]
 pub(crate) fn force_from_velocity_momentum_reverse_accumulate_into(
     vel: &[f64],
     momentum: &[f64],
@@ -1141,6 +1423,62 @@ pub(crate) fn force_from_velocity_momentum_reverse_accumulate_into(
             // materialising a 6×6 matrix.
             let n_bar = cross(y_tau, w);
             let f_bar = add3(cross(y_tau, linear), cross(y_force, w));
+            for c in 0..3 {
+                momentum_bar[j * 6 + c] += n_bar[c];
+                momentum_bar[j * 6 + 3 + c] += f_bar[c];
+            }
+        }
+    }
+}
+
+/// CM primal momentum; all cotangents use ordinary physical-output coordinates.
+pub(crate) fn force_from_velocity_momentum_cm_rhs_reverse_accumulate_into(
+    vel: &[f64],
+    momentum: &[f64],
+    force_bar: &[f64],
+    force_order: usize,
+    fact: &[f64],
+    vel_bar: &mut [f64],
+    momentum_bar: &mut [f64],
+) {
+    debug_assert!(vel.len() >= force_order * 6);
+    debug_assert!(momentum.len() >= (force_order + 1) * 6);
+    debug_assert!(force_bar.len() >= force_order * 6);
+    debug_assert!(vel_bar.len() >= force_order * 6);
+    debug_assert!(momentum_bar.len() >= (force_order + 1) * 6);
+
+    for k in 0..force_order {
+        let y = vec6_from_flat(force_bar, k);
+        // f_k contains h_(k+1) directly.
+        let next = k + 1;
+        for c in 0..6 {
+            momentum_bar[next * 6 + c] += y[c];
+        }
+
+        for i in 0..=k {
+            let j = k - i;
+            let scale = fact[k] / fact[i];
+            let v = vec6_from_flat(vel, i);
+            let h = vec6_from_flat(momentum, j);
+            let w = [v[0], v[1], v[2]];
+            let linear = [v[3], v[4], v[5]];
+            let n = [h[0], h[1], h[2]];
+            let f = [h[3], h[4], h[5]];
+            let y_tau = [y[0] * scale, y[1] * scale, y[2] * scale];
+            let y_force = [y[3] * scale, y[4] * scale, y[5] * scale];
+
+            // adjoint of [w×n + linear×f, w×f] with respect to v.
+            let w_bar = add3(cross(n, y_tau), cross(f, y_force));
+            let linear_bar = cross(f, y_tau);
+            for c in 0..3 {
+                vel_bar[i * 6 + c] += w_bar[c];
+                vel_bar[i * 6 + 3 + c] += linear_bar[c];
+            }
+
+            // ...and with respect to h.  This is (v×*)^T y written without
+            // materialising a 6×6 matrix.
+            let n_bar = scale3(cross(y_tau, w), fact[i] / fact[j]);
+            let f_bar = scale3(add3(cross(y_tau, linear), cross(y_force, w)), fact[i] / fact[j]);
             for c in 0..3 {
                 momentum_bar[j * 6 + c] += n_bar[c];
                 momentum_bar[j * 6 + 3 + c] += f_bar[c];
@@ -1830,13 +2168,28 @@ mod tests {
         let eps = 1e-7;
         let mut plus_mat = mat;
         for row in 0..3 { for col in 0..4 { plus_mat[row][col] += eps * dmat[row][col]; } }
-        let plus_vecs: Vec<f64> = vecs.iter().zip(&dvecs).map(|(x, dx)| x + eps * dx).collect();
+        let plus_vecs: Vec<f64> = vecs.iter().zip(&dvecs).enumerate().map(|(i, (x, dx))| x + eps * dx / fact[i / 6]).collect();
         let plus_rhs: Vec<f64> = rhs.iter().zip(&drhs).map(|(x, dx)| x + eps * dx).collect();
         let mut blocks_a = vec![[[0.0; 3]; 3]; order];
         let mut blocks_c = vec![[[0.0; 3]; 3]; order];
         let mut scaled = vec![0.0; (order - 1) * 6];
         let mut value = vec![0.0; order * 6];
         cmtm_accumulate_mat_adj_wrench_series_into(mat, &vecs, &rhs, order, &fact, &mut scaled, &mut blocks_a, &mut blocks_c, &mut value);
+        let mut cm_rhs = rhs.clone();
+        for k in 0..order {
+            for i in 0..6 { cm_rhs[k * 6 + i] /= fact[k]; }
+        }
+        let mut cm_value = vec![0.0; order * 6];
+        cmtm_accumulate_mat_adj_wrench_cm_into(
+            mat, &vecs, &cm_rhs, order, &fact, &mut scaled,
+            &mut blocks_a, &mut blocks_c, &mut cm_value,
+        );
+        for k in 0..order {
+            for i in 0..6 {
+                let expected = value[k * 6 + i];
+                assert!((cm_value[k * 6 + i] * fact[k] - expected).abs() < 1e-12);
+            }
+        }
         let mut plus_value = vec![0.0; order * 6];
         cmtm_accumulate_mat_adj_wrench_series_into(plus_mat, &plus_vecs, &plus_rhs, order, &fact, &mut scaled, &mut blocks_a, &mut blocks_c, &mut plus_value);
         let lhs: f64 = plus_value.iter().zip(&value).zip(&bar).map(|((p, x), b)| (p - x) * b / eps).sum();

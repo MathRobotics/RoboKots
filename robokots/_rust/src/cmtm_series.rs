@@ -7,6 +7,7 @@ fn gravity_is_zero(gravity: [f64; 3]) -> bool {
     gravity == [0.0; 3]
 }
 
+#[cfg(test)]
 fn binomial(n: usize, k: usize) -> f64 {
     let k = k.min(n - k);
     let mut value = 1.0;
@@ -16,6 +17,7 @@ fn binomial(n: usize, k: usize) -> f64 {
     value
 }
 
+#[cfg(test)]
 fn gravity_force_series_into(
     link_mat: [[f64; 4]; 4],
     link_vel: &[f64],
@@ -68,8 +70,70 @@ fn gravity_force_series_into(
     }
 }
 
+fn gravity_force_cm_into(
+    link_mat: [[f64; 4]; 4],
+    link_vel: &[f64],
+    inertia: [[f64; 6]; 6],
+    gravity: [f64; 3],
+    order: usize,
+    local_gravity: &mut [f64],
+    force: &mut [f64],
+) {
+    if order == 0 {
+        return;
+    }
+    let rotation_t = mat3_transpose(mat3_from_mat4(link_mat));
+    let gravity0 = mat3_vec(rotation_t, gravity);
+    local_gravity[..3].copy_from_slice(&gravity0);
+
+    // For a world-fixed vector expressed in a moving link frame,
+    // g_bar[n] = -sum_k omega_bar[k] x g_bar[n-1-k] / n.
+    for n in 1..order {
+        let mut derivative = [0.0; 3];
+        for k in 0..n {
+            let omega = vec6_from_flat(link_vel, k);
+            let gravity_derivative = [
+                local_gravity[(n - 1 - k) * 3],
+                local_gravity[(n - 1 - k) * 3 + 1],
+                local_gravity[(n - 1 - k) * 3 + 2],
+            ];
+            let term = cross([omega[0], omega[1], omega[2]], gravity_derivative);
+            let coefficient = 1.0 / n as f64;
+            for i in 0..3 {
+                derivative[i] -= coefficient * term[i];
+            }
+        }
+        local_gravity[n * 3..(n + 1) * 3].copy_from_slice(&derivative);
+    }
+
+    for n in 0..order {
+        let acceleration = [
+            0.0,
+            0.0,
+            0.0,
+            local_gravity[n * 3],
+            local_gravity[n * 3 + 1],
+            local_gravity[n * 3 + 2],
+        ];
+        let gravity_force = mat6_vec6(inertia, acceleration);
+        for i in 0..6 {
+            force[n * 6 + i] = -gravity_force[i];
+        }
+    }
+}
+
+// Reference-test conversion only; persistent dynamics state stays CM.
+#[cfg(test)]
+fn restore_derivative_rows(values: &mut [f64], order: usize, width: usize, fact: &[f64]) {
+    if order == 0 { return; }
+    for (row, values) in values.chunks_exact_mut(width).enumerate() {
+        for value in values { *value *= fact[row % order]; }
+    }
+}
+
 /// Analytic directional derivative of moving-frame gravity force series.
 #[allow(clippy::too_many_arguments)]
+#[cfg(test)]
 fn gravity_force_series_tangent_into(
     link_mat: [[f64; 4]; 4],
     dlink_mat: [[f64; 4]; 4],
@@ -111,6 +175,48 @@ fn gravity_force_series_tangent_into(
     }
 }
 
+// CM gravity scratch; ordinary velocities and output sensitivities.
+fn gravity_force_cm_rhs_tangent_into(
+    link_mat: [[f64; 4]; 4],
+    dlink_mat: [[f64; 4]; 4],
+    link_vel: &[f64],
+    dlink_vel: &[f64],
+    inertia: [[f64; 6]; 6],
+    gravity: [f64; 3],
+    order: usize,
+    local_gravity: &mut [f64],
+    dlocal_gravity: &mut [f64],
+    out: &mut [f64],
+) {
+    if order == 0 { return; }
+    let rt = mat3_transpose(mat3_from_mat4(link_mat));
+    let drt = mat3_transpose(mat3_from_mat4(dlink_mat));
+    local_gravity[..3].copy_from_slice(&mat3_vec(rt, gravity));
+    dlocal_gravity[..3].copy_from_slice(&mat3_vec(drt, gravity));
+    for n in 1..order {
+        let mut value = [0.0; 3];
+        let mut dvalue = [0.0; 3];
+        for k in 0..n {
+            let omega = vec6_from_flat(link_vel, k);
+            let domega = scale6(vec6_from_flat(dlink_vel, k), 1.0 / factorial_scale(k));
+            let g = [local_gravity[(n - 1 - k) * 3], local_gravity[(n - 1 - k) * 3 + 1], local_gravity[(n - 1 - k) * 3 + 2]];
+            let dg = [dlocal_gravity[(n - 1 - k) * 3], dlocal_gravity[(n - 1 - k) * 3 + 1], dlocal_gravity[(n - 1 - k) * 3 + 2]];
+            let c = 1.0 / n as f64;
+            for i in 0..3 {
+                value[i] -= c * cross([omega[0], omega[1], omega[2]], g)[i];
+                dvalue[i] -= c * (cross([domega[0], domega[1], domega[2]], g)[i] + cross([omega[0], omega[1], omega[2]], dg)[i]);
+            }
+        }
+        local_gravity[n * 3..(n + 1) * 3].copy_from_slice(&value);
+        dlocal_gravity[n * 3..(n + 1) * 3].copy_from_slice(&dvalue);
+    }
+    for n in 0..order {
+        let dg = [dlocal_gravity[n * 3], dlocal_gravity[n * 3 + 1], dlocal_gravity[n * 3 + 2]];
+        let value = mat6_vec6(inertia, [0.0, 0.0, 0.0, dg[0], dg[1], dg[2]]);
+        for i in 0..6 { out[n * 6 + i] = -value[i] * factorial_scale(n); }
+    }
+}
+
 /// Reverse-mode counterpart of [`gravity_force_series_into`].
 ///
 /// The gravity series is a world-fixed vector represented in a moving link
@@ -123,6 +229,7 @@ fn gravity_force_series_tangent_into(
 /// basis-tangent implementation would evaluate this O(order * input_dim)
 /// times, whereas this visits each binomial term once per output cotangent.
 #[allow(clippy::too_many_arguments)]
+#[cfg(test)]
 pub(crate) fn gravity_force_series_reverse_accumulate_into(
     link_vel: &[f64],
     inertia: [[f64; 6]; 6],
@@ -180,6 +287,88 @@ pub(crate) fn gravity_force_series_reverse_accumulate_into(
 
             // y . (omega x g) = omega . (g x y) = g . (y x omega).
             let omega_bar = scale3(cross(g, y), coefficient);
+            let g_bar = scale3(cross(y, [omega[0], omega[1], omega[2]]), coefficient);
+            for component in 0..3 {
+                link_vel_bar[k * 6 + component] += omega_bar[component];
+                local_gravity_bar[g_index * 3 + component] += g_bar[component];
+            }
+        }
+    }
+
+    // g_0 = R^T gravity.  Matrix entry R[r,c] has derivative gravity[r] in
+    // local component c.  Translation and the homogeneous row do not enter.
+    let g0_bar = [
+        local_gravity_bar[0],
+        local_gravity_bar[1],
+        local_gravity_bar[2],
+    ];
+    for r in 0..3 {
+        for c in 0..3 {
+            link_mat_bar[r][c] += gravity[r] * g0_bar[c];
+        }
+    }
+
+}
+
+// CM local gravity, ordinary physical-output cotangents.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn gravity_force_cm_rhs_reverse_accumulate_into(
+    link_vel: &[f64],
+    inertia: [[f64; 6]; 6],
+    gravity: [f64; 3],
+    order: usize,
+    local_gravity: &[f64],
+    force_bar: &[f64],
+    link_mat_bar: &mut [[f64; 4]; 4],
+    link_vel_bar: &mut [f64],
+    local_gravity_bar: &mut [f64],
+) {
+    if order == 0 {
+        return;
+    }
+    debug_assert!(link_vel.len() >= order.saturating_sub(1) * 6);
+    debug_assert!(local_gravity.len() >= order * 3);
+    debug_assert!(force_bar.len() >= order * 6);
+    debug_assert!(link_vel_bar.len() >= order.saturating_sub(1) * 6);
+    debug_assert!(local_gravity_bar.len() >= order * 3);
+
+    local_gravity_bar[..order * 3].fill(0.0);
+
+    // f^(n) = -n! I [0, g_bar[n]].  Do not assume that the supplied inertia is exactly
+    // symmetric: using the literal transpose makes this the adjoint of the
+    // forward code for every 6x6 input matrix.
+    for n in 0..order {
+        for g_component in 0..3 {
+            let mut value = 0.0;
+            for force_component in 0..6 {
+                value -= inertia[force_component][3 + g_component]
+                    * force_bar[n * 6 + force_component] * factorial_scale(n);
+            }
+            local_gravity_bar[n * 3 + g_component] += value;
+        }
+    }
+
+    // g_bar[n] = -sum_k omega[k] x g_bar[n-1-k] / (n k!).
+    // Process descending n so that every contribution to an earlier gravity
+    // derivative is present before its own recurrence is reversed.
+    for n in (1..order).rev() {
+        let y = [
+            local_gravity_bar[n * 3],
+            local_gravity_bar[n * 3 + 1],
+            local_gravity_bar[n * 3 + 2],
+        ];
+        for k in 0..n {
+            let coefficient = -1.0 / n as f64;
+            let omega = vec6_from_flat(link_vel, k);
+            let g_index = n - 1 - k;
+            let g = [
+                local_gravity[g_index * 3],
+                local_gravity[g_index * 3 + 1],
+                local_gravity[g_index * 3 + 2],
+            ];
+
+            // y . (omega x g) = omega . (g x y) = g . (y x omega).
+            let omega_bar = scale3(cross(g, y), coefficient / factorial_scale(k));
             let g_bar = scale3(cross(y, [omega[0], omega[1], omega[2]]), coefficient);
             for component in 0..3 {
                 link_vel_bar[k * 6 + component] += omega_bar[component];
@@ -335,7 +524,7 @@ impl RustCompiledRobot {
                 let lv_start = child * vec_len;
 
                 let joint_force_seed = joint_force_bar[jf_start..jf_start + force_len].to_vec();
-                force_from_velocity_momentum_reverse_accumulate_into(
+                force_from_velocity_momentum_cm_rhs_reverse_accumulate_into(
                     link_vec, joint_momentum, &joint_force_seed, dynamics_order, &primal.factorial,
                     &mut link_vec_bar[lv_start..lv_start + vec_len],
                     &mut joint_momentum_bar[jm_start..jm_start + momentum_len],
@@ -347,7 +536,7 @@ impl RustCompiledRobot {
                     let joint_gravity_seed = joint_gravity_bar[jf_start..jf_start + force_len].to_vec();
                     let local_gravity = &primal.link_local_gravity[child * dynamics_order * 3..(child + 1) * dynamics_order * 3];
                     let mut local_gravity_bar = vec![0.0; dynamics_order * 3];
-                    gravity_force_series_reverse_accumulate_into(
+                    gravity_force_cm_rhs_reverse_accumulate_into(
                         link_vec, self.link_inertia[child], gravity, dynamics_order, local_gravity,
                         &joint_gravity_seed, &mut link_mat_bar[child],
                         &mut link_vec_bar[lv_start..lv_start + vec_len], &mut local_gravity_bar,
@@ -363,7 +552,7 @@ impl RustCompiledRobot {
                         let mut ab = vec![[[0.0; 3]; 3]; dynamics_order];
                         let mut cb = vec![[[0.0; 3]; 3]; dynamics_order];
                         let mut scaled = vec![0.0; dynamics_order.saturating_sub(1) * 6];
-                        cmtm_accumulate_mat_adj_wrench_series_reverse_accumulate_into(
+                        cmtm_accumulate_mat_adj_wrench_cm_rhs_reverse_accumulate_into(
                             rel_mat, &rel_vecs[..dynamics_order.saturating_sub(1) * 6], child_gravity,
                             &joint_gravity_seed, dynamics_order, &primal.factorial, &mut scaled,
                             &mut a, &mut c, &mut ab, &mut cb,
@@ -389,7 +578,7 @@ impl RustCompiledRobot {
                     let mut ab = vec![[[0.0; 3]; 3]; momentum_order];
                     let mut cb = vec![[[0.0; 3]; 3]; momentum_order];
                     let mut scaled = vec![0.0; (momentum_order - 1) * 6];
-                    cmtm_accumulate_mat_adj_wrench_series_reverse_accumulate_into(
+                    cmtm_accumulate_mat_adj_wrench_cm_rhs_reverse_accumulate_into(
                         rel_mat, &rel_vecs[..(momentum_order - 1) * 6], child_momentum,
                         &joint_momentum_seed, momentum_order, &primal.factorial, &mut scaled,
                         &mut a, &mut c, &mut ab, &mut cb,
@@ -404,7 +593,7 @@ impl RustCompiledRobot {
                 let lf_start = child * force_len;
                 let link_force_seed = link_force_bar[lf_start..lf_start + force_len].to_vec();
                 let link_momentum = cmvec_slice(&primal.link_momentum, child, momentum_order);
-                force_from_velocity_momentum_reverse_accumulate_into(
+                force_from_velocity_momentum_cm_rhs_reverse_accumulate_into(
                     link_vec, link_momentum, &link_force_seed, dynamics_order, &primal.factorial,
                     &mut link_vec_bar[lv_start..lv_start + vec_len],
                     &mut link_momentum_bar[child * momentum_len..(child + 1) * momentum_len],
@@ -412,7 +601,7 @@ impl RustCompiledRobot {
                 if gravity_enabled {
                     let local_gravity = &primal.link_local_gravity[child * dynamics_order * 3..(child + 1) * dynamics_order * 3];
                     let mut local_gravity_bar = vec![0.0; dynamics_order * 3];
-                    gravity_force_series_reverse_accumulate_into(
+                    gravity_force_cm_rhs_reverse_accumulate_into(
                         link_vec, self.link_inertia[child], gravity, dynamics_order, local_gravity,
                         &link_force_seed, &mut link_mat_bar[child],
                         &mut link_vec_bar[lv_start..lv_start + vec_len], &mut local_gravity_bar,
@@ -569,7 +758,7 @@ impl RustCompiledRobot {
                 if dynamics_order > 0 {
                     let momentum = cmvec_slice(&primal.link_momentum, link, momentum_order);
                     let mut dforce = vec![0.0; dynamics_order * 6];
-                    force_from_velocity_momentum_tangent_into(
+                    force_from_velocity_momentum_cm_rhs_tangent_into(
                         vel,
                         &dvel,
                         momentum,
@@ -583,7 +772,7 @@ impl RustCompiledRobot {
                         let mut dgravity = vec![0.0; dynamics_order * 6];
                         let mut local_g = vec![0.0; dynamics_order * 3];
                         let mut dlocal_g = vec![0.0; dynamics_order * 3];
-                        gravity_force_series_tangent_into(
+                        gravity_force_cm_rhs_tangent_into(
                             mat4_from_flat(&primal.cmtm.link_mat, link), dmat, vel, &dvel,
                             self.link_inertia[link], gravity, dynamics_order,
                             &mut local_g, &mut dlocal_g, &mut dgravity,
@@ -632,7 +821,7 @@ impl RustCompiledRobot {
                     let mut dblocks = vec![[[0.0; 6]; 6]; momentum_order];
                     let mut transported = vec![0.0; momentum_order * 6];
                     let mut dtransported = vec![0.0; momentum_order * 6];
-                    cmtm_apply_mat_adj_wrench_tangent_into(
+                    cmtm_apply_mat_adj_wrench_cm_rhs_tangent_into(
                         rel_mat, &rel_vecs[..(momentum_order - 1) * 6], drel_mat, &drel_vecs[..(momentum_order - 1) * 6],
                         rhs, &drhs, momentum_order, &primal.factorial,
                         &mut blocks, &mut dblocks, &mut transported, &mut dtransported,
@@ -645,7 +834,7 @@ impl RustCompiledRobot {
                     let dvel = tangent_cmtm_vecs(&tangent.link_vecs, child, kin_order, tangent.rhs_cols, rhs_col);
                     let mut local_g = vec![0.0; dynamics_order * 3];
                     let mut dlocal_g = vec![0.0; dynamics_order * 3];
-                    gravity_force_series_tangent_into(
+                    gravity_force_cm_rhs_tangent_into(
                         mat4_from_flat(&primal.cmtm.link_mat, child),
                         tangent_mat4(&tangent.link_mat, child, tangent.rhs_cols, rhs_col),
                         vel, &dvel, self.link_inertia[child], gravity, dynamics_order,
@@ -663,13 +852,13 @@ impl RustCompiledRobot {
                         let mut dblocks = vec![[[0.0; 6]; 6]; dynamics_order];
                         let mut transported = vec![0.0; dynamics_order * 6];
                         let mut dtransported = vec![0.0; dynamics_order * 6];
-                        cmtm_apply_mat_adj_wrench_tangent_into(rel_mat, &rel_vecs[..dynamics_order.saturating_sub(1) * 6], drel_mat, &drel_vecs[..dynamics_order.saturating_sub(1) * 6], rhs, &drhs, dynamics_order, &primal.factorial, &mut blocks, &mut dblocks, &mut transported, &mut dtransported);
+                        cmtm_apply_mat_adj_wrench_cm_rhs_tangent_into(rel_mat, &rel_vecs[..dynamics_order.saturating_sub(1) * 6], drel_mat, &drel_vecs[..dynamics_order.saturating_sub(1) * 6], rhs, &drhs, dynamics_order, &primal.factorial, &mut blocks, &mut dblocks, &mut transported, &mut dtransported);
                         for i in 0..dynamics_order * 6 { dgravity_force[i] += dtransported[i]; }
                     }
                     set_tangent_cmvecs(&mut tangent.joint_gravity_force, j, dynamics_order, tangent.rhs_cols, rhs_col, &dgravity_force);
                 }
                 let mut dforce = vec![0.0; dynamics_order * 6];
-                force_from_velocity_momentum_tangent_into(
+                force_from_velocity_momentum_cm_rhs_tangent_into(
                     vel, &tangent_cmtm_vecs(&tangent.link_vecs, child, kin_order, tangent.rhs_cols, rhs_col),
                     cmvec_slice(&primal.joint_momentum, j, momentum_order), &d_joint_momentum,
                     dynamics_order, &primal.factorial, &mut dforce,
@@ -721,15 +910,14 @@ impl RustCompiledRobot {
             );
 
             if dynamics_order > 0 {
-                force_from_velocity_momentum_into(
+                force_from_velocity_momentum_cm_into(
                     link_vel,
                     &ws.tmp_link_momentum,
                     dynamics_order,
-                    &ws.factorial,
                     &mut ws.tmp_force,
                 );
                 if !gravity_is_zero(gravity) {
-                    gravity_force_series_into(
+                    gravity_force_cm_into(
                         mat4_from_flat(&ws.cmtm.link_mat, child),
                         link_vel,
                         self.link_inertia[child],
@@ -759,7 +947,7 @@ impl RustCompiledRobot {
                     self.origin_p[child_joint_id],
                 );
                 let rel_vecs = cmtm_vecs_slice(&ws.cmtm.joint_vecs, child_joint_id, kin_order);
-                cmtm_accumulate_mat_adj_wrench_series_into(
+                cmtm_accumulate_mat_adj_wrench_cm_into(
                     rel_mat,
                     &rel_vecs[..(momentum_order - 1) * 6],
                     child_joint_momentum,
@@ -775,10 +963,9 @@ impl RustCompiledRobot {
                         cmvec_slice(&ws.joint_gravity_force, child_joint_id, dynamics_order);
                     // Momentum prepared this joint's blocks through one
                     // higher order. Gravity uses exactly the same prefix.
-                    cmtm_accumulate_wrench_series_from_blocks_into(
+                    cmtm_accumulate_wrench_cm_from_blocks_into(
                         child_gravity,
                         dynamics_order,
-                        &ws.factorial,
                         &ws.tmp_wrench_adj_a_blocks,
                         &ws.tmp_wrench_adj_c_blocks,
                         &mut ws.tmp_gravity_force,
@@ -802,11 +989,10 @@ impl RustCompiledRobot {
                         &ws.tmp_gravity_force,
                     );
                 }
-                force_from_velocity_momentum_into(
+                force_from_velocity_momentum_cm_into(
                     link_vel,
                     &ws.tmp_joint_momentum,
                     dynamics_order,
-                    &ws.factorial,
                     &mut ws.tmp_force,
                 );
                 if !gravity_is_zero(gravity) {
@@ -840,15 +1026,14 @@ impl RustCompiledRobot {
             &ws.tmp_link_momentum,
         );
         if dynamics_order > 0 {
-            force_from_velocity_momentum_into(
+            force_from_velocity_momentum_cm_into(
                 world_vel,
                 &ws.tmp_link_momentum,
                 dynamics_order,
-                &ws.factorial,
                 &mut ws.tmp_force,
             );
             if !gravity_is_zero(gravity) {
-                gravity_force_series_into(
+                gravity_force_cm_into(
                     mat4_from_flat(&ws.cmtm.link_mat, world),
                     world_vel,
                     self.link_inertia[world],
@@ -1074,6 +1259,87 @@ impl RustCompiledRobot {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn persistent_dynamics_series_stay_normalized() {
+        use crate::model::{JointKind, JointModel, LinkModel, RobotModel};
+        let robot = RustCompiledRobot::from_model(&RobotModel {
+            links: vec![
+                LinkModel { name: "world".into(), mass: 0.0, cog: [0.0; 3], inertia: [0.0; 6] },
+                LinkModel { name: "body".into(), mass: 2.0, cog: [0.3, -0.2, 0.1],
+                    inertia: [1.0, 2.0, 3.0, 0.0, 0.0, 0.0] },
+            ],
+            joints: vec![JointModel { name: "axis".into(), parent_link: 0, child_link: 1,
+                kind: JointKind::Revolute, axis: [0.0, 0.0, 1.0], position: [0.0; 3],
+                orientation: [1.0, 0.0, 0.0, 0.0] }],
+        }, false).unwrap();
+        for order in [0, 1, 4, 9] {
+            let motion: Vec<f64> = (0..order + 2).map(|i| (i + 1) as f64 * 0.13).collect();
+            for gravity in [[0.0; 3], [0.2, -0.3, -9.81]] {
+                let mut ws = DynamicsCmtmWorkspace::new(&robot, order);
+                robot.dynamics_cmtm_into(&motion, order, gravity, &mut ws);
+                let velocity = cmtm_vecs_slice(&ws.cmtm.link_vecs, 1, order + 2);
+                for k in 0..order + 1 {
+                    let expected = mat6_vec6(robot.link_inertia[1], vec6_from_flat(velocity, k));
+                    let stored = vec6_from_flat(cmvec_slice(&ws.link_momentum, 1, order + 1), k);
+                    for c in 0..6 { assert!((stored[c] - expected[c]).abs() < 1e-13); }
+                }
+                for k in 0..order {
+                    let force = vec6_from_flat(&ws.joint_force, k);
+                    assert!((ws.joint_torque[k] - dot3(robot.axis[0], [force[0], force[1], force[2]])).abs() < 1e-13);
+                }
+                if order > 1 {
+                    let mut ordinary_g = vec![0.0; order * 3];
+                    let mut force = vec![0.0; order * 6];
+                    gravity_force_series_into(mat4_from_flat(&ws.cmtm.link_mat, 1), &ordinary_series(velocity, order + 1, 6),
+                        robot.link_inertia[1], gravity, order, &mut ordinary_g, &mut force);
+                    for k in 0..order { for c in 0..3 {
+                        let stored = ws.link_local_gravity[(order + k) * 3 + c];
+                        assert!((stored - ordinary_g[k * 3 + c] / factorial_scale(k)).abs() < 1e-12);
+                    }}
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn cm_force_and_gravity_match_ordinary_derivatives() {
+        let mat = [[1.0, 0.0, 0.0, 0.2], [0.0, 1.0, 0.0, -0.3],
+                   [0.0, 0.0, 1.0, 0.1], [0.0, 0.0, 0.0, 1.0]];
+        let mut inertia = [[0.0; 6]; 6];
+        for i in 0..6 { inertia[i][i] = (i + 1) as f64; }
+        for order in [0, 1, 5, 11] {
+            let mut fact = vec![1.0; order + 1];
+            fill_factorial_table(&mut fact);
+            let vel: Vec<f64> = (0..(order + 1) * 6)
+                .map(|i| ((i as f64 + 0.3) * 0.7).sin() * 0.2).collect();
+            let mut cm_vel = vel.clone();
+            for (k, row) in cm_vel.chunks_exact_mut(6).enumerate() {
+                for x in row { *x /= fact[k]; }
+            }
+            let mut p = vec![0.0; vel.len()];
+            let mut cm_p = p.clone();
+            momentum_from_velocity_into(inertia, &vel, order + 1, &mut p);
+            momentum_from_velocity_into(inertia, &cm_vel, order + 1, &mut cm_p);
+            let mut force = vec![0.0; order * 6];
+            let mut cm_force = force.clone();
+            force_from_velocity_momentum_into(&vel, &p, order, &fact, &mut force);
+            force_from_velocity_momentum_cm_into(&cm_vel, &cm_p, order, &mut cm_force);
+            restore_derivative_rows(&mut cm_force, order, 6, &fact);
+            for (a, b) in force.iter().zip(&cm_force) {
+                assert!((a - b).abs() < 1e-10 * (1.0 + a.abs()));
+            }
+            let mut g = vec![0.0; order * 3];
+            let mut cm_g = g.clone();
+            gravity_force_series_into(mat, &vel, inertia, [0.3, -0.4, -9.81], order, &mut g, &mut force);
+            gravity_force_cm_into(mat, &cm_vel, inertia, [0.3, -0.4, -9.81], order, &mut cm_g, &mut cm_force);
+            restore_derivative_rows(&mut cm_g, order, 3, &fact);
+            restore_derivative_rows(&mut cm_force, order, 6, &fact);
+            for (a, b) in g.iter().zip(&cm_g).chain(force.iter().zip(&cm_force)) {
+                assert!((a - b).abs() < 1e-10 * (1.0 + a.abs()));
+            }
+        }
+    }
 
     #[test]
     fn gravity_force_series_reverse_satisfies_directional_duality() {

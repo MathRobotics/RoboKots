@@ -8,6 +8,51 @@ use crate::types::{
 use crate::workspace::{CmtmWorkspace, DynamicsCmtmTangentWorkspace, DynamicsCmtmWorkspace};
 
 impl RustOutwardData {
+    pub fn kinematics_cm_series(&self, joint: bool, id: usize) -> CoreResult<Vec<f64>> {
+
+        if joint { self.check_joint_id(id)?; } else { self.check_link_id(id)?; }
+        let ws = self.cmtm_source()?;
+        if joint && self.has_cached_order1_dynamics {
+            let mut out = Vec::new();
+            for k in 0..self.order - 1 { out.extend(self.joint_vec(id, k + 2)?); }
+            return Ok(out);
+        }
+        Ok(cmtm_vecs_slice(if joint { &ws.joint_vecs } else { &ws.link_vecs }, id, self.order).to_vec())
+    }
+
+    /// Complete canonical CM series, detached from the persistent workspace.
+    pub fn dynamics_cm_series(&self, joint: bool, id: usize, momentum: bool) -> CoreResult<Vec<f64>> {
+
+        if joint { self.check_joint_id(id)?; } else { self.check_link_id(id)?; }
+        self.check_dynamics_computed()?;
+        if !self.has_full_dynamics {
+            return Err(Error::new("compute_dynamics_minimal only stores kinematics and joint torque; use compute_dynamics for full dynamics values"));
+        }
+        let order = self.dynamics_order + if momentum { 1 } else { 0 };
+        if order == 0 { return Err(Error::new("force is unavailable for dynamics order zero")); }
+        if self.has_cached_order1_dynamics {
+            // Only rows 0/1 are present in this path, and 0! = 1! = 1.
+            let mut out = Vec::with_capacity(order * 6);
+            for k in 0..order {
+                let row = match (joint, momentum) {
+                    (false, true) => self.link_momentum(id, k + 1)?,
+                    (false, false) => self.link_force(id, k + 1)?,
+                    (true, true) => self.joint_momentum(id, k + 1)?,
+                    (true, false) => self.joint_force(id, k + 1)?,
+                };
+                out.extend(row);
+            }
+            return Ok(out);
+        }
+        let values = match (joint, momentum) {
+            (false, true) => &self.dynamics.link_momentum,
+            (false, false) => &self.dynamics.link_force,
+            (true, true) => &self.dynamics.joint_momentum,
+            (true, false) => &self.dynamics.joint_force,
+        };
+        Ok(cmvec_slice(values, id, order).to_vec())
+    }
+
     /// World spatial motion: key_order 2 is velocity, 3 acceleration, etc.
     /// Includes derivatives of the moving frame; returns [angular, linear].
     pub fn world_link_vec(&self, link_id: usize, key_order: usize) -> CoreResult<Vec<f64>> {
@@ -111,6 +156,51 @@ impl RustOutwardData {
 }
 
 impl RustBatchOutwardData {
+    pub fn kinematics_cm_series(&self, sample: usize, joint: bool, id: usize) -> CoreResult<Vec<f64>> {
+        if sample >= self.batch { return Err(Error::new("sample index is out of range")); }
+        if joint { self.check_joint_id(id)?; } else { self.check_link_id(id)?; }
+        let ws = self.cmtm_source(sample)?;
+        if joint && self.has_cached_order1_dynamics {
+            let mut out = Vec::new();
+            for k in 0..self.order - 1 { out.extend(self.joint_vec(sample, id, k + 2)?); }
+            return Ok(out);
+        }
+        Ok(cmtm_vecs_slice(if joint { &ws.joint_vecs } else { &ws.link_vecs }, id, self.order).to_vec())
+    }
+
+    /// Complete canonical CM series, detached from the persistent workspace.
+    pub fn dynamics_cm_series(&self, sample: usize, joint: bool, id: usize, momentum: bool) -> CoreResult<Vec<f64>> {
+        if sample >= self.batch { return Err(Error::new("sample index is out of range")); }
+        if joint { self.check_joint_id(id)?; } else { self.check_link_id(id)?; }
+        self.check_dynamics_computed()?;
+        if !self.has_full_dynamics {
+            return Err(Error::new("compute_dynamics_minimal only stores kinematics and joint torque; use compute_dynamics for full dynamics values"));
+        }
+        let order = self.dynamics_order + if momentum { 1 } else { 0 };
+        if order == 0 { return Err(Error::new("force is unavailable for dynamics order zero")); }
+        if self.has_cached_order1_dynamics {
+            // Only rows 0/1 are present in this path, and 0! = 1! = 1.
+            let mut out = Vec::with_capacity(order * 6);
+            for k in 0..order {
+                let row = match (joint, momentum) {
+                    (false, true) => self.link_momentum(sample, id, k + 1)?,
+                    (false, false) => self.link_force(sample, id, k + 1)?,
+                    (true, true) => self.joint_momentum(sample, id, k + 1)?,
+                    (true, false) => self.joint_force(sample, id, k + 1)?,
+                };
+                out.extend(row);
+            }
+            return Ok(out);
+        }
+        let values = match (joint, momentum) {
+            (false, true) => &self.dynamics[sample].link_momentum,
+            (false, false) => &self.dynamics[sample].link_force,
+            (true, true) => &self.dynamics[sample].joint_momentum,
+            (true, false) => &self.dynamics[sample].joint_force,
+        };
+        Ok(cmvec_slice(values, id, order).to_vec())
+    }
+
     /// World spatial motion: key_order 2 is velocity, 3 acceleration, etc.
     /// Includes derivatives of the moving frame; returns [angular, linear].
     pub fn world_link_vec(
@@ -290,38 +380,20 @@ impl RustAbaData {
     }
 }
 
-pub(crate) fn cmtm_world_wrench_value(
-    elem_mat: [[f64; 4]; 4],
-    elem_vecs: &[f64],
-    raw_vecs: &[f64],
-    key_order: usize,
+pub(crate) fn cmtm_world_wrench_cm_value(
+    elem_mat: [[f64; 4]; 4], elem_vecs: &[f64], cm_vecs: &[f64], key_order: usize,
 ) -> Vec<f64> {
     let mut fact = vec![1.0; key_order.max(1)];
     fill_factorial_table(&mut fact);
-    let mut cm_rhs = vec![0.0; key_order * 6];
-    for k in 0..key_order {
-        let scale = 1.0 / fact[k];
-        for i in 0..6 {
-            cm_rhs[k * 6 + i] = raw_vecs[k * 6 + i] * scale;
-        }
-    }
     let mut blocks = vec![[[0.0; 6]; 6]; key_order];
-    let mut out_cm = vec![0.0; key_order * 6];
-    cmtm_apply_mat_adj_wrench_with_blocks_into(
-        elem_mat,
-        elem_vecs,
-        &cm_rhs,
-        key_order,
-        &fact,
-        &mut blocks,
-        &mut out_cm,
-    );
-    let start = (key_order - 1) * 6;
-    let scale = fact[key_order - 1];
-    out_cm[start..start + 6]
-        .iter()
-        .map(|value| value * scale)
-        .collect()
+    cmtm_mat_adj_wrench_blocks_into(elem_mat, elem_vecs, key_order, &fact, &mut blocks);
+    let k = key_order - 1;
+    let mut value = [0.0; 6];
+    for i in 0..=k {
+        let rhs = vec6_from_flat(cm_vecs, k - i);
+        value = add6(value, mat6_vec6(blocks[i], rhs));
+    }
+    scale6(value, fact[k]).to_vec()
 }
 // Ad_motion(T) = P Ad_wrench(T) P. Reuse the same ordinary-derivative
 // series transform as the selected world-motion tangent/reverse kernels.
@@ -357,7 +429,7 @@ fn world_spatial_value(
         &cmtm_vecs_slice(series, owner, order)[..n * 6]
     };
     let swapped = swap_spatial(raw);
-    swap_spatial(&cmtm_world_wrench_value(mat, frame_vecs, &swapped, n))
+    swap_spatial(&cmtm_world_wrench_cm_value(mat, frame_vecs, &swapped, n))
 }
 
 pub(crate) fn order1_link_momentum_value(
@@ -604,7 +676,7 @@ impl RustOutwardData {
         let vec_index = self.cmtm_vec_index(key_order)?;
         let ws = self.cmtm_source()?;
         let start = (link_id * (self.order - 1) + vec_index) * 6;
-        Ok(ws.link_vecs[start..start + 6].to_vec())
+        Ok(scale6(vec6_from_flat(&ws.link_vecs[start..start + 6], 0), factorial_scale(vec_index)).to_vec())
     }
     pub fn joint_vec(&self, joint_id: usize, key_order: usize) -> CoreResult<Vec<f64>> {
         self.check_joint_id(joint_id)?;
@@ -616,7 +688,7 @@ impl RustOutwardData {
         }
         let ws = self.cmtm_source()?;
         let start = (joint_id * (self.order - 1) + vec_index) * 6;
-        Ok(ws.joint_vecs[start..start + 6].to_vec())
+        Ok(scale6(vec6_from_flat(&ws.joint_vecs[start..start + 6], 0), factorial_scale(vec_index)).to_vec())
     }
     pub fn link_momentum(&self, link_id: usize, key_order: usize) -> CoreResult<Vec<f64>> {
         self.check_link_id(link_id)?;
@@ -632,7 +704,7 @@ impl RustOutwardData {
             );
         }
         let start = (link_id * (self.dynamics_order + 1) + vec_index) * 6;
-        Ok(self.dynamics.link_momentum[start..start + 6].to_vec())
+        Ok(scale6(vec6_from_flat(&self.dynamics.link_momentum[start..start + 6], 0), factorial_scale(vec_index)).to_vec())
     }
     pub fn joint_momentum(&self, joint_id: usize, key_order: usize) -> CoreResult<Vec<f64>> {
         self.check_joint_id(joint_id)?;
@@ -642,7 +714,7 @@ impl RustOutwardData {
         }
         let vec_index = self.momentum_vec_index(key_order)?;
         let start = (joint_id * (self.dynamics_order + 1) + vec_index) * 6;
-        Ok(self.dynamics.joint_momentum[start..start + 6].to_vec())
+        Ok(scale6(vec6_from_flat(&self.dynamics.joint_momentum[start..start + 6], 0), factorial_scale(vec_index)).to_vec())
     }
     pub fn world_link_momentum(&self, link_id: usize, key_order: usize) -> CoreResult<Vec<f64>> {
         self.check_link_id(link_id)?;
@@ -660,11 +732,11 @@ impl RustOutwardData {
                 let value = order1_link_momentum_value(&self.robot, &self.dynamics, link_id, index);
                 raw[index * 6..index * 6 + 6].copy_from_slice(&value);
             }
-            let out = cmtm_world_wrench_value(mat, vecs, &raw[..key_order * 6], key_order);
+            let out = cmtm_world_wrench_cm_value(mat, vecs, &raw[..key_order * 6], key_order);
             return Ok(out);
         }
         let start = link_id * (self.dynamics_order + 1) * 6;
-        let out = cmtm_world_wrench_value(
+        let out = cmtm_world_wrench_cm_value(
             mat,
             vecs,
             &self.dynamics.link_momentum[start..start + key_order * 6],
@@ -684,7 +756,7 @@ impl RustOutwardData {
         let mat = mat4_from_flat(&ws.link_mat, link_id);
         let vecs = cmtm_vecs_slice(&ws.link_vecs, link_id, self.order);
         let start = joint_id * (self.dynamics_order + 1) * 6;
-        let out = cmtm_world_wrench_value(
+        let out = cmtm_world_wrench_cm_value(
             mat,
             vecs,
             &self.dynamics.joint_momentum[start..start + key_order * 6],
@@ -703,7 +775,7 @@ impl RustOutwardData {
             return Ok(order1_link_force_value(&self.robot, &self.dynamics, link_id).to_vec());
         }
         let start = (link_id * self.dynamics_order + vec_index) * 6;
-        Ok(self.dynamics.link_force[start..start + 6].to_vec())
+        Ok(scale6(vec6_from_flat(&self.dynamics.link_force[start..start + 6], 0), factorial_scale(vec_index)).to_vec())
     }
     pub fn world_link_force(&self, link_id: usize, key_order: usize) -> CoreResult<Vec<f64>> {
         self.check_link_id(link_id)?;
@@ -717,11 +789,11 @@ impl RustOutwardData {
         let vecs = cmtm_vecs_slice(&ws.link_vecs, link_id, self.order);
         if self.has_cached_order1_dynamics {
             let force = order1_link_force_value(&self.robot, &self.dynamics, link_id);
-            let out = cmtm_world_wrench_value(mat, vecs, &force, key_order);
+            let out = cmtm_world_wrench_cm_value(mat, vecs, &force, key_order);
             return Ok(out);
         }
         let start = link_id * self.dynamics_order * 6;
-        let out = cmtm_world_wrench_value(
+        let out = cmtm_world_wrench_cm_value(
             mat,
             vecs,
             &self.dynamics.link_force[start..start + key_order * 6],
@@ -742,11 +814,11 @@ impl RustOutwardData {
         let vecs = cmtm_vecs_slice(&ws.link_vecs, link_id, self.order);
         if self.has_cached_order1_dynamics {
             let force = order1_joint_force_value(&self.robot, &self.dynamics, joint_id);
-            let out = cmtm_world_wrench_value(mat, vecs, &force, key_order);
+            let out = cmtm_world_wrench_cm_value(mat, vecs, &force, key_order);
             return Ok(out);
         }
         let start = joint_id * self.dynamics_order * 6;
-        let out = cmtm_world_wrench_value(
+        let out = cmtm_world_wrench_cm_value(
             mat,
             vecs,
             &self.dynamics.joint_force[start..start + key_order * 6],
@@ -765,14 +837,14 @@ impl RustOutwardData {
             return Ok(order1_joint_force_value(&self.robot, &self.dynamics, joint_id).to_vec());
         }
         let start = (joint_id * self.dynamics_order + vec_index) * 6;
-        Ok(self.dynamics.joint_force[start..start + 6].to_vec())
+        Ok(scale6(vec6_from_flat(&self.dynamics.joint_force[start..start + 6], 0), factorial_scale(vec_index)).to_vec())
     }
     pub fn joint_torque(&self, joint_id: usize, key_order: usize) -> CoreResult<Vec<f64>> {
         self.check_joint_id(joint_id)?;
         self.check_dynamics_computed()?;
         let vec_index = self.force_vec_index(key_order)?;
         let start = joint_id * self.dynamics_order + vec_index;
-        Ok(vec![self.dynamics.joint_torque[start]])
+        Ok(vec![self.dynamics.joint_torque[start] * factorial_scale(vec_index)])
     }
 }
 impl RustBatchOutwardData {
@@ -818,7 +890,7 @@ impl RustBatchOutwardData {
         let vec_index = self.cmtm_vec_index(key_order)?;
         let ws = self.cmtm_source(sample)?;
         let start = (link_id * (self.order - 1) + vec_index) * 6;
-        Ok(ws.link_vecs[start..start + 6].to_vec())
+        Ok(scale6(vec6_from_flat(&ws.link_vecs[start..start + 6], 0), factorial_scale(vec_index)).to_vec())
     }
     pub fn joint_vec(
         &self,
@@ -843,7 +915,7 @@ impl RustBatchOutwardData {
         }
         let ws = self.cmtm_source(sample)?;
         let start = (joint_id * (self.order - 1) + vec_index) * 6;
-        Ok(ws.joint_vecs[start..start + 6].to_vec())
+        Ok(scale6(vec6_from_flat(&ws.joint_vecs[start..start + 6], 0), factorial_scale(vec_index)).to_vec())
     }
     pub fn link_momentum(
         &self,
@@ -871,7 +943,7 @@ impl RustBatchOutwardData {
             .to_vec());
         }
         let start = (link_id * (self.dynamics_order + 1) + vec_index) * 6;
-        Ok(self.dynamics[sample].link_momentum[start..start + 6].to_vec())
+        Ok(scale6(vec6_from_flat(&self.dynamics[sample].link_momentum[start..start + 6], 0), factorial_scale(vec_index)).to_vec())
     }
     pub fn joint_momentum(
         &self,
@@ -890,7 +962,7 @@ impl RustBatchOutwardData {
         }
         let vec_index = self.momentum_vec_index(key_order)?;
         let start = (joint_id * (self.dynamics_order + 1) + vec_index) * 6;
-        Ok(self.dynamics[sample].joint_momentum[start..start + 6].to_vec())
+        Ok(scale6(vec6_from_flat(&self.dynamics[sample].joint_momentum[start..start + 6], 0), factorial_scale(vec_index)).to_vec())
     }
     pub fn world_link_momentum(
         &self,
@@ -918,11 +990,11 @@ impl RustBatchOutwardData {
                     order1_link_momentum_value(&self.robot, &self.dynamics[sample], link_id, index);
                 raw[index * 6..index * 6 + 6].copy_from_slice(&value);
             }
-            let out = cmtm_world_wrench_value(mat, vecs, &raw[..key_order * 6], key_order);
+            let out = cmtm_world_wrench_cm_value(mat, vecs, &raw[..key_order * 6], key_order);
             return Ok(out);
         }
         let start = link_id * (self.dynamics_order + 1) * 6;
-        let out = cmtm_world_wrench_value(
+        let out = cmtm_world_wrench_cm_value(
             mat,
             vecs,
             &self.dynamics[sample].link_momentum[start..start + key_order * 6],
@@ -951,7 +1023,7 @@ impl RustBatchOutwardData {
         let mat = mat4_from_flat(&ws.link_mat, link_id);
         let vecs = cmtm_vecs_slice(&ws.link_vecs, link_id, self.order);
         let start = joint_id * (self.dynamics_order + 1) * 6;
-        let out = cmtm_world_wrench_value(
+        let out = cmtm_world_wrench_cm_value(
             mat,
             vecs,
             &self.dynamics[sample].joint_momentum[start..start + key_order * 6],
@@ -981,7 +1053,7 @@ impl RustBatchOutwardData {
             );
         }
         let start = (link_id * self.dynamics_order + vec_index) * 6;
-        Ok(self.dynamics[sample].link_force[start..start + 6].to_vec())
+        Ok(scale6(vec6_from_flat(&self.dynamics[sample].link_force[start..start + 6], 0), factorial_scale(vec_index)).to_vec())
     }
     pub fn world_link_force(
         &self,
@@ -1004,11 +1076,11 @@ impl RustBatchOutwardData {
         let vecs = cmtm_vecs_slice(&ws.link_vecs, link_id, self.order);
         if self.has_cached_order1_dynamics {
             let force = order1_link_force_value(&self.robot, &self.dynamics[sample], link_id);
-            let out = cmtm_world_wrench_value(mat, vecs, &force, key_order);
+            let out = cmtm_world_wrench_cm_value(mat, vecs, &force, key_order);
             return Ok(out);
         }
         let start = link_id * self.dynamics_order * 6;
-        let out = cmtm_world_wrench_value(
+        let out = cmtm_world_wrench_cm_value(
             mat,
             vecs,
             &self.dynamics[sample].link_force[start..start + key_order * 6],
@@ -1038,11 +1110,11 @@ impl RustBatchOutwardData {
         let vecs = cmtm_vecs_slice(&ws.link_vecs, link_id, self.order);
         if self.has_cached_order1_dynamics {
             let force = order1_joint_force_value(&self.robot, &self.dynamics[sample], joint_id);
-            let out = cmtm_world_wrench_value(mat, vecs, &force, key_order);
+            let out = cmtm_world_wrench_cm_value(mat, vecs, &force, key_order);
             return Ok(out);
         }
         let start = joint_id * self.dynamics_order * 6;
-        let out = cmtm_world_wrench_value(
+        let out = cmtm_world_wrench_cm_value(
             mat,
             vecs,
             &self.dynamics[sample].joint_force[start..start + key_order * 6],
@@ -1072,7 +1144,7 @@ impl RustBatchOutwardData {
             );
         }
         let start = (joint_id * self.dynamics_order + vec_index) * 6;
-        Ok(self.dynamics[sample].joint_force[start..start + 6].to_vec())
+        Ok(scale6(vec6_from_flat(&self.dynamics[sample].joint_force[start..start + 6], 0), factorial_scale(vec_index)).to_vec())
     }
     pub fn joint_torque(
         &self,
@@ -1088,7 +1160,7 @@ impl RustBatchOutwardData {
         self.check_dynamics_computed()?;
         let vec_index = self.force_vec_index(key_order)?;
         let start = joint_id * self.dynamics_order + vec_index;
-        Ok(vec![self.dynamics[sample].joint_torque[start]])
+        Ok(vec![self.dynamics[sample].joint_torque[start] * factorial_scale(vec_index)])
     }
 }
 impl RustSelectedWorkspace {

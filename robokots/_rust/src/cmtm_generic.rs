@@ -50,7 +50,7 @@ fn reverse_cmtm_recovery(
     for i in (0..order - 1).rev() {
         let mut s = scale_mat4(blocks[i + 1], (i + 1) as f64);
         for j in 0..i {
-            s = sub_mat4(s, mat4_mul_hat_se3(blocks[i - j], scale6(vec6_from_flat(vecs, j), 1.0 / fact[j])));
+            s = sub_mat4(s, mat4_mul_hat_se3(blocks[i - j], vec6_from_flat(vecs, j)));
         }
         let mut d_bar = [[0.0; 4]; 4];
         let u_bar = vec6_from_flat(vec_bar, i);
@@ -59,7 +59,7 @@ fn reverse_cmtm_recovery(
         let s_bar = mat4_mul(mat4_t(e_inv), d_bar);
         add_mat4_in_place(&mut block_bar[i + 1], scale_mat4(s_bar, (i + 1) as f64));
         for j in 0..i {
-            let u = scale6(vec6_from_flat(vecs, j), 1.0 / fact[j]);
+            let u = vec6_from_flat(vecs, j);
             let neg = scale_mat4(s_bar, -1.0);
             add_mat4_in_place(&mut block_bar[i - j], mat4_mul(neg, mat4_t(hat_se3(u))));
             let h_bar = mat4_mul(mat4_t(blocks[i - j]), neg);
@@ -78,7 +78,7 @@ fn reverse_cmtm_blocks(
         let g = scale_mat4(block_bar[k], 1.0 / k as f64);
         for i in 0..k {
             let prev = k - i - 1;
-            let v = scale6(vec6_from_flat(vecs, i), 1.0 / fact[i]);
+            let v = vec6_from_flat(vecs, i);
             add_mat4_in_place(&mut block_bar[prev], mat4_mul(g, mat4_t(hat_se3(v))));
             let h_bar = mat4_mul(mat4_t(blocks[prev]), g);
             let v_bar = scale6(hat_se3_adjoint(h_bar), 1.0 / fact[i]);
@@ -404,7 +404,7 @@ impl RustCompiledRobot {
                     mat4_from_rot_pos(rot_axis(self.axis[j], motion[motion_start]), [0.0; 3]);
                 let rel_mat = mat4_mul(origin_mat, local_mat);
                 for k in 0..order - 1 {
-                    let value = motion[motion_start + k + 1];
+                    let value = motion[motion_start + k + 1] / ws.factorial[k];
                     ws.tmp_rel_vecs[k * 6] = self.axis[j][0] * value;
                     ws.tmp_rel_vecs[k * 6 + 1] = self.axis[j][1] * value;
                     ws.tmp_rel_vecs[k * 6 + 2] = self.axis[j][2] * value;
@@ -713,11 +713,11 @@ impl RustCompiledRobot {
                     let parent_v = vec6_from_flat(cmtm_vecs_slice(&ws.link_vecs, parent, order), n-k);
                     let w = [parent_v[0], parent_v[1], parent_v[2]];
                     let v = sub3([parent_v[3], parent_v[4], parent_v[5]], cross(self.origin_p[j], w));
-                    let scale = ws.factorial[n] / ws.factorial[n-k];
+                    let scale = 1.0;
                     omega = add3(omega, scale3(mat3_vec(rotations[k], w), scale));
                     linear = add3(linear, scale3(mat3_vec(rotations[k], v), scale));
                 }
-                let relative = if qi >= 0 { scale3(self.axis[j], motion[start+n+1]) } else { [0.0; 3] };
+                let relative = if qi >= 0 { scale3(self.axis[j], motion[start+n+1] / ws.factorial[n]) } else { [0.0; 3] };
                 omega = add3(omega, relative);
                 set_vec6_flat(&mut ws.link_vecs, child * count + n,
                     [omega[0],omega[1],omega[2],linear[0],linear[1],linear[2]]);

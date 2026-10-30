@@ -124,7 +124,7 @@ impl RustCompiledRobot {
                 for r in 0..=k {
                     let mut value = [0.0; 6];
                     for t in r..=k {
-                        value = add6(value, scale6(mat6_vec6(dx[t][r], vec6_from_flat(velocities, k-t)), fact[k]/fact[k-t]));
+                        value = add6(value, scale6(mat6_vec6(dx[t][r], vec6_from_flat(velocities, k-t)), fact[k]));
                     }
                     put_derivative(&mut derivatives.link_vecs, child, k, count, cols, start+r, value);
                 }
