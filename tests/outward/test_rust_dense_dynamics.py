@@ -76,13 +76,16 @@ def test_dense_workspace_interleaves_products_and_invalidates_state():
             for width in (1, 3):
                 v = rng.normal(size=(len(x), x.shape[-1], width))
                 w = rng.normal(size=(len(x), actual.shape[-2], width))
-                np.testing.assert_allclose(ws.apply(x, v, specs, gravity), expected @ v, atol=2e-8, rtol=2e-9)
+                # VJP consumes kinematics/world coefficients and must not
+                # prepare local dynamics, even before the first forward JVP.
                 np.testing.assert_allclose(ws.apply(x, w, specs, gravity, transpose=True),
                                            expected.swapaxes(-1, -2) @ w, atol=2e-8, rtol=2e-9)
+                assert ws.cache_info() == counts
+                np.testing.assert_allclose(ws.apply(x, v, specs, gravity), expected @ v, atol=2e-8, rtol=2e-9)
                 np.testing.assert_allclose(ws.jacobian(x, specs, gravity), expected, atol=2e-9, rtol=2e-9)
                 updated = ws.cache_info()
                 if width == 1 and any(spec[2] < 3 for spec in specs):
-                    # Dense world J prepares kinematics only. The first product
+                    # Dense world J prepares kinematics only. The first JVP
                     # upgrades stale local dynamics for at most the batch size.
                     assert updated[0] == counts[0]
                     assert updated[2] == counts[2]
