@@ -80,5 +80,14 @@ def test_dense_workspace_interleaves_products_and_invalidates_state():
                 np.testing.assert_allclose(ws.apply(x, w, specs, gravity, transpose=True),
                                            expected.swapaxes(-1, -2) @ w, atol=2e-8, rtol=2e-9)
                 np.testing.assert_allclose(ws.jacobian(x, specs, gravity), expected, atol=2e-9, rtol=2e-9)
-                assert ws.cache_info() == counts
+                updated = ws.cache_info()
+                if width == 1 and any(spec[2] < 3 for spec in specs):
+                    # Dense world J prepares kinematics only. The first product
+                    # upgrades stale local dynamics for at most the batch size.
+                    assert updated[0] == counts[0]
+                    assert updated[2] == counts[2]
+                    assert 0 <= updated[1] - counts[1] <= len(x)
+                else:
+                    assert updated == counts
+                counts = updated  # Further RHS widths must reuse the full state.
             np.testing.assert_array_equal(actual, saved)
