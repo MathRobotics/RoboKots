@@ -249,3 +249,8 @@ from robokots.robot_io import load_json_file, validate_model_data
 model_data = load_json_file("robot.json")
 validate_model_data(model_data)
 ```
+
+### Private Rust core development
+
+Source builds currently require the sibling `robokots-rs` checkout.
+See [Rust core separation](docs/RUST_CORE_SEPARATION.md) for layout and build instructions.

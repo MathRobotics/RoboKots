@@ -3,6 +3,438 @@
 These scripts are for local performance investigation and are not part of the
 normal RoboKots runtime path.
 
+## Standalone CMTM series / NumPy link Jacobian
+
+Run from the repository root using the experiment's uv environment:
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 \
+  uv run --project developer/algorithms --extra verify \
+  python -u -m developer.benchmarks.series_kinematics_compare
+```
+
+Compares the standalone factorial-normalized, one-link Jacobian with current
+RoboKots NumPy on synthetic 7-/16-/32-DOF chains and a branched model. Measures
+pose and spatial velocity time derivatives 0, 2 and 5 in local/world frames.
+Both implementations prepare states for every link. State-inclusive calls
+alternate two motions; model construction is excluded.
+Both implementations' prepared-state APIs are measured separately with the
+same fixed input. The standalone stages are distinguished explicitly:
+
+- `prepare_kinematics(model, motion)`: prepare all-link states and transforms;
+  only the requested link's Jacobian is subsequently constructed.
+- `prepare_link_tangent(state, target)`: build the target's reusable B/E
+  coefficient arrays from the prepared state; timed independently.
+- `link_jacobian_from_state`: build B/E at the requested order on every call,
+  then extract the Jacobian; no implicit target-tangent cache.
+- `link_jacobian_from_tangent`: extract a fresh Jacobian from existing B/E;
+  excludes state and B/E preparation.
+
+Additional mixed-order rows request local velocity derivatives 0, 2 and 5 from
+one p=7 state. They compare rebuilding B/E for each request, building it once
+for three outputs, and reusing it across repeated sets of three outputs.
+All paths are checked against original NumPy Jacobians for two motions, and
+all-link state coverage is asserted outside the timing regions. No
+dense Jacobians are cached by the standalone implementation. The original
+uses its existing derivative caches after warmup. NumPy-to-Rust dispatch is
+blocked.
+
+Three sequential rounds in one process randomly interleave variants within
+each sample, using 5 warmups and 15 samples of 3 calls per round. The
+[report](results/series_kinematics_all_links_compare.md) and
+[JSON](results/series_kinematics_all_links_compare.json) record output errors for both
+motions, all timing samples, source hashes, model definitions and environment.
+Metadata explicitly records the `all_links` state scope for both implementations;
+B/E remains prepared only for the requested target link.
+For an already populated environment, `uv run --offline --no-sync` can run the
+same measurement without resolving dependencies. Rust, JAX, numerical
+differentiation and dynamics are not timed by this script.
+The earlier [initial report](results/series_kinematics_compare.md) retains the
+measurement before the standalone prepared-state API was added. The
+[prepared-state report](results/series_kinematics_prepared_compare.md) and
+[JSON](results/series_kinematics_prepared_compare.json) retain the measurement
+before reusable target tangents were added. The
+[target-tangent report](results/series_kinematics_tangent_compare.md) and
+[JSON](results/series_kinematics_tangent_compare.json) retain the earlier run
+with targeted ancestor-state preparation. Reruns use the new all-link report
+path by default and do not overwrite those historical results.
+
+### Preparing tangents for every link
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 \
+  uv run --project developer/algorithms --extra verify \
+  python -u -m developer.benchmarks.series_all_tangents_compare
+```
+
+Measures `prepare_link_tangent` for one selected link and for every link on
+7-/16-/32-DOF serial models and the branched example, at coefficient orders
+1, 2, 4 and 7. All-link preparation includes the root and fixed-link outputs:
+
+```python
+state = prepare_kinematics(model, motion)
+tangents = tuple(prepare_link_tangent(state, i) for i in range(len(model.links)))
+```
+
+All tangents share the same state snapshot; each retains its own B/E arrays.
+Integer link indices avoid repeating name searches. State preparation,
+one/all-link tangent preparation, and combined preparation are timed separately.
+The all-output comparison includes all-link state preparation, all tangents,
+and one Jacobian per link, against an existing NumPy all-link request.
+The output is local pose for order 1, or the highest available local velocity
+time derivative for higher orders. Two input motions are checked against the
+existing implementation before timing. State-inclusive calls alternate inputs.
+
+The [report](results/series_all_tangents_compare.md) and
+[JSON](results/series_all_tangents_compare.json) save timings, models, input
+motions, errors, environment, source hashes, and B/E array payload sizes.
+Reported B/E bytes exclude the shared state, Python object/array headers, and
+peak temporary allocations. These are retained payload sizes, not process RSS.
+Settings match the single-target benchmark: 3 rounds, 5 warmups, 15 samples of
+3 calls per round, with timing variants randomly interleaved.
+
+The weighted convolution and ancestor batching proposals can be checked with:
+
+```bash
+uv run --project developer/algorithms --extra verify \
+  python -m developer.benchmarks.series_convolution_proposal
+```
+
+This independent experiment checks both proposals against existing NumPy
+analytical Jacobians and the current standalone algorithm. It records 144
+analytical comparisons and 48 independent central-difference comparisons in
+[JSON](results/series_convolution_proposal.json), with models, inputs, errors
+and source hashes. The difference checks perturb all 140 motion columns by
+`±1e-6` and read NumPy state values directly, without using its Jacobian API.
+They cover local/world velocity derivatives 0, 1, 2 and 5 on a branched model
+and a 7-DOF serial chain. It does not measure speed or change the
+standalone runtime algorithm.
+
+## Standalone CMTM series / NumPy link momentum
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 \
+  uv run --project developer/algorithms --extra verify \
+  python -u -m developer.benchmarks.series_momentum_compare
+```
+
+Measures one link's momentum value and dense analytic Jacobian for 24 conditions:
+7-/16-/32-DOF serial models and the 3-DOF branched example, time derivatives
+0, 2 and 5, and local/world frames. Both implementations prepare states for all
+links at motion order `p = derivative + 2`. The state-inclusive comparison
+includes state preparation, the requested momentum value and its Jacobian;
+model construction is excluded and calls alternate two input motions.
+
+The main existing-NumPy baseline uses a benchmark-only preparation adapter:
+`kinematics()` followed by the existing `link_momentum_cmvec` kernel for every
+link. It omits subtree momentum sums, forces and torques, matching the
+standalone link-momentum scope. The existing value and analytic Jacobian APIs
+are unchanged. A separate reference column measures the ordinary full
+`dynamics()` API with zero gravity. Before timing, both inputs' values and
+Jacobians are checked against that full API, including the restricted adapter.
+NumPy-to-Rust dispatch is blocked.
+
+Additional timings separate all-link kinematics preparation, all-link momentum
+preparation from existing kinematics, target-link B/E preparation, Jacobian
+construction from an existing state or B/E, and value retrieval from an existing
+state. Prepared-state measurements reuse a fixed input. The original reuses
+relative CMTMs and related cached blocks after warmup; both implementations
+construct the dense output Jacobian on every call. The synthetic serial
+models use the fixed `a_tip` link (mass 0.2, zero rotational inertia) as output.
+
+Three sequential rounds use 5 warmups and 15 samples of 3 calls per round,
+randomly interleaving timing variants within each sample. The
+[report](results/series_momentum_compare.md) and
+[JSON](results/series_momentum_compare.json) save timings, raw samples, models,
+input motions, value/Jacobian errors, source hashes and environment metadata.
+For an already populated environment, add `--offline --no-sync` to `uv run` to
+skip dependency resolution. Rust, JAX and numerical differentiation are not
+timed by this script.
+
+## Standalone CMTM series / NumPy joint momentum
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 \
+  uv run --project developer/algorithms --extra verify \
+  python -u -m developer.benchmarks.series_joint_momentum_compare
+```
+
+Measures one joint's subtree momentum value and dense analytic Jacobian for
+24 conditions. The main comparison targets the root joint `joint1` of
+7-/16-/32-DOF serial models at time derivatives 0, 2 and 5, in local/world
+frames. Additional fifth-derivative cases target the middle joint `joint8`
+and fixed end joint `tool_fixed` of the 16-DOF model, and `shoulder` of the
+3-DOF branched example. Motion order is `p = derivative + 2`.
+
+Both implementations prepare all-link and all-subtree momentum states before
+returning the requested joint's value and Jacobian. The main existing-NumPy
+baseline uses the benchmark-only adapter in `joint_momentum_reference.py`:
+it retains the original local-CMTM subtree momentum aggregation and omits
+only force and torque calculations. The existing value and analytic Jacobian
+APIs are unchanged. A separate column measures the full `dynamics()` API
+with zero gravity. Both input motions' values and Jacobians, including the
+restricted adapter, are checked against that full API before timing.
+NumPy-to-Rust dispatch is blocked.
+
+Timings distinguish state preparation plus the value and Jacobian, all-state
+preparation alone, standalone subtree-coefficient preparation from existing
+link momentum, and separate Jacobian/value retrieval from prepared states.
+State-inclusive calls alternate two input motions; prepared-state calls use
+a fixed input. Model construction and conversion, module imports and
+correctness checks are excluded. The existing implementation reuses relative
+CMTMs and related cached blocks after warmup; both implementations construct
+the dense output Jacobian on every call.
+
+Three sequential rounds use 3 warmups and 9 samples of 1 call per round,
+randomly interleaving variants within each sample. This gives **27 samples**
+per variant, unlike the 45 samples in the link-momentum benchmark above.
+The [report](results/series_joint_momentum_compare.md) and
+[JSON](results/series_joint_momentum_compare.json) save timings, raw samples,
+models, input motions, value/Jacobian errors, source hashes and environment
+metadata. For an already populated environment, add `--offline --no-sync` to
+`uv run` to skip dependency resolution. Rust, JAX and numerical differentiation
+are not timed by this script.
+
+## Standalone CMTM series / NumPy force and torque
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 \
+  uv run --project developer/algorithms --extra verify \
+  python -u -m developer.benchmarks.series_force_torque_compare
+```
+
+Measures one link force, one joint-subtree force, and one joint torque, each
+with its dense analytic Jacobian. The default 50 conditions cover 7-/16-/32-DOF
+serial models at time derivatives 0, 2 and 5, plus the branched example at
+derivative 5. Forces use local/world frames; torque is a scalar generalized
+effort. Serial targets are the fixed end link `a_tip` and root joint `joint1`;
+branched targets are `slider` and `shoulder`. Motion order is
+`p = derivative + 3`, with world gravity `[0.2, -0.3, -9.81]` in both paths.
+
+Both implementations prepare all-link and all-subtree dynamics and all joint
+torque values. The baseline uses ordinary NumPy `dynamics()` without a
+restricted adapter. The standalone additionally prepares its small analytic
+variation blocks. State preparation plus one value/Jacobian, prepared-state
+Jacobian alone, and value retrieval alone are measured separately. All-state
+preparation and the additional `prepare_forces` stage from prepared momentum
+are also recorded. Each matrix describes one output, not all joint torques.
+
+Two inputs are checked before timing. State-changing variants have separate
+Kots instances and alternate those inputs; prepared-state calls share a fixed
+input. The existing relative-CMTM caches are reused after warmup, while both
+implementations generate fresh dense output Jacobians. NumPy-to-Rust dispatch
+is blocked. Three sequential rounds, each with 3 warmups and 9 samples of one
+call, give 27 samples per variant. Timing variants are randomly interleaved.
+Model construction/conversion, imports and correctness checks are excluded.
+
+The [report](results/series_force_torque_compare.md) and
+[JSON](results/series_force_torque_compare.json) retain environment, source
+hashes, models, inputs, value/Jacobian errors, first timed calls and all samples.
+Use `--dofs`, `--derivatives` and `--skip-branched` to narrow a rerun. An existing
+environment can use `uv run --offline --no-sync`. Rust, JAX, numerical
+differentiation and the all-joint dense torque Jacobian are not timed here.
+
+## Standalone analytic values / central-difference Jacobian
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 \
+  uv run --project developer/algorithms --extra verify \
+  python -u -m developer.benchmarks.series_numerical_jacobian_compare
+```
+
+Compares the root joint torque Jacobian of 7-/16-DOF serial chains at output
+time-derivative orders 0 and 5 (`p=n+3`). The three state-inclusive variants
+are existing NumPy analytics, standalone NumPy analytics, and central
+differences of standalone `algorithm.inverse_dynamics` values. The numerical
+path uses no analytic variation blocks, and evaluates one base value plus
+`2*N*p` perturbed values with absolute step `eps=1e-6`. World gravity is
+`[0.2, -0.3, -9.81]`, and each result has shape `(1,N*p)`.
+
+Prepared-state analytic timings are separate. A numerical difference needs
+new states at perturbed motions; there is no numerical state-ready timing.
+State-inclusive calls alternate two inputs. Before timing, both inputs are
+checked against existing NumPy analytics. Model construction, imports and
+correctness checks are excluded; input processing and output allocation are
+included. NumPy-to-Rust dispatch is blocked.
+
+Defaults use three sequential rounds, each with one warmup and three samples
+of one call, giving **9 samples** per variant. Variants are randomly
+interleaved. `--dofs`, `--derivatives`, `--eps` and repetition flags configure
+additional runs. Existing environments can add `--offline --no-sync` to uv.
+The [report](results/series_numerical_jacobian_compare.md) and
+[JSON](results/series_numerical_jacobian_compare.json) retain inputs, models,
+environment, source hashes, first calls, all samples and comparison errors.
+The default run measures differences of standalone values. To add central
+differences of **existing RoboKots NumPy** dynamics/state_info values:
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 \
+  uv run --project developer/algorithms --extra verify \
+  python -u -m developer.benchmarks.series_numerical_jacobian_compare \
+  --include-existing-numerical --dofs 7 --derivatives 0 5
+```
+
+The same central-difference loop, epsilon, inputs and output are used for both
+value evaluators. The existing-NumPy adapter explicitly calls
+`dynamics(backend="numpy")` in a private Kots workspace and leaves the original
+Kots unchanged. Workspace construction once per Jacobian is included; static
+model parsing/construction is excluded. With this flag, the default output
+changes to the [existing-NumPy numerical report](results/series_numpy_numerical_jacobian_compare.md)
+and [JSON](results/series_numpy_numerical_jacobian_compare.json), preserving the
+earlier standalone-only results. The saved run uses seven DOFs and derivatives
+0/5 with the same nine-sample settings. It does not time the built-in
+`Kots.jacobian(numerical=True)` API. Rust, JAX and all-torque dense Jacobians
+are not timed.
+
+## Matched NumPy/JAX series kernels, finite differences and AD
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 \
+  uv run --project developer/algorithms --extra verify \
+  python -u -m developer.benchmarks.series_jax_compare
+```
+
+Uses `array_force_torque.make_force_torque_functions` for a shared coefficient
+recurrence and explicit analytic variation in NumPy and JAX. Central
+differences, `jacfwd`, and `jacrev` evaluate/differentiate the same value
+function, with the same model, runtime motion/gravity, float64, output and
+input layout. Defaults select the root torque of a seven-DOF chain at time
+derivatives 0 and 5. `--dofs` and `--derivatives` configure further runs.
+
+All methods include state computation. JAX outer-JIT-disabled and JIT-enabled
+methods are separate; the first call is timed before correctness checks and
+warm measurements. Backend initialization and static factory construction
+are recorded separately. Every JAX call synchronizes and returns a NumPy
+array, including input transfer and output conversion in the timer. The
+default is three rounds, one warmup and three samples per round: nine samples
+per variant. Two runtime motions alternate in the timing, and a zero-pose,
+zero-gravity input is also checked against existing NumPy analytics.
+
+NumPy FD evaluates a base value for shape plus `2*N*p` perturbed values. JAX
+FD uses static output shape and `lax.map` over `2*N*p` evaluations, without
+materializing a full identity seed or all perturbed states. Even outer-JIT-off
+JAX can internally compile primitives and lax.map. The BLAS environment is
+set to one thread; this does not guarantee that every JAX/XLA internal thread
+pool has size one. Device information and XLA flags are recorded.
+
+The [report](results/series_jax_compare.md) and
+[JSON](results/series_jax_compare.json) store all samples, first calls, inputs,
+models, errors and source hashes. The original RoboKots NumPy analytic API
+and previous standalone NumPy analytic API are additional reference columns.
+The existing `Kots.jacobian_autodiff()` API, Rust and GPU are not timed here.
+An existing environment can add `--offline --no-sync` to uv.
+
+The all-method run exhibited substantial variance in JIT timings. To separate
+compiled steady execution from interleaved outer-JIT-off tracing/compilation,
+run the same command with `--jit-only --samples 9`. It retains the NumPy
+baselines and all four compiled JAX methods, but omits the eager JAX variants.
+Three rounds now yield 27 samples per variant. The independent
+[JIT comparison report](results/series_jax_jit_compare.md) and
+[JSON](results/series_jax_jit_compare.json) preserve this run separately from
+the all-method report. Both retain p10/p90 and first-call measurements.
+
+Both series JAX benchmarks also accept `--model tree --branching 2`. The tree
+has shared active ancestors, nested branches, revolute/prismatic joints, fixed
+spacers and fixed tools. The active motion rows remain joint1..jointN.
+`--target joint2` selects an internal subtree, while `--target total_joint`
+compares the complete dense torque Jacobian. Serial remains the default;
+tree defaults write separate `_tree` report files. Use `--output` for separate
+target/branching runs so their reports do not overwrite each other.
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 \
+  uv run --project developer/algorithms --extra verify \
+  python -u -m developer.benchmarks.series_jax_compare \
+  --model tree --dofs 7 --target total_joint --jit-only
+```
+
+The full tree correctness entry point is
+`python -u -m developer.algorithms.series_dynamics.verify_tree`, using the same
+uv environment. It checks all NumPy links/joints, independent central
+differences, topology-dependent zeros, and shared JAX force/torque analytics
+and AD with JIT off/on. See the [algorithm guide](../algorithms/series_dynamics/README.md).
+
+### Compilation stages and memory in isolated processes
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 \
+  uv run --project developer/algorithms --extra verify \
+  python -u -m developer.benchmarks.series_jax_resources
+```
+
+Measures the same shared NumPy/JAX analytic, central-difference and AD methods,
+one fresh subprocess per method/order/repetition. Defaults: seven DOFs,
+derivatives 0 and 5, one process per condition, one warmup and nine execution
+samples. `--repeats 3` repeats cold preparation in three separate processes;
+`--dof`, `--derivatives`, `--methods`, `--samples` and `--output` select other
+cases. An existing environment can use `uv run --offline --no-sync`.
+
+For a tree resource comparison, add `--model tree --target total_joint`.
+`--methods` can restrict the run to matched JAX analytic/AD methods with JIT
+off/on; the isolated subprocess receives the selected topology and target.
+
+JAX persistent compilation caching is disabled. The JIT path times
+`trace`, `lower`, and `compile` separately using abstract float64 input shapes,
+then calls the compiled executable with runtime motion and gravity. Device
+initialization and factory setup are recorded separately. Executions include
+state calculation, host input transfer, synchronization and NumPy conversion.
+Non-JIT JAX may still compile individual primitives; its first-call cost is
+reported without inventing a separate whole-function compilation time.
+
+The OS `ru_maxrss` records lifetime peak resident memory at each boundary,
+including imports, runtime, tracing and compilation. These are cumulative
+high-water marks, **not** per-stage peaks, live RSS, or pure tensor usage.
+The change since setup is a high-water-mark increase, not net allocation.
+JIT `memory_analysis()` additionally reports compiler estimates for argument,
+output, temporary and alias buffers; these do not measure Python/compiler
+memory. Correctness checks and compiler-memory queries follow all measured
+regions. NumPy workers import the same dependencies but do not initialize a
+JAX device. RSS collection supports macOS and Linux and normalizes their
+different units. No extra memory-profiler dependency is needed.
+
+The [resource report](results/series_jax_resources.md) and
+[JSON](results/series_jax_resources.json) retain timing samples, inputs,
+source hashes, all RSS checkpoints, compiler buffer details and comparisons
+against existing NumPy analytics for two motions and zero pose/gravity.
+
+### Matched serial/tree connectivity comparison
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 \
+  uv run --project developer/algorithms --extra verify \
+  python -u -m developer.benchmarks.series_topology_compare
+```
+
+Uses `matched_topology_models` rather than comparing the older serial and tree
+fixtures, whose link counts, inertias and joint types differ. Both matched
+models have the same `N+2` links (world, N active bodies, one fixed tool),
+joint types, local origins, axes, inertias and motion-row order. **Only parent
+link IDs differ.** The default seven-DOF pair has five revolute and two
+prismatic joints. Serial active depth is seven and binary-tree depth is three.
+World poses and torque values differ physically; each model is checked against
+its own independent RoboKots NumPy reference.
+
+Defaults measure all-joint dense torque Jacobians at derivative orders 0 and
+5, CPU float64, state calculation included. The matched JAX analytic,
+forward-AD and reverse-AD methods all use JIT; NumPy analytic is a reference.
+`--methods` can additionally select matched eager JAX methods or finite
+differences. Each topology/method/order runs in **three fresh processes**;
+each uses two warmups and nine timed executions. Runtime is the median of
+process medians, p10/p90 pool all 27 samples. Compilation and RSS summarize
+the three independent processes. Execution order is randomized with a saved
+seed, processes run sequentially, and persistent JAX compilation caching is
+disabled. Host input transfer, synchronization and NumPy output conversion
+are included. RSS is the process lifetime high-water mark through measurement;
+compiler estimates for execution buffers are reported separately.
+
+`--dof`, `--branching`, `--target`, `--derivatives`, `--methods`, `--repeats`,
+`--samples`, `--warmup` and `--output` configure other comparisons. An existing
+environment can add `--offline --no-sync` to uv. The coordinator verifies that
+all model constants except parent links, runtime inputs, gravity and Jacobian
+layouts match across conditions. The [report](results/series_topology_compare.md)
+and [JSON](results/series_topology_compare.json) retain all measurements,
+models, inputs, source hashes, reference errors and memory details.
+
 ## Dense Rust dynamics: dedicated assembly vs identity-seeded JVP
 
 Rebuild the installed Rust extension from the current sources before measuring:

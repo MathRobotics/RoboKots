@@ -29,7 +29,8 @@ NumPyによる解析計算、JAXによる自動微分、PyO3経由のRust実装�
 | `robokots/outward/diff/` | 解析微分、数値微分、JAXの計算 |
 | `robokots/outward/rust/` | Rustモデル・状態へのアダプター |
 | `robokots/inward/` | 順動力学と関連キャッシュ |
-| `robokots/_rust/src/` | RustカーネルとPythonバインディング |
+| `robokots/_rust/src/` | 兄弟 `robokots-rs` に接続するPython拡張入口 |
+| `../robokots-rs/` | Rustカーネル、native tests、高速化試作 |
 | `tests/` | 単体・API・バックエンド間の回帰テスト |
 | `developer/benchmarks/` | 再現可能な比較・性能測定スクリプト |
 
