@@ -8,3 +8,8 @@ target/
 developer/benchmarks/*.json
 ._*
 /developer/
+/dist/
+
+/build/
+/*.egg-info/
+/AGENTS.md
