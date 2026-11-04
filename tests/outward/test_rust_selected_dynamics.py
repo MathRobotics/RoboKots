@@ -128,3 +128,107 @@ def test_selected_dynamics_rejects_invalid_output_descriptors(kernel):
         method(motion, np.zeros((2, 6, 1)), [(0, 0, 1, 0, False)], 1)
     with pytest.raises(ValueError, match="dynamics_order"):
         method(motion, rhs, [(0, 0, 0, 0, False)], 0)
+
+
+@pytest.mark.parametrize("order", [3, 7])
+@pytest.mark.parametrize("batch_shape", [(), (2, 1)])
+def test_pure_torque_products_share_selected_workspace(monkeypatch, order, batch_shape):
+    rust = make_kots(order)
+    reference = make_kots(order)
+    rng = np.random.default_rng(81)
+    motion = rng.normal(scale=.2, size=batch_shape + (rust.dof() * order,))
+    key = "torque" if order == 3 else "torque_diff4"
+    states = [StateType("total_joint", "total_joint", key)] * 2
+    for kots, backend in ((rust, "rust"), (reference, "numpy")):
+        kots.import_motions(motion)
+        kots.dynamics(backend=backend, gravity=[.2, -.3, -9.81])
+    expected = reference.jacobian(states)
+    def forbidden(*args, **kwargs):
+        raise AssertionError("torque products must reuse selected workspace without dense assembly")
+    for name in ("_jacobian_from_state", "_rust_cmtm_torque_jacobian_apply", "_rust_torque_jacobian_transpose_apply"):
+        monkeypatch.setattr(rust, name, forbidden)
+    directions = rng.normal(size=batch_shape + (expected.shape[-1], 2))
+    weights = rng.normal(size=batch_shape + (expected.shape[-2], 2))
+    np.testing.assert_allclose(rust.jacobian_mul(states, directions), expected @ directions, atol=3e-9, rtol=3e-9)
+    workspace = rust._rust_selected_workspace_[2]
+    before = workspace.cache_info()
+    np.testing.assert_allclose(rust.jacobian_transpose_mul(states, weights), expected.swapaxes(-1, -2) @ weights, atol=3e-9, rtol=3e-9)
+    parts = rust.jacobian_mul(states, directions, list_output=True)
+    np.testing.assert_allclose(np.concatenate(parts, axis=-2), expected @ directions, atol=3e-9, rtol=3e-9)
+    np.testing.assert_allclose(rust.jacobian_mul(states, directions[..., 0]), (expected @ directions)[..., 0], atol=3e-9, rtol=3e-9)
+    np.testing.assert_allclose(rust.jacobian_transpose_mul(states, weights[..., 0]), (expected.swapaxes(-1, -2) @ weights)[..., 0], atol=3e-9, rtol=3e-9)
+    assert rust._rust_selected_workspace_[2] is workspace
+    assert workspace.cache_info() == before
+
+    # Updating motion and gravity must invalidate the shared preparation.
+    for kots, backend in ((rust, "rust"), (reference, "numpy")):
+        kots.import_motions(motion + .01)
+        kots.dynamics(backend=backend, gravity=[-.1, .4, -8.9])
+    updated = reference.jacobian(states)
+    np.testing.assert_allclose(rust.jacobian_mul(states, directions), updated @ directions, atol=3e-9, rtol=3e-9)
+    np.testing.assert_allclose(rust.jacobian_transpose_mul(states, weights), updated.swapaxes(-1, -2) @ weights, atol=3e-9, rtol=3e-9)
+    assert rust._rust_selected_workspace_[2] is workspace
+    # Order three uses the workspace's RNEA cache, not CMTM primal counters.
+    if order > 3:
+        assert workspace.cache_info()[0] > before[0]
+
+
+@pytest.mark.parametrize("order", [3, 7])
+def test_dense_and_products_use_shared_dispatch(monkeypatch, order):
+    rust, reference = make_kots(order), make_kots(order)
+    motion = np.random.default_rng(391).normal(scale=.2, size=rust.dof()*order)
+    states = [StateType("total_joint", "total_joint", "torque" if order == 3 else "torque_diff4")]
+    for kots, backend in ((rust, "rust"), (reference, "numpy")):
+        kots.import_motions(motion)
+        kots.dynamics(backend=backend, gravity=[.2, -.3, -9.81])
+    expected = reference.jacobian(states)
+    def forbidden(*args, **kwargs):
+        raise AssertionError("dense J must not use legacy torque dispatch")
+    monkeypatch.setattr(rust, "_rust_torque_jacobian", forbidden)
+    np.testing.assert_allclose(rust.jacobian(states), expected, atol=3e-9, rtol=3e-9)
+    workspace = rust._rust_selected_workspace_[2]
+    specs = rust._rust_selected_specs_[2]
+    rust.jacobian_mul(states, np.ones(expected.shape[-1]))
+    rust.jacobian_transpose_mul(states, np.ones(expected.shape[-2]))
+    assert rust._rust_selected_workspace_[2] is workspace
+    assert rust._rust_selected_specs_[2] is specs
+
+
+def test_selected_descriptor_cache_tracks_mutable_selection():
+    k = make_kots(5)
+    k.import_motions(np.zeros(k.dof()*5))
+    k.dynamics(backend="rust")
+    state = StateType("link", "a_tip", "force", "local")
+    initial = k._rust_selected_dynamics_specs([state], 5)
+    assert k._rust_selected_dynamics_specs([state], 5) is initial
+    state.frame_name = "world"
+    world = k._rust_selected_dynamics_specs([state], 5)
+    assert world[0][0][-1] and not initial[0][0][-1]
+    state.key_order = 2
+    assert k._rust_selected_dynamics_specs([state], 5)[0][0][3] == 1
+    state.owner_name = "b_upper"
+    assert k._rust_selected_dynamics_specs([state], 5)[0][0][1] != world[0][0][1]
+    state.frame_name = "invalid"
+    assert k._rust_selected_dynamics_specs([state], 5) is None
+    state.frame_name = "world"
+    assert k._rust_selected_dynamics_specs([state], 5) is not None
+
+
+@pytest.mark.parametrize("order", [3, 7])
+def test_gravity_only_updates_match_numpy(order):
+    rust, reference = make_kots(order), make_kots(order)
+    rng = np.random.default_rng(415)
+    motion = rng.normal(scale=.2, size=rust.dof()*order)
+    states = [StateType("link", "a_tip", "momentum", "world"),
+              StateType("joint", "a_shoulder", "force" if order == 3 else "force_diff4", "world"),
+              StateType("total_joint", "total_joint", "torque" if order == 3 else "torque_diff4")]
+    for k in (rust, reference):
+        k.import_motions(motion)
+    for gravity in ([.2, -.3, -9.81], [-.7, .4, -8.], [0., 0., 0.]):
+        rust.dynamics(backend="rust", gravity=gravity)
+        reference.dynamics(backend="numpy", gravity=gravity)
+        expected = reference.jacobian(states)
+        np.testing.assert_allclose(rust.jacobian(states), expected, atol=3e-9, rtol=3e-9)
+        v = rng.normal(size=expected.shape[-1]); w = rng.normal(size=expected.shape[-2])
+        np.testing.assert_allclose(rust.jacobian_mul(states, v), expected @ v, atol=3e-9, rtol=3e-9)
+        np.testing.assert_allclose(rust.jacobian_transpose_mul(states, w), expected.T @ w, atol=3e-9, rtol=3e-9)

@@ -52,28 +52,33 @@ def test_workspace_reuses_and_invalidates_primal():
     first=np.asarray(ws.apply(x,v,outputs,gravity))
     first_saved=first.copy()
     np.testing.assert_allclose(first,expected(),atol=1e-11)
-    assert ws.cache_info()==(0,2,2)
+    # Products now share world coefficients and need only local kinematics.
+    assert ws.cache_info()==(2,0,2)
     np.testing.assert_allclose(ws.apply(x,v,outputs,gravity),first,atol=1e-11)
-    assert ws.cache_info()==(0,2,2)
+    assert ws.cache_info()==(2,0,2)
     # Different cotangents and RHS widths reuse the same primal.
     w=rng.normal(size=(2,12,3))
     np.testing.assert_allclose(ws.apply(x,w,outputs,gravity,transpose=True),robot.dynamics_selected_transpose_batch(x,w,outputs,2,gravity),atol=1e-11)
-    assert ws.cache_info()==(0,2,2)
+    assert ws.cache_info()==(2,0,2)
     x[1,0]+=.15
     np.testing.assert_allclose(ws.apply(x,v,outputs,gravity),expected(),atol=1e-11)
-    assert ws.cache_info()==(0,3,2)
+    assert ws.cache_info()==(3,0,2)
     gravity[0]+=.7
     np.testing.assert_allclose(ws.apply(x,v,outputs,gravity),expected(),atol=1e-11)
-    assert ws.cache_info()==(0,5,2)
-    # Switching to pure kinematics frees dynamics state and computes no dynamics.
+    assert ws.cache_info()==(3,0,2)
+    # Pure kinematics switches the selected state category without local dynamics.
     kin=[outputs[0]]
-    ws.apply(x,v,kin,gravity)
-    assert ws.cache_info()==(2,5,2)
+    actual_kin = ws.apply(x,v,kin,gravity)
+    np.testing.assert_allclose(actual_kin, robot.dynamics_selected_tangent_batch(x,v,kin,2,gravity), atol=1e-11)
+    assert ws.cache_info()==(3,0,2)
+    # Switching back also reuses kinematics while respecting changed gravity.
+    np.testing.assert_allclose(ws.apply(x,v,outputs,gravity), expected(), atol=1e-11)
+    assert ws.cache_info()==(3,0,2)
     ws.apply(x[:1],v[:1],kin,gravity)
-    assert ws.cache_info()==(3,5,1)
+    assert ws.cache_info()==(4,0,1)
     # Invalid requests must not poison the last valid cache.
     with pytest.raises(ValueError):ws.apply(x,v[:1],outputs,gravity)
-    assert ws.cache_info()==(3,5,1)
+    assert ws.cache_info()==(4,0,1)
     np.testing.assert_array_equal(first,first_saved)
 
 

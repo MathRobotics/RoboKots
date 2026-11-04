@@ -112,16 +112,23 @@ class RustDerivativesMixin:
   def _rust_selected_dynamics_specs(self, states, max_order, *, dense=False):
     """Select dynamics, spatial motion and pose tangents in public output order.
 
-    Order-three torque products use the cached RNEA linearization. Joint motion
-    coordinates are not spatial CMTM entries. Higher-order pure torque retains
-    its specialised product dispatch, while dense=True selects native assembly.
+    Torque products at every order share the selected workspace with dense
+    Jacobians and mixed outputs. Joint motion coordinates are not spatial
+    CMTM entries.
     """
     if not hasattr(self.outward_state_, "raw_data") or self.dim_ != 3 or max_order < 1:
       return None
-    if not states or (not dense and max_order != 3 and all(st.data_type in keys_torque and st.frame_name is None for st in states)):
+    if not states:
       return None
-    specs, widths = [], []
     model_info = self._rust_model_info()
+    # Cache only the latest selection, never state values. Include mutable
+    # StateType fields by value and bind owner IDs to this immutable model.
+    key = (max_order, tuple((st.owner_type, st.owner_name, st.data_type,
+                            st.frame_name, st.key_order) for st in states))
+    cached = getattr(self, "_rust_selected_specs_", None)
+    if cached is not None and cached[0] is model_info and cached[1] == key:
+      return cached[2]
+    specs, widths = [], []
     families = {"momentum": 0, "force": 1, "torque": 2, "spatial": 3, "pos": 4, "rot": 5, "frame": 6}
     for st in states:
       try:
@@ -136,7 +143,9 @@ class RustDerivativesMixin:
         return None
       specs.append((0 if spec.owner_type == "link" else 1, spec.owner_id, family, time, spec.frame == "world"))
       widths.append(spec.width)
-    return specs, widths
+    result = (specs, widths)
+    self._rust_selected_specs_ = (model_info, key, result)
+    return result
 
   def _rust_selected_dynamics_apply(self, states, max_order, rhs, batch_shape, *, rhs_is_matrix, transpose=False, list_output=False):
     spec = self._rust_selected_dynamics_specs(states, max_order)

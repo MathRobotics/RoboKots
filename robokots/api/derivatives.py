@@ -159,6 +159,10 @@ class DerivativesMixin:
     )
 
   def _jacobian_from_state(self, state, state_type_list, max_order : int, list_output : bool = False):
+    fast = self._rust_selected_dynamics_jacobian(state_type_list, max_order, list_output=list_output)
+    if fast is not None:
+      return fast
+
     fast = self._joint_motion_torque_jacobian(state, state_type_list, max_order, list_output=list_output)
     if fast is not None:
       return fast
@@ -166,10 +170,6 @@ class DerivativesMixin:
     if fast is not None:
       return fast
     fast = self._rust_link_local_jacobian(state_type_list, max_order, list_output=list_output)
-    if fast is not None:
-      return fast
-
-    fast = self._rust_selected_dynamics_jacobian(state_type_list, max_order, list_output=list_output)
     if fast is not None:
       return fast
 
@@ -398,6 +398,12 @@ class DerivativesMixin:
     return self._stack_mul_columns(column_results, list_output, len(state_type_list))
 
   def _jacobian_output_dim(self, state_type_list) -> int:
+    if hasattr(self.outward_state_, "raw_data"):
+      selected = self._rust_selected_dynamics_specs(
+        state_type_list, StateType.max_time_order(state_type_list),
+      )
+      if selected is not None:
+        return sum(selected[1])
     dim_dof = dim_to_dof(self.dim_)
     output_dim = 0
     for st in state_type_list:
