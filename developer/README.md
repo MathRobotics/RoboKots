@@ -322,7 +322,7 @@ algorithm-specific numerical storage and must not be inserted into that cache.
 
 ### Native Rust model and Python boundary
 
-`../robokots-rs/src/model.rs` defines `RobotModel`, `LinkModel`, and
+The independently maintained native model module defines `RobotModel`, `LinkModel`, and
 `JointModel`. `RustCompiledRobot::from_model()` validates topology and compiles
 these ordinary Rust values. Link zero is the root; every other link must be
 connected exactly once, and joints must appear in parent-before-child order.
@@ -335,22 +335,16 @@ buffers or add a separate heap allocation. Dictionary/NumPy conversion and
 Python exceptions remain at this boundary. The existing Python class names,
 methods, array layouts, and supported joint subsets are retained.
 
-The native core lives in the sibling `robokots-rs` repository. Its default
-features are empty; the optional `python` feature enables the compatibility
-adapter used by this repository’s PyO3 extension entry point. Native tests:
-
-```bash
-cargo test --offline --manifest-path ../robokots-rs/Cargo.toml --no-default-features
-cargo tree --offline --manifest-path ../robokots-rs/Cargo.toml --no-default-features
-```
+Native compilation is maintained separately. Install the compatible
+`robokots-native` wheel before native tests; this repository builds only Python.
+See [native installation](../docs/RUST_CORE_SEPARATION.md).
 
 Native state operations are now public: outward/batch compute methods, local
 matrix/vector and local/world motion/wrench getters, selected JVP/VJP application,
 and ABA preparation/solve. Selected inputs and outputs use flattened row-major
 arrays, with explicit batch size and RHS column count. Dense Jacobians use
 `RustSelectedWorkspace::jacobian`; callers do not need an identity RHS.
-See [the external-crate integration tests](../../robokots-rs/tests/native_api.rs)
-for a complete model/state/finite-difference/JVP/VJP/ABA example without Python.
+Native integration examples are maintained with the native backend.
 
 ModelInfo holds names, joint kinds, DOFs, motion offsets and parent/child indices.
 Its immutable native storage is shared by model clones. Python obtains the
@@ -440,8 +434,7 @@ It replaces the previous exported numeric tuple alias. The packed numeric
 protocol remains crate-private for the existing Python binding. The output's
 `derivative` is zero-based (SpatialMotion 0 = velocity); `width()` is its tangent
 row count. Rotation/frame derivatives have 3/6 rows, distinct from matrix values.
-See the [executable Rust example](../../robokots-rs/src/lib.rs) and
-[integration tests](../../robokots-rs/tests/native_api.rs).
+Native examples and integration tests are maintained separately.
 
 `RustCompiledRobot::inverse_dynamics`/`forward_dynamics` and their `_batch`
 variants expose RNEA/ABA directly, with explicit world gravity and checked
@@ -461,7 +454,7 @@ and position/orientation/frame tangents.
 derivative orders, repeated selections, `total_joint` expansion, and leading
 batch axes retain the public output ordering.
 
-`../robokots-rs/src/dynamics_outputs.rs` selects results from the same primal
+The native selected-output implementation selects results from the same primal
 and tangent recurrence used by the torque-series API. World JVPs include both
 wrench and moving-transform derivatives. World VJP seeds are accumulated with
 local force/momentum/torque seeds before the common dynamics and kinematics
@@ -625,7 +618,7 @@ Reproducible measurements are in
 
 ### Dense Rust dynamics Jacobians
 
-`../robokots-rs/src/dynamics_jacobian.rs` assembles motion-coordinate columns
+The native dense implementation assembles motion-coordinate columns
 directly for selected momentum, force, torque and mixed spatial/pose outputs.
 Pure order-three torque retains the dedicated RNEA dense implementation;
 higher-order torque uses the selected dense workspace. Neither path sends an

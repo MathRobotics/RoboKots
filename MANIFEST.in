@@ -1,0 +1,6 @@
+include README.md LICENSE
+recursive-include robokots *.py
+recursive-exclude robokots *.so *.pyd *.dll *.dylib *.rs Cargo.*
+prune build
+prune dist
+prune developer

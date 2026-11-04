@@ -7,16 +7,17 @@ Clone RoboKots
 git clone https://github.com/MathRobotics/RoboKots
 ```
 
-Install RoboKots
-```
+Install the Python package (no Rust compiler or native source checkout required):
+
+```bash
 pip install .
 ```
 
-This builds the Python package and the experimental Rust backend extension.
-With uv, RoboKots can also be added directly from Git:
-```
-uv add "robokots @ git+https://github.com/MathRobotics/RoboKots.git"
-```
+Use `backend="numpy"` for Python/NumPy computation. To use `backend="rust"`,
+install a compatible, separately supplied `robokots-native` wheel into the same
+Python environment. RoboKots checks native API version 1 before loading it.
+An absent or incompatible extension raises an explicit error; it does not
+silently switch backends. See [optional native backend](docs/RUST_CORE_SEPARATION.md).
 
 Install optional table support for Polars-backed state tables:
 ```
@@ -250,7 +251,7 @@ model_data = load_json_file("robot.json")
 validate_model_data(model_data)
 ```
 
-### Private Rust core development
+### Optional native backend
 
-Source builds currently require the sibling `robokots-rs` checkout.
-See [Rust core separation](docs/RUST_CORE_SEPARATION.md) for layout and build instructions.
+Native compilation is managed separately from this Python repository.
+See [installation and compatibility](docs/RUST_CORE_SEPARATION.md).

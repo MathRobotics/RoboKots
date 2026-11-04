@@ -1,28 +1,65 @@
-# Rustコアの分離
+# Optional native backend
 
-Rust実装・native tests・高速化試作は兄弟リポジトリ `../robokots-rs` に移しました。
-RustディレクトリのGit履歴は新しいリポジトリに引き継いでいます。
-このリポジトリはPython公開API、NumPy/JAX実装、Python回帰テストと薄いPyO3入口を持ちます。
-import名 `robokots._rust_core` とpipプロジェクト名 `robokots` は変わりません。
+RoboKots contains the Python API, NumPy/JAX implementations and the adapter for
+an optional native extension. Installing or building this repository requires
+no Rust compiler, native source repository, credentials or sibling directory.
 
-```text
-workspace/
-  RoboKots/
-  robokots-rs/
+```bash
+pip install .
 ```
 
-Python環境を有効にしてRoboKotsルートから `maturin develop --release` でビルドします。
-Rust単体は `cargo test --manifest-path ../robokots-rs/Cargo.toml --no-default-features`。
-新しい場所にもRoboKotsの既存LICENSEを保持しています。
+Select `backend="numpy"` explicitly for NumPy-only operation. Native execution
+is opt-in via `backend="rust"`. The Python API and array layouts are unchanged.
 
-現在は非公開ローカル開発用のpath依存です。リモート・自動配布は設定していません。
-公開sdistにはpath依存のソースが同梱される可能性があるため、非公開期間は公開sdistを作成・配布しないでください。
-Cargoはコアと拡張入口の両方を `publish = false` にしています。
-公開済みバージョンの内容とGit履歴はこの移行で消去しません。
+## Local native installation
 
-互換バインディング本体 `py_api.rs` は内部ワークスペースへの依存が強いため、
-まずRustコアのoptional `python` feature内に保持しています。
-Rustのdefault featureは空で、単体利用はPython不要です。
+Native source and build configuration are managed independently. Obtain a
+compatible `robokots-native` wheel from its maintainer and install it into the
+same environment as RoboKots:
 
-分離時の確認: Rust単体20テスト、分離先のworld集約32ケース、
-新しくビルドしたPython拡張を使う関連回帰テスト227件が通過しました。
+```bash
+python -m pip install /path/to/robokots_native-<version>-<platform-tags>.whl
+```
+
+Replace the placeholder with the actual wheel filename for your Python, OS and
+CPU. This is a local installation procedure, not a public package-index upload.
+No Rust compiler is needed to install the wheel.
+
+The distribution is `robokots-native`, and its import name is `robokots_native`.
+It must declare integer `__api_version__ = 1`. RoboKots checks this version and
+required classes on first native use. Missing or incompatible extensions raise
+ImportError with a reason; they never silently fall back to NumPy. Native API
+version is a compatibility contract, separate from package release version.
+Breaking signatures, array layouts or semantics require a new API version.
+
+```python
+from robokots.kots import Kots
+model = Kots.from_urdf_file("robot.urdf", order=3, backend="rust")
+```
+
+`robokots._rust` remains the internal adapter. The old private import
+`robokots._rust_core` is a Python compatibility shim, not a bundled binary.
+The new native package owns no files under the `robokots` package, so installing
+or uninstalling it cannot overwrite RoboKots Python modules.
+
+## Migration and verification
+
+Replace the old combined RoboKots installation with the Python package, then
+install the separate native wheel. Remove any manually copied old
+`robokots/_rust_core*.so` or `.pyd` from a source checkout: extension modules
+can shadow the compatibility shim. Restart Python/Notebook processes afterward.
+Do not copy compiled files into the public Git repository.
+
+```python
+import robokots
+import robokots_native
+from robokots._rust import RustCompiledRobot
+print(robokots.__file__)
+print(robokots_native.__file__)
+print(robokots_native.__api_version__)
+```
+
+Public builds use setuptools (`uv build` or `python -m build`) and produce a
+`py3-none-any` wheel and a source archive without native code. Native wheels are
+built independently. Neither build is published automatically. Existing Git
+history and previously distributed artifacts are not rewritten by this change.
