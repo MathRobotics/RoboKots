@@ -43,6 +43,31 @@ class StateType:
         self.is_dynamics = is_in_keys_dynamics([data_type])
         self.alliance = state_dict_key(owner_type, owner_name, data_type)
 
+    @classmethod
+    def _for_owners(cls, owner_type, owner_names, data_type, frame_name=None):
+        """Expand one quantity without repeating its order/name lookups.
+
+        Every result owns its attributes; mutating a returned selection must
+        never alter another result or a subsequent expansion.
+        """
+        time_order = keys_time_order.get(data_type, 1)
+        key_order = keys_order.get(data_type, 1)
+        is_dynamics = is_in_keys_dynamics([data_type])
+        data_name = state_data_name(data_type)
+        result = []
+        for owner_name in owner_names:
+            state = cls.__new__(cls)
+            state.owner_type = owner_type
+            state.owner_name = owner_name
+            state.data_type = data_type
+            state.frame_name = frame_name
+            state.time_order = time_order
+            state.key_order = key_order
+            state.is_dynamics = is_dynamics
+            state.alliance = state_storage_key(owner_type, owner_name, data_name)
+            result.append(state)
+        return result
+
     def __repr__(self):
         return f"StateType(\n  owner type: {self.owner_type}\n  owner name: {self.owner_name}\n  data type: {self.data_type}\n  frame name: {self.frame_name}\n  time order: {self.time_order}\n  key order: {self.key_order}\n  is dynamics: {self.is_dynamics}\n  alliance: {self.alliance}\n)"
 

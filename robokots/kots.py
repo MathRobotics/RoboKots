@@ -314,15 +314,9 @@ class Kots(ModelInputMixin, DerivativesMixin, RustDerivativesMixin, FastDerivati
         continue
       if st.data_type not in keys_joint_motion and not is_in_keys_dynamics([st.data_type]):
         raise ValueError("total_joint state types support joint motion or dynamics data types")
-      expanded.extend(
-        StateType(
-          owner_type="joint",
-          owner_name=joint_name,
-          data_type=st.data_type,
-          frame_name=st.frame_name,
-        )
-        for joint_name in self._active_joint_names()
-      )
+      expanded.extend(StateType._for_owners(
+        "joint", self._active_joint_names(), st.data_type, st.frame_name,
+      ))
     return expanded
 
   @staticmethod
