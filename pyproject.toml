@@ -6,16 +6,17 @@ build-backend = "setuptools.build_meta"
 name = "robokots"
 version = "0.0.1"
 authors = [  
-  { name="taiki-ishigaki", email="taiki.ishigaki@ieee.org" },
+  { name="taiki-ishigaki", email="taiki000ishigaki@gmail.com" },
 ]
 description = "robotics library"
 readme = "README.md"
 
 license = {text = "MIT License"}
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
@@ -26,7 +27,8 @@ dependencies = [
     "jax>=0.4.30",
     "numpy>=2.0.2",
     "scipy>=1.13.1",
-    "mathrobo>=0.0.4",
+    "mathrobo>=0.0.6",
+    "tomli>=2.0.1; python_version < '3.11'",
 ]
 
 [project.optional-dependencies]

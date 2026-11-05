@@ -2,6 +2,13 @@
 
 Utilities based on the Kots framework for robotic system modeling, kinematics, and dynamics analysis.
 
+Python 3.11 or later is recommended. Python 3.10 is supported as a deprecated
+compatibility target for existing environments such as ROS 2 Humble. New
+deployments should use Python 3.11 or later. Python 3.9 is not supported.
+Python 3.10 resolves older compatible versions of dependencies such as JAX,
+NumPy, and SciPy. The optional Rust backend requires a native wheel built for
+the selected Python version and platform.
+
 Clone RoboKots
 ```
 git clone https://github.com/MathRobotics/RoboKots
@@ -41,6 +48,37 @@ python -m examples.simple_example.main
 
 Developer-only benchmarks live under `developer/benchmarks`; see
 `developer/README.md` for setup and commands.
+
+## Tests by Python version
+
+Run the portable core, API, NumPy/JAX, TOML and visualization tests in a
+separate environment for each Python version, using `uv.lock` and the
+`test`/`viz` extras:
+
+```bash
+./scripts/test-python.sh                         # 3.10, 3.11, 3.12, 3.13
+./scripts/test-python.sh 3.10 3.13               # Selected versions
+./scripts/test-python.sh 3.10 -- tests/test_perturbation_toml.py -q
+```
+
+Python 3.10 is a deprecated compatibility target. The script can run from any
+directory and creates `.venv-py<VERSION>` without changing `.venv`. `uv` may
+download interpreters and dependencies. A failed version does not stop the
+remaining versions; the final summary reports each result, and any failure
+returns a nonzero exit code. Pytest's default configuration excludes `slow` tests.
+
+Arguments after `--` replace the default test selection. The default selection
+excludes Rust integration tests and local developer experiments. To run the full
+suite, first install a matching `robokots-native` wheel in each version's
+environment, then run:
+
+```bash
+./scripts/test-python.sh 3.13 -- tests
+```
+
+The script preserves separately installed packages such as the native extension.
+The full suite may include optional tests or local experiments whose additional
+dependencies must be prepared separately. See `./scripts/test-python.sh --help`.
 
 ## Batch Shapes and Axis-Aware Data
 

@@ -27,7 +27,8 @@ perturbed, report = apply_perturbation(
 ## TOMLファイルからの指定
 
 Pythonでのコンストラクタ指定に加えて、設定をTOMLに保存できます。
-追加依存は不要です（Python 3.11以降の標準 `tomllib` を使用）。
+Python 3.11以降では標準の `tomllib` を使用します。非推奨の互換対象である
+Python 3.10では、条件付き依存として自動導入される `tomli` を使用します。
 
 ```toml
 # perturbation.toml

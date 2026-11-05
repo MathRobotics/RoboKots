@@ -1,5 +1,6 @@
 *.png
 __pycache__
+/.venv-py*/
 .python-version
 *.csv
 .DS_Store
