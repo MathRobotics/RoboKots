@@ -27,6 +27,19 @@ needed:
 uv sync --extra table --extra viz
 ```
 
+## Perturbation Example
+
+Open `examples/perturbation_example` as the working directory, then run:
+
+```bash
+uv run python main.py
+```
+
+Loads TOML settings and compares nominal/perturbed masses, joint distances,
+world positions, Jacobians and inverse-dynamics torques. Also checks zero noise,
+reproducibility and JSON replay. See [the example guide](perturbation_example/README.md)
+for custom settings and explicit distribution/group rules.
+
 ## Models
 
 Sample robot model JSON files live in `examples/model`.

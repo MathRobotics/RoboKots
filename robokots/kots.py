@@ -3,36 +3,35 @@
 # 2024.12.13 Created by T.Ishigaki
 
 import numpy as np
-from typing import List, Any, Optional, Tuple
+from typing import List, Any, Optional
 
 from .core.motion import RobotMotions
-from .core.state import StateType, data_type_dof, dim_to_dof, is_in_keys_dynamics, keys_force, keys_kinematics, keys_momentum, keys_torque
-from .core.state_cache import StateCache
-from .core.state_batch import StateBatch
-from .core.state_tensor import JacobianTensor, StateTensor
+from .core.state.spec import is_joint_coordinate_state, StateType, data_type_dof, dim_to_dof, is_in_keys_dynamics, keys_force, keys_joint_motion, keys_kinematics, keys_momentum, keys_torque
+from .api.state_cache import StateCache
+from .core.state.batch import StateBatch
+from .core.state.tensor import JacobianTensor, StateTensor
 from .core.robot import RobotStruct
 from .core.target import TargetList, RobotNames
 from .core.viz import show_robot, show_robot_traj, RobotColor, show_link_points
-from .core import batch as batch_api
+from .core import batch_shape as batch_shapes
 
 from . import outward as outward_api
 from .robot_io import load_json_file
 from .urdf_io import load_urdf_file
+from .api import ModelInputMixin, DerivativesMixin, FastDerivativesMixin, InwardDynamicsMixin, OutwardDynamicsMixin, RustBackendMixin, RustDerivativesMixin, StateManagementMixin, WholeBodyMixin
 
 default_order = 3 
 default_dim = 3
-class Kots():
+class Kots(ModelInputMixin, DerivativesMixin, RustDerivativesMixin, FastDerivativesMixin, RustBackendMixin, InwardDynamicsMixin, OutwardDynamicsMixin, StateManagementMixin, WholeBodyMixin):
   robot_ : RobotStruct
   motions_ : RobotMotions
-  state_dict_ : dict
   state_ : Optional[Any]
   outward_state_ : Optional[Any]
-  state_dict_source_ : Optional[Any]
   target_ : TargetList
   order_ : int
   dim_ : int
   lib_ : str
-  state_cache_config_ : Optional[Tuple[bool, int, Optional[str]]]
+  state_cache_config_ : Optional[tuple]
 
   def order_to_aliases(self, order: int) -> List[str]:
     m_aliases = []
@@ -71,14 +70,12 @@ class Kots():
 
     m_aliases, l_aliases, j_aliases = self.order_to_aliases(order)
 
-    self.robot_ = robot
+    self._init_model(robot)
     self.motions_ = RobotMotions(robot.dof, m_aliases, owner_layout=robot.motion_owners())
     self.state_ = None
     self.outward_state_ = None
     self._state_l_aliases = l_aliases
     self._state_j_aliases = j_aliases
-    self.state_dict_ = {}
-    self.state_dict_source_ = None
     self.state_cache_ = None
     self.state_cache_config_ = None
     self.target_ = None
@@ -87,35 +84,57 @@ class Kots():
     self.dim_ = dim
     self.lib_ = lib
     self.batch_shape_ = ()
+    self._rust_compiled_robot_ = None
+    self._rust_inverse_dynamics_robot_ = None
+    self._rust_outward_data_cache_ = {}
+    self._rust_outward_data_cache_state_ = {}
+    self._jax_autodiff_cache_ = {}
+    self.gravity_ = np.zeros(3, dtype=float)
 
   def set_order(self, order: int):
     if order < 1:
       raise ValueError("order must be greater than 0")
     m_aliases, l_aliases, j_aliases = self.order_to_aliases(order)
     self.order_ = order
-    self.motions_ = RobotMotions(self.robot_.dof, m_aliases, owner_layout=self.robot_.motion_owners())
+    self.motions_ = RobotMotions(self._model_metadata.dof, m_aliases, owner_layout=self._model_metadata.motion_owners())
     self.state_ = None
     self.outward_state_ = None
-    self.state_dict_ = {}
-    self.state_dict_source_ = None
     self._state_l_aliases = l_aliases
     self._state_j_aliases = j_aliases
     self.state_cache_ = None
     self.state_cache_config_ = None
     self.state_batch_ = None
     self.batch_shape_ = ()
+    if self._input_backend_ != "rust":
+      self._rust_compiled_robot_ = None
+      self._rust_inverse_dynamics_robot_ = None
+    self._rust_outward_data_cache_ = {}
+    self._rust_outward_data_cache_state_ = {}
+    self._jax_autodiff_cache_ = {}
+    self.gravity_ = np.zeros(3, dtype=float)
 
   @staticmethod
-  def from_json_file(model_file_name : str, order=default_order, dim=default_dim, lib : str = "numpy") -> "Kots":
+  def from_json_file(model_file_name : str, order=default_order, dim=default_dim, lib : str = "numpy", *, backend: str = None) -> "Kots":
+    Kots._check_input_backend(backend)
+    if backend == "rust":
+      from pathlib import Path
+      return Kots._from_rust_input(Path(model_file_name).read_text(encoding="utf-8"), order, dim, lib)
     robot = RobotStruct.from_dict(load_json_file(model_file_name), lib)
 
-    return Kots(robot, order, dim, lib)
+    result = Kots(robot, order, dim, lib)
+    result._input_backend_ = backend
+    return result
 
   @staticmethod
-  def from_json_data(model_data : dict, order=default_order, dim=default_dim, lib : str = "numpy") -> "Kots":
+  def from_json_data(model_data : dict, order=default_order, dim=default_dim, lib : str = "numpy", *, backend: str = None) -> "Kots":
+    Kots._check_input_backend(backend)
+    if backend == "rust":
+      return Kots._from_rust_input(model_data, order, dim, lib)
     robot = RobotStruct.from_dict(model_data, lib=lib)
 
-    return Kots(robot, order, dim, lib)
+    result = Kots(robot, order, dim, lib)
+    result._input_backend_ = backend
+    return result
 
   @staticmethod
   def from_urdf_file(
@@ -124,36 +143,43 @@ class Kots():
       dim=default_dim,
       lib: str = "numpy",
       add_world_link: bool = True,
+      *, backend: str = None,
   ) -> "Kots":
+    Kots._check_input_backend(backend)
     model_data = load_urdf_file(urdf_file_name, add_world_link=add_world_link)
+    if backend == "rust":
+      return Kots._from_rust_input(model_data, order, dim, lib)
     robot = RobotStruct.from_dict(model_data, lib=lib)
-    return Kots(robot, order, dim, lib)
+    result = Kots(robot, order, dim, lib)
+    result._input_backend_ = backend
+    return result
 
   def print_structure(self):
     self.robot_.print()
 
   def print_state_dict(self):
-    from .core.state_dict import print_state_dict
+    from .state_io.dictionary import print_state_dict
 
-    print_state_dict(self.state_dict_)
+    print_state_dict(self.to_state_dict())
 
   def targets(self):
     return self.target_
     
   def dof(self):
-    return self.robot_.dof
+    return self._model_metadata.dof
 
   def order(self):
     return self.order_
   
   def link_name_list(self):
-    return self.robot_.link_names
+    return list(self._model_metadata.link_names)
   
   def joint_name_list(self):
-    return self.robot_.joint_names
+    return list(self._model_metadata.joint_names)
 
   def motions(self):
-    return self.motions_.motions
+    """Return an independent snapshot of the stored owner-major motion."""
+    return self.motions_.motions.copy()
 
   def set_motion_aliases(self, aliases : list[str]):
     self.motions_.set_aliases(aliases)
@@ -161,13 +187,11 @@ class Kots():
     
   def import_motions(self, vecs : np.ndarray):
     self.motions_.set_motion(vecs)
-    self.motions_.increment_revision()
     self._invalidate_current_state()
     self.batch_shape_ = self.motions_.batch_shape()
 
   def import_motion_array(self, array : np.ndarray):
     self.motions_.set_dof_order(array)
-    self.motions_.increment_revision()
     self._invalidate_current_state()
     self.batch_shape_ = self.motions_.batch_shape()
 
@@ -220,31 +244,6 @@ class Kots():
   def motion_diff_cm(self, order : int = None, last_diff = None):
     return self.motion_derivative_cm(order, tail=last_diff)
 
-  def _set_batch_states(self, states, batch_shape : tuple, materialize_dict : bool = True):
-    self.batch_shape_ = batch_shape
-    if not batch_shape:
-      return self._set_current_state(states, materialize_dict=materialize_dict)
-    if hasattr(states, "to_state_dict"):
-      self.state_batch_ = states
-      self.outward_state_ = states
-      self.state_dict_ = states.to_state_dict(self.robot_) if materialize_dict else {}
-      self.state_dict_source_ = states if materialize_dict else None
-      return self.state_dict_ if materialize_dict else states
-    self.state_batch_ = StateBatch.from_states(states, batch_shape, self.robot_, materialize_dict=materialize_dict)
-    self.outward_state_ = self.state_batch_.outward_states
-    self.state_dict_ = self.state_batch_.state_dicts if materialize_dict or self.outward_state_ is None else {}
-    self.state_dict_source_ = self.state_batch_ if self.state_dict_ else None
-    return self.state_dict_ if materialize_dict or self.outward_state_ is None else self.outward_state_
-
-  def _invalidate_current_state(self):
-    self.state_cache_ = None
-    self.state_cache_config_ = None
-    self.state_batch_ = None
-    self.outward_state_ = None
-    self.state_dict_ = {}
-    self.state_dict_source_ = None
-    self.batch_shape_ = ()
-
   def _ensure_not_batched(self, api_name : str):
     if self.batch_shape_ or self.motions_.is_batched() or self.state_batch_ is not None:
       raise ValueError(f"{api_name} does not support batched state or motion")
@@ -252,7 +251,7 @@ class Kots():
   def _ensure_state_table(self):
     if self.state_ is None:
       try:
-        from .contrib.polars.state_table import RobotState
+        from .contrib.polars import RobotState
       except ImportError as e:
         raise ImportError(
           "DataFrame state tables are optional. Install RoboKots with the "
@@ -261,8 +260,8 @@ class Kots():
           "an explicit traj argument."
         ) from e
       self.state_ = RobotState(
-        self.robot_.link_names,
-        self.robot_.joint_names,
+        self._model_metadata.link_names,
+        self._model_metadata.joint_names,
         self._state_l_aliases,
         self._state_j_aliases,
       )
@@ -272,206 +271,7 @@ class Kots():
     self._ensure_not_batched("state_df")
     return self._ensure_state_table().df()
 
-  def _state_for_direct_read(self):
-    return self.outward_state_ if self.outward_state_ is not None else self.state_dict_
 
-  def state_info(self, state_type : StateType):
-    if state_type.owner_type == "total_joint":
-      values = self.state_info_list(self._state_type_list(state_type))
-      if not self.batch_shape_:
-        values = np.asarray(values).reshape(-1)
-      return values
-    if isinstance(self.state_batch_, StateBatch):
-      return self.state_batch_.state_info(self.robot_, state_type, outward_api.get_value)
-    value = outward_api.get_value(self.robot_, self._state_for_direct_read(), state_type)
-    if self.batch_shape_ and hasattr(value, "mat"):
-      return value.mat()
-    return value
-
-  def state_info_list(self, state_type_list : List[StateType], list_output : bool = False) -> List[np.ndarray]:
-    state_type_list = self._state_type_list(state_type_list)
-    if isinstance(self.state_batch_, StateBatch):
-      return self.state_batch_.state_info_list(self.robot_, state_type_list, outward_api.get_value, list_output=list_output)
-    state = self._state_for_direct_read()
-    state_list = [outward_api.get_value(self.robot_, state, st) for st in state_type_list]
-    if list_output:
-        return state_list
-    elif self.batch_shape_:
-        return np.concatenate([np.asarray(v).reshape(self.batch_shape_ + (-1,)) for v in state_list], axis=-1)
-    else:
-        return np.vstack(state_list)
-
-  def target_state_info(self, list_output : bool = False) -> np.ndarray:
-    if self.target_ is None:
-      raise ValueError("target is not set")
-
-    return self.state_info_list(self.target_._targets, list_output=list_output)
-
-  def state_tensor(self, state_type) -> StateTensor:
-    state_type_list = self._state_type_list(state_type)
-    values = self.state_info_list(state_type_list)
-    if not self.batch_shape_:
-      values = np.asarray(values).reshape(-1)
-    return StateTensor.from_array(values, state_type_list)
-
-  def target_state_tensor(self) -> StateTensor:
-    if self.target_ is None:
-      raise ValueError("target is not set")
-    values = self.target_state_info()
-    if not self.batch_shape_:
-      values = np.asarray(values).reshape(-1)
-    return StateTensor.from_array(values, self.target_._targets)
-  
-  def kinematics(self, order = None, backend : str = None):
-    if order is None:
-      order = self.order_
-    states, batch_shape = self._build_state_result(order=order, is_dynamics=False, backend=backend)
-    self._set_batch_states(states, batch_shape)
-
-  # ToDo: change function name
-  def kinematics_point(self, s : float = 0.0):
-    self._ensure_not_batched("kinematics_point")
-    return outward_api.calc_link_total_point_frame(self.robot_, self.motions_, self.state_dict_, s)
-  
-  def dynamics(self, order = None):
-    if order is None:
-      order = self.order_
-    states, batch_shape = self._build_state_result(order=order, is_dynamics=True)
-    self._set_batch_states(states, batch_shape)
-
-  def _use_jax_kinematics_backend(self, backend: str = None) -> bool:
-    return (
-      backend == "jax"
-      or (
-        backend is None
-        and len(self.robot_.links) > 0
-        and getattr(self.robot_.links[0], "lib", "numpy") == "jax"
-        and all(link.dof == 0 for link in self.robot_.links)
-      )
-    )
-
-  def _resolve_kinematics_backend(self, is_dynamics : bool = False, backend : str = None):
-    kinematics_backend = None if is_dynamics else backend
-    if kinematics_backend not in (None, "numpy", "jax"):
-      raise ValueError(f"Unsupported kinematics backend: {kinematics_backend}. Use 'numpy' or 'jax'.")
-    return kinematics_backend
-
-  def _state_builder(self, order : int, is_dynamics : bool = False, backend : str = None):
-    kinematics_backend = self._resolve_kinematics_backend(is_dynamics, backend)
-    if is_dynamics:
-      return (
-        kinematics_backend,
-        lambda x: outward_api.build_dynamics_outward_state(self.robot_, x, order-2),
-      )
-    if self._use_jax_kinematics_backend(kinematics_backend):
-      return (
-        kinematics_backend,
-        lambda x: outward_api.build_kinematics_state(self.robot_, x, order, backend=kinematics_backend),
-      )
-    return (
-      kinematics_backend,
-      lambda x: outward_api.build_kinematics_outward_state(self.robot_, x, order),
-    )
-
-  def _build_state_result(self, order : int, is_dynamics : bool = False, backend : str = None):
-    kinematics_backend, build_state = self._state_builder(order, is_dynamics=is_dynamics, backend=backend)
-    motion = self.motion(order)
-    if (
-      batch_api.is_batched_feature_array(motion)
-      and kinematics_backend in (None, "numpy")
-    ):
-      try:
-        if is_dynamics:
-          return outward_api.build_dynamics_outward_state(self.robot_, motion, order - 2), motion.shape[:-1]
-        return outward_api.build_kinematics_outward_state(self.robot_, motion, order), motion.shape[:-1]
-      except Exception:
-        pass
-    return batch_api.map_flat_batch(motion, build_state)
-
-  def _set_current_state(self, state_obj, materialize_dict : bool = True):
-    self.batch_shape_ = ()
-    self.state_batch_ = None
-    if hasattr(state_obj, "to_state_dict"):
-      self.outward_state_ = state_obj
-      self.state_dict_ = state_obj.to_state_dict(self.robot_) if materialize_dict else {}
-      self.state_dict_source_ = state_obj if materialize_dict else None
-    else:
-      self.outward_state_ = None
-      self.state_dict_ = state_obj
-      self.state_dict_source_ = state_obj
-    return self.state_dict_ if materialize_dict or not hasattr(state_obj, "to_state_dict") else state_obj
-
-  def update_state(self, order : int = None, is_dynamics: bool = False, backend : str = None):
-    if order is None:
-      order = self.order_
-
-    kinematics_backend, build_state = self._state_builder(order, is_dynamics=is_dynamics, backend=backend)
-    motion_revision = self.motions_.revision()
-
-    cache_config = (bool(is_dynamics), int(order), kinematics_backend)
-    if not self.motions_.is_batched():
-      if self.state_cache_ is None or self.state_cache_config_ != cache_config:
-        self.state_cache_ = StateCache(build_state=lambda x_all, time=None, required=None: build_state(x_all))
-        self.state_cache_config_ = cache_config
-      elif self.state_cache_.is_fresh(motion_revision):
-        if self.outward_state_ is self.state_cache_.state or self.state_dict_ is self.state_cache_.state:
-          return self.state_cache_.state
-        return self._set_current_state(self.state_cache_.state, materialize_dict=False)
-
-    motion = self.motion(order)
-    if batch_api.is_batched_feature_array(motion):
-      states, batch_shape = self._build_state_result(order=order, is_dynamics=is_dynamics, backend=backend)
-      return self._set_batch_states(states, batch_shape, materialize_dict=False)
-
-    if self.state_cache_ is None or self.state_cache_config_ != cache_config:
-      self.state_cache_ = StateCache(build_state=lambda x_all, time=None, required=None: build_state(x_all))
-      self.state_cache_config_ = cache_config
-
-    if self.state_cache_.is_fresh(motion_revision):
-      return self._set_current_state(self.state_cache_.state, materialize_dict=False)
-
-    class _MotionPack:
-      def __init__(self, x: np.ndarray, revision: int):
-        self._x = np.asarray(x, dtype=float).reshape(-1)
-        self.revision = int(revision)
-
-      def get(self) -> np.ndarray:
-        return self._x
-
-    motion_pack = _MotionPack(motion, motion_revision)
-
-    state_obj = outward_api.update_outward_state(self.robot_, motion_pack, self.state_cache_, is_dynamics, order)
-    return self._set_current_state(state_obj, materialize_dict=False)
-
-  def to_state_dict(self) -> dict:
-    if isinstance(self.state_batch_, StateBatch):
-      if self.state_dict_source_ is self.state_batch_:
-        return self.state_dict_
-      if not self.state_batch_.state_dicts and self.state_batch_.outward_states is not None:
-        self.state_batch_ = StateBatch.from_states(
-          self.state_batch_.outward_states,
-          self.state_batch_.batch_shape,
-          self.robot_,
-          materialize_dict=True,
-        )
-      self.state_dict_ = self.state_batch_.state_dicts
-      self.state_dict_source_ = self.state_batch_
-      return self.state_dict_
-
-    if self.outward_state_ is not None and hasattr(self.outward_state_, "to_state_dict"):
-      if self.state_dict_source_ is self.outward_state_:
-        return self.state_dict_
-      self.state_dict_ = self.outward_state_.to_state_dict(self.robot_)
-      self.state_dict_source_ = self.outward_state_
-    return self.state_dict_
-
-  def update_state_dict(self, order : int = None, is_dynamics: bool = False, backend : str = None) -> dict:
-    self.update_state(order=order, is_dynamics=is_dynamics, backend=backend)
-    return self.to_state_dict()
-
-  def set_state_df(self):
-    self._ensure_not_batched("set_state_df")
-    self._ensure_state_table().import_state(self.state_dict_)
     
   def set_target_from_file(self, target_file : str):
     if not target_file:
@@ -480,7 +280,7 @@ class Kots():
       raise TypeError("target_file must be a string")
     self.target_ = TargetList.from_dict(
       load_json_file(target_file),
-      RobotNames(self.robot_.joint_names, self.robot_.link_names, self._active_joint_names()),
+      RobotNames(self._model_metadata.joint_names, self._model_metadata.link_names, self._active_joint_names()),
     )
     self.set_order(self.target_._max_order)
 
@@ -503,7 +303,7 @@ class Kots():
     return outward_api.diff_outward_numerical(self.robot_, motion, state_type, order, eps, update_method, update_direction)
 
   def _active_joint_names(self):
-    return [joint.name for joint in self.robot_.joints if joint.dof > 0]
+    return [joint.name for joint in self._state_model_info().joints if joint.dof > 0]
 
   def _state_type_list(self, state_type):
     state_type_list = state_type if type(state_type) is list else [state_type]
@@ -512,394 +312,87 @@ class Kots():
       if st.owner_type != "total_joint":
         expanded.append(st)
         continue
-      if not is_in_keys_dynamics([st.data_type]):
-        raise ValueError("total_joint state types support only dynamics data types")
-      expanded.extend(
-        StateType(
-          owner_type="joint",
-          owner_name=joint_name,
-          data_type=st.data_type,
-          frame_name=st.frame_name,
-        )
-        for joint_name in self._active_joint_names()
-      )
+      if st.data_type not in keys_joint_motion and not is_in_keys_dynamics([st.data_type]):
+        raise ValueError("total_joint state types support joint motion or dynamics data types")
+      expanded.extend(StateType._for_owners(
+        "joint", self._active_joint_names(), st.data_type, st.frame_name,
+      ))
     return expanded
+
+  @staticmethod
+  def _is_total_body_kinetic_energy(state_type) -> bool:
+    return (
+      state_type.owner_type == "total_body"
+      and state_type.owner_name == "total_body"
+      and state_type.data_type == "kinetic_energy"
+      and state_type.frame_name is None
+    )
+
+  def _select_motion_order_rhs(self, rhs, source_order: int, target_order: int, rhs_is_matrix: bool):
+    """Take q..source_order coefficients from a larger scalar-major motion RHS."""
+    trailing = (rhs.shape[-1],) if rhs_is_matrix else ()
+    head = rhs.shape[:-(2 if rhs_is_matrix else 1)]
+    shaped = rhs.reshape(head + (self._model_metadata.dof, target_order) + trailing)
+    return shaped[..., :source_order, :].reshape(head + (self._model_metadata.dof * source_order,) + trailing) if rhs_is_matrix \
+      else shaped[..., :source_order].reshape(head + (self._model_metadata.dof * source_order,))
+
+  def _embed_motion_order_rhs(self, rhs, source_order: int, target_order: int, rhs_is_matrix: bool):
+    """Zero-pad a q..source_order motion result into a larger motion order."""
+    trailing = (rhs.shape[-1],) if rhs_is_matrix else ()
+    head = rhs.shape[:-(2 if rhs_is_matrix else 1)]
+    shaped = rhs.reshape(head + (self._model_metadata.dof, source_order) + trailing)
+    out = np.zeros(head + (self._model_metadata.dof, target_order) + trailing, dtype=rhs.dtype)
+    if rhs_is_matrix:
+      out[..., :source_order, :] = shaped
+    else:
+      out[..., :source_order] = shaped
+    return out.reshape(head + (self._model_metadata.dof * target_order,) + trailing)
+
+  def _embed_motion_order_jacobian(self, jacobian, source_order: int, target_order: int):
+    head = jacobian.shape[:-2]
+    rows = jacobian.shape[-2]
+    shaped = jacobian.reshape(head + (rows, self._model_metadata.dof, source_order))
+    out = np.zeros(head + (rows, self._model_metadata.dof, target_order), dtype=jacobian.dtype)
+    out[..., :source_order] = shaped
+    return out.reshape(head + (rows, self._model_metadata.dof * target_order))
+
+  def _joint_motion_index(self, data_type : str):
+    order_map = {
+      "coord": 0,
+      "veloc": 1,
+      "accel": 2,
+      "jerk": 3,
+    }
+    return order_map.get(data_type)
+
+  def _joint_motion_state_info_list(self, state_type_list):
+    if not any(is_joint_coordinate_state(st) for st in state_type_list):
+      return None
+    values = []
+    motion = self.motion(self.order_)
+    for st in state_type_list:
+      if is_joint_coordinate_state(st):
+        joint = self._state_model_info().joint(st.owner_name)
+        if joint is None or joint.dof <= 0:
+          raise ValueError(f"Invalid active joint for joint motion state: {st.owner_name}")
+        motion_index = self._joint_motion_index(st.data_type)
+        if motion_index is None or motion_index >= self.order_:
+          raise ValueError(f"{st.data_type} is not available for order={self.order_}")
+        start = joint.dof_index * self.order_ + motion_index * joint.dof
+        values.append(np.asarray(motion[..., start:start + joint.dof]))
+      else:
+        values.append(self._read_state_info(st))
+    return values
 
   def _sample_motions(self, motion : np.ndarray, order : int) -> RobotMotions:
     sample_motions = RobotMotions(
-      self.robot_.dof,
+      self._model_metadata.dof,
       self.motions_.aliases[:order],
-      owner_layout=self.robot_.motion_owners(),
+      owner_layout=self._model_metadata.motion_owners(),
     )
     sample_motions.set_motion(motion)
     return sample_motions
 
-  def _jacobian_numerical(self, state_type_list, max_order : int, list_output : bool = False):
-    if not self.motions_.is_batched():
-      jacobs = [outward_api.jacobian_numerical(self.robot_, self.motions_, st, max_order) for st in state_type_list]
-      return jacobs if list_output else np.vstack(jacobs)
-
-    flat_motion, batch_shape = batch_api.flatten_feature_batch(self.motion(max_order))
-    sample_results = [
-      [
-        outward_api.jacobian_numerical(self.robot_, self._sample_motions(x, max_order), st, max_order)
-        for st in state_type_list
-      ]
-      for x in flat_motion
-    ]
-    return batch_api.stack_results(
-      sample_results,
-      batch_shape,
-      list_output,
-      len(state_type_list),
-      combine=np.vstack,
-    )
-
-  def _jacobian_from_state(self, state, state_type_list, max_order : int, list_output : bool = False):
-    if not isinstance(state, list):
-      if self.batch_shape_:
-        try:
-          return outward_api.outward_jacobian(self.robot_, state, state_type_list, max_time_order=max_order, dim = self.dim_, list_output = list_output)
-        except (AttributeError, IndexError, TypeError, ValueError):
-          # Fall back when the cached state cannot be consumed as a batched
-          # outward state. Unexpected runtime errors should still surface.
-          pass
-        is_dynamics = any(st.is_dynamics for st in state_type_list)
-        _, build_state = self._state_builder(max_order, is_dynamics=is_dynamics)
-        flat_motion, batch_shape = batch_api.flatten_feature_batch(self.motion(max_order))
-        states = [build_state(x) for x in flat_motion]
-        sample_results = [
-          outward_api.outward_jacobian(self.robot_, st, state_type_list, max_time_order=max_order, dim = self.dim_, list_output = list_output)
-          for st in states
-        ]
-        return batch_api.stack_results(
-          sample_results,
-          batch_shape,
-          list_output,
-          len(state_type_list),
-        )
-      return outward_api.outward_jacobian(self.robot_, state, state_type_list, dim = self.dim_, list_output = list_output)
-
-    sample_results = [
-      outward_api.outward_jacobian(self.robot_, st, state_type_list, max_time_order=max_order, dim = self.dim_, list_output = list_output)
-      for st in state
-    ]
-    return batch_api.stack_results(
-      sample_results,
-      self.batch_shape_,
-      list_output,
-      len(state_type_list),
-    )
-
-  def _jacobian_matvec_numerical(self, state_type_list, max_order : int, vec, list_output : bool = False):
-    if not self.motions_.is_batched():
-      results = [outward_api.jacobian_numerical(self.robot_, self.motions_, st, max_order) @ vec for st in state_type_list]
-      return results if list_output else np.concatenate(results)
-
-    flat_motion, batch_shape = batch_api.flatten_feature_batch(self.motion(max_order))
-    sample_results = []
-    for x, v in zip(flat_motion, vec):
-      sample_motions = self._sample_motions(x, max_order)
-      parts = [
-        outward_api.jacobian_numerical(self.robot_, sample_motions, st, max_order) @ v
-        for st in state_type_list
-      ]
-      sample_results.append(parts if list_output else np.concatenate(parts))
-    return batch_api.stack_results(
-      sample_results,
-      batch_shape,
-      list_output,
-      len(state_type_list),
-    )
-
-  def _jacobian_matvec_from_state(self, state, state_type_list, max_order : int, vec, batch_shape : tuple, list_output : bool = False):
-    if not isinstance(state, list):
-      if batch_shape:
-        try:
-          direct_vec = vec.reshape(batch_shape + (vec.shape[-1],))
-          return outward_api.outward_jacobian_matvec(self.robot_, state, state_type_list, direct_vec, max_time_order=max_order, dim = self.dim_, list_output = list_output)
-        except (AttributeError, IndexError, TypeError, ValueError):
-          # Fall back when the cached state cannot be consumed as a batched
-          # outward state. Unexpected runtime errors should still surface.
-          pass
-        is_dynamics = any(st.is_dynamics for st in state_type_list)
-        _, build_state = self._state_builder(max_order, is_dynamics=is_dynamics)
-        flat_motion, _ = batch_api.flatten_feature_batch(self.motion(max_order))
-        states = [build_state(x) for x in flat_motion]
-        sample_results = [
-          outward_api.outward_jacobian_matvec(self.robot_, st, state_type_list, v, max_time_order=max_order, dim = self.dim_, list_output = list_output)
-          for st, v in zip(states, vec)
-        ]
-        return batch_api.stack_results(
-          sample_results,
-          batch_shape,
-          list_output,
-          len(state_type_list),
-        )
-      return outward_api.outward_jacobian_matvec(self.robot_, state, state_type_list, vec, dim = self.dim_, list_output = list_output)
-
-    sample_results = [
-      outward_api.outward_jacobian_matvec(self.robot_, st, state_type_list, v, max_time_order=max_order, dim = self.dim_, list_output = list_output)
-      for st, v in zip(state, vec)
-    ]
-    return batch_api.stack_results(
-      sample_results,
-      batch_shape,
-      list_output,
-      len(state_type_list),
-    )
-
-  def _jacobian_matmul_rhs_from_state(self, state, state_type_list, max_order : int, rhs, batch_shape : tuple, list_output : bool = False):
-    if not isinstance(state, list):
-      if batch_shape:
-        try:
-          direct_rhs = rhs.reshape(batch_shape + rhs.shape[-2:])
-          return outward_api.outward_jacobian_matmul_rhs(self.robot_, state, state_type_list, direct_rhs, max_time_order=max_order, dim = self.dim_, list_output = list_output)
-        except (AttributeError, IndexError, TypeError, ValueError):
-          # Fall back when the cached state cannot be consumed as a batched
-          # outward state. Unexpected runtime errors should still surface.
-          pass
-        is_dynamics = any(st.is_dynamics for st in state_type_list)
-        _, build_state = self._state_builder(max_order, is_dynamics=is_dynamics)
-        flat_motion, _ = batch_api.flatten_feature_batch(self.motion(max_order))
-        states = [build_state(x) for x in flat_motion]
-        sample_results = [
-          outward_api.outward_jacobian_matmul_rhs(self.robot_, st, state_type_list, r, max_time_order=max_order, dim = self.dim_, list_output = list_output)
-          for st, r in zip(states, rhs)
-        ]
-        return batch_api.stack_results(
-          sample_results,
-          batch_shape,
-          list_output,
-          len(state_type_list),
-        )
-      return outward_api.outward_jacobian_matmul_rhs(self.robot_, state, state_type_list, rhs, dim = self.dim_, list_output = list_output)
-
-    sample_results = [
-      outward_api.outward_jacobian_matmul_rhs(self.robot_, st, state_type_list, r, max_time_order=max_order, dim = self.dim_, list_output = list_output)
-      for st, r in zip(state, rhs)
-    ]
-    return batch_api.stack_results(
-      sample_results,
-      batch_shape,
-      list_output,
-      len(state_type_list),
-    )
-
-  def _stack_mul_columns(self, column_results, list_output : bool, item_count : int):
-    if list_output:
-      return [
-        np.stack([column[i] for column in column_results], axis=-1)
-        for i in range(item_count)
-      ]
-    return np.stack(column_results, axis=-1)
-
-  def _jacobian_mul_numerical(self, state_type_list, max_order : int, rhs, rhs_is_matrix : bool, list_output : bool = False):
-    if not rhs_is_matrix:
-      return self._jacobian_matvec_numerical(state_type_list, max_order, rhs, list_output)
-
-    rhs_count = rhs.shape[-1]
-    column_results = [
-      self._jacobian_matvec_numerical(state_type_list, max_order, rhs[..., i], list_output)
-      for i in range(rhs_count)
-    ]
-    return self._stack_mul_columns(column_results, list_output, len(state_type_list))
-
-  def _jacobian_mul_from_state(self, state, state_type_list, max_order : int, rhs, batch_shape : tuple, rhs_is_matrix : bool, list_output : bool = False):
-    if not rhs_is_matrix:
-      return self._jacobian_matvec_from_state(state, state_type_list, max_order, rhs, batch_shape, list_output)
-
-    if not isinstance(state, list):
-      return self._jacobian_matmul_rhs_from_state(state, state_type_list, max_order, rhs, batch_shape, list_output)
-
-    rhs_count = rhs.shape[-1]
-    column_results = [
-      self._jacobian_matvec_from_state(state, state_type_list, max_order, rhs[..., i], batch_shape, list_output)
-      for i in range(rhs_count)
-    ]
-    return self._stack_mul_columns(column_results, list_output, len(state_type_list))
-
-  def _jacobian_output_dim(self, state_type_list) -> int:
-    dim_dof = dim_to_dof(self.dim_)
-    output_dim = 0
-    for st in state_type_list:
-      if st.data_type in keys_kinematics:
-        output_dim += data_type_dof(st.data_type, dim=self.dim_)
-      elif st.data_type in keys_momentum or st.data_type in keys_force:
-        output_dim += dim_dof
-      elif st.data_type in keys_torque:
-        if st.owner_type != "joint":
-          raise ValueError("torque can be specified only for joint owner type")
-        joint = self.robot_.joint(st.owner_name)
-        if joint is None:
-          raise ValueError(f"Invalid joint name: {st.owner_name}")
-        output_dim += joint.dof
-      else:
-        raise ValueError(f"Unsupported data_type: {st.data_type}")
-    return output_dim
-
-  def _jacobian_transpose_matvec_numerical(self, state_type_list, max_order : int, vec):
-    if not self.motions_.is_batched():
-      jacob = self._jacobian_numerical(state_type_list, max_order)
-      return jacob.T @ vec
-
-    flat_motion, batch_shape = batch_api.flatten_feature_batch(self.motion(max_order))
-    sample_results = []
-    for x, v in zip(flat_motion, vec):
-      sample_motions = self._sample_motions(x, max_order)
-      parts = [
-        outward_api.jacobian_numerical(self.robot_, sample_motions, st, max_order)
-        for st in state_type_list
-      ]
-      jacob = np.vstack(parts)
-      sample_results.append(jacob.T @ v)
-    return batch_api.stack_sample_results(sample_results, batch_shape)
-
-  def _jacobian_transpose_matvec_from_state(self, state, state_type_list, max_order : int, vec, batch_shape : tuple):
-    if not isinstance(state, list):
-      if batch_shape:
-        try:
-          direct_vec = vec.reshape(batch_shape + (vec.shape[-1],))
-          return outward_api.outward_jacobian_transpose_matvec(
-            self.robot_,
-            state,
-            state_type_list,
-            direct_vec,
-            max_time_order=max_order,
-            dim=self.dim_,
-          )
-        except (AttributeError, IndexError, TypeError, ValueError):
-          # Fall back when the cached state cannot be consumed as a batched
-          # outward state. Unexpected runtime errors should still surface.
-          pass
-        is_dynamics = any(st.is_dynamics for st in state_type_list)
-        _, build_state = self._state_builder(max_order, is_dynamics=is_dynamics)
-        flat_motion, _ = batch_api.flatten_feature_batch(self.motion(max_order))
-        states = [build_state(x) for x in flat_motion]
-        sample_results = [
-          outward_api.outward_jacobian_transpose_matvec(self.robot_, st, state_type_list, v, max_time_order=max_order, dim=self.dim_)
-          for st, v in zip(states, vec)
-        ]
-        return batch_api.stack_sample_results(sample_results, batch_shape)
-      return outward_api.outward_jacobian_transpose_matvec(self.robot_, state, state_type_list, vec, dim=self.dim_)
-
-    sample_results = [
-      outward_api.outward_jacobian_transpose_matvec(self.robot_, st, state_type_list, v, max_time_order=max_order, dim=self.dim_)
-      for st, v in zip(state, vec)
-    ]
-    return batch_api.stack_sample_results(sample_results, batch_shape)
-
-  def _jacobian_transpose_mul_numerical(self, state_type_list, max_order : int, rhs, rhs_is_matrix : bool):
-    if not rhs_is_matrix:
-      return self._jacobian_transpose_matvec_numerical(state_type_list, max_order, rhs)
-
-    rhs_count = rhs.shape[-1]
-    column_results = [
-      self._jacobian_transpose_matvec_numerical(state_type_list, max_order, rhs[..., i])
-      for i in range(rhs_count)
-    ]
-    return np.stack(column_results, axis=-1)
-
-  def _jacobian_transpose_mul_from_state(self, state, state_type_list, max_order : int, rhs, batch_shape : tuple, rhs_is_matrix : bool):
-    if not rhs_is_matrix:
-      return self._jacobian_transpose_matvec_from_state(state, state_type_list, max_order, rhs, batch_shape)
-
-    if (
-      not batch_shape
-      and not isinstance(state, list)
-    ):
-      block_result = self._jacobian_transpose_matvec_from_state(
-        state,
-        state_type_list,
-        max_order,
-        np.swapaxes(rhs, -1, -2),
-        batch_shape,
-      )
-      return np.swapaxes(block_result, -1, -2)
-
-    rhs_count = rhs.shape[-1]
-    column_results = [
-      self._jacobian_transpose_matvec_from_state(state, state_type_list, max_order, rhs[..., i], batch_shape)
-      for i in range(rhs_count)
-    ]
-    return np.stack(column_results, axis=-1)
-
-  def jacobian(self, state_type, numerical : bool = False, list_output : bool = False):
-    state_type_list = self._state_type_list(state_type)
-    max_order = StateType.max_time_order(state_type_list)
-    if numerical:
-      return self._jacobian_numerical(state_type_list, max_order, list_output)
-
-    state = self.outward_state_ if self.outward_state_ is not None else self.state_dict_
-    return self._jacobian_from_state(state, state_type_list, max_order, list_output)
-
-  def jacobian_mul(self, state_type, rhs : np.ndarray, numerical : bool = False, list_output : bool = False):
-    """
-    Compute J @ rhs for the Jacobian of ``state_type``.
-
-    ``rhs`` may be a vector with shape ``(motion_dim,)`` or
-    ``batch_shape + (motion_dim,)``, or a matrix with shape
-    ``(motion_dim, rhs_dim)`` or ``batch_shape + (motion_dim, rhs_dim)``.
-    """
-    state_type_list = self._state_type_list(state_type)
-    max_order = StateType.max_time_order(state_type_list)
-    input_dim = self.robot_.dof * max_order
-    batch_shape = self.batch_shape_ if self.batch_shape_ else self.motions_.batch_shape()
-    rhs, rhs_is_matrix = batch_api.broadcast_feature_rhs(rhs, batch_shape, input_dim, name="rhs")
-
-    if numerical:
-      return self._jacobian_mul_numerical(state_type_list, max_order, rhs, rhs_is_matrix, list_output)
-
-    state = self.outward_state_ if self.outward_state_ is not None else self.state_dict_
-    return self._jacobian_mul_from_state(state, state_type_list, max_order, rhs, batch_shape, rhs_is_matrix, list_output)
-
-  def jacobian_transpose_mul(self, state_type, rhs : np.ndarray, numerical : bool = False):
-    """
-    Compute J.T @ rhs for the Jacobian of ``state_type``.
-
-    ``rhs`` may be a vector with shape ``(total_state_dim,)`` or
-    ``batch_shape + (total_state_dim,)``, or a matrix with shape
-    ``(total_state_dim, rhs_dim)`` or ``batch_shape + (total_state_dim, rhs_dim)``.
-    """
-    state_type_list = self._state_type_list(state_type)
-    max_order = StateType.max_time_order(state_type_list)
-    output_dim = self._jacobian_output_dim(state_type_list)
-    batch_shape = self.batch_shape_ if self.batch_shape_ else self.motions_.batch_shape()
-    rhs, rhs_is_matrix = batch_api.broadcast_feature_rhs(rhs, batch_shape, output_dim, name="rhs")
-
-    if numerical:
-      return self._jacobian_transpose_mul_numerical(state_type_list, max_order, rhs, rhs_is_matrix)
-
-    state = self.outward_state_ if self.outward_state_ is not None else self.state_dict_
-    return self._jacobian_transpose_mul_from_state(state, state_type_list, max_order, rhs, batch_shape, rhs_is_matrix)
-
-  def jacobian_tensor(self, state_type, numerical : bool = False) -> JacobianTensor:
-    state_type_list = self._state_type_list(state_type)
-    return JacobianTensor.from_array(self.jacobian(state_type_list, numerical=numerical), state_type_list)
-  
-  def jacobian_target(self, numerical : bool = False, list_output : bool = False):
-    if self.target_ is None:
-      raise ValueError("target is not set")
-    
-    return self.jacobian(self.target_._targets, numerical=numerical, list_output=list_output)
-
-  def jacobian_target_mul(self, rhs : np.ndarray, numerical : bool = False, list_output : bool = False):
-    if self.target_ is None:
-      raise ValueError("target is not set")
-
-    return self.jacobian_mul(self.target_._targets, rhs, numerical=numerical, list_output=list_output)
-
-  def jacobian_target_transpose_mul(self, rhs : np.ndarray, numerical : bool = False):
-    if self.target_ is None:
-      raise ValueError("target is not set")
-
-    return self.jacobian_transpose_mul(self.target_._targets, rhs, numerical=numerical)
-
-  def jacobian_target_tensor(self, numerical : bool = False) -> JacobianTensor:
-    if self.target_ is None:
-      raise ValueError("target is not set")
-    return JacobianTensor.from_array(self.jacobian_target(numerical=numerical), self.target_._targets)
-  
   def inverse_kinematics(self, target_type : List[StateType], target_value : List[np.ndarray],
                     q_init : np.ndarray, opt_func : None = None) -> np.ndarray:
     raise NotImplementedError(
@@ -908,39 +401,39 @@ class Kots():
 
   def show_robot(self, save = False, ax = None, color : RobotColor = None):
     self._ensure_not_batched("show_robot")
-    from .core.state_dict import state_dict_to_links_pos
+    from .core.state.access import state_link_positions
 
-    conectivity = np.zeros((self.robot_.joint_num, 2), dtype='int64')
-    for i in range(self.robot_.joint_num):
-      joint = self.robot_.joints[i]
+    conectivity = np.zeros((self._model_metadata.joint_num, 2), dtype='int64')
+    for i in range(self._model_metadata.joint_num):
+      joint = self._model_metadata.joints[i]
       conectivity[i, 0] = joint.child_link_id
       conectivity[i, 1] = joint.parent_link_id
 
-    show_robot(conectivity, state_dict_to_links_pos(self.state_dict_, self.robot_.link_names), save, ax, color)
+    show_robot(conectivity, state_link_positions(self._state_for_direct_read(), self._model_metadata.link_names), save, ax, color)
 
   def show_robot_traj(self, traj = None, save = False, ax = None, color : RobotColor = None):
-    conectivity = np.zeros((self.robot_.joint_num, 2), dtype='int64')
-    for i in range(self.robot_.joint_num):
-      joint = self.robot_.joints[i]
+    conectivity = np.zeros((self._model_metadata.joint_num, 2), dtype='int64')
+    for i in range(self._model_metadata.joint_num):
+      joint = self._model_metadata.joints[i]
       conectivity[i, 0] = joint.child_link_id
       conectivity[i, 1] = joint.parent_link_id
 
     if traj is None:
       self._ensure_not_batched("show_robot_traj")
-      link_pos_traj = self._ensure_state_table().extract_links_info_traj("pos", self.robot_.link_names)
+      link_pos_traj = self._ensure_state_table().extract_links_info_traj("pos", self._model_metadata.link_names)
     else:
       link_pos_traj = traj
     show_robot_traj(conectivity, link_pos_traj, save, ax, color)
 
   def show_link_points(self):
     self._ensure_not_batched("show_link_points")
-    from .core.state_dict import state_dict_to_links_pos
+    from .core.state.access import state_link_positions
 
-    show_link_points(state_dict_to_links_pos(self.state_dict_, self.robot_.link_names))
+    show_link_points(state_link_positions(self._state_for_direct_read(), self._model_metadata.link_names))
 
   def show_target_link_points(self, plt = None, dimension=3):
     self._ensure_not_batched("show_target_link_points")
-    from .core.state_dict import state_dict_to_links_pos
+    from .core.state.access import state_link_positions
 
     if not self.target_:
       raise ValueError("target_ is not set")
@@ -949,7 +442,7 @@ class Kots():
     for t in self.target_._targets:
       if t._state_type.owner_type == "link":
         owner_link_names.append(t._state_type.owner_name)
-    show_link_points(state_dict_to_links_pos(self.state_dict_, owner_link_names), plt, dimension)
+    show_link_points(state_link_positions(self._state_for_direct_read(), owner_link_names), plt, dimension)
 
   def target_link_pos_traj(self):
     self._ensure_not_batched("target_link_pos_traj")

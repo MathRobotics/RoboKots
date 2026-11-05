@@ -8,6 +8,7 @@ import math
 from dataclasses import dataclass
 
 from .axis_tensor import AxisTensor
+from .batch_shape import validate_batch_shape
 
 
 @dataclass(frozen=True)
@@ -181,15 +182,18 @@ class RobotMotions:
       new_dst = self.owner_vec_index(owner_dof, owner_dof_index, self.motion_num, copy_order)
       new_motions[..., new_dst] = self.motions[..., old_src]
     self.motions = new_motions
+    self.increment_revision()
     
   def set_motion(self, vecs):
     motions = np.asarray(vecs, dtype=float)
     if motions.ndim == 0:
       raise ValueError("motions must have at least one dimension")
+    validate_batch_shape(motions.shape[:-1])
     expected = self.dof * self.motion_num
     if motions.shape[-1] != expected:
       raise ValueError(f"motions last dimension must be {expected}, got {motions.shape[-1]}")
-    self.motions = motions
+    self.motions = motions.copy()
+    self.increment_revision()
     
   def motion_index(self, name : str) -> int:
     if name not in self.aliases:
@@ -289,9 +293,11 @@ class RobotMotions:
 
   def set_dof_order(self, data):
     tensor = MotionTensor.from_dof_order(data, self.owner_layout)
+    validate_batch_shape(tensor.batch_shape)
     if tensor.order != self.motion_num:
       raise ValueError(f"dof-order motion order must be {self.motion_num}, got {tensor.order}")
     self.motions = tensor.to_flat_owner_major(self.motion_num).data
+    self.increment_revision()
 
   def to_vector(self, order : int = None, cm : bool = False):
     if order is None:

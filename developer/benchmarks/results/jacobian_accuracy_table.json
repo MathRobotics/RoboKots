@@ -1,0 +1,2041 @@
+{
+  "metadata": {
+    "utc": "2026-09-16T04:43:31.075731+00:00",
+    "platform": "Linux-7.0.0-31-generic-x86_64-with-glibc2.39",
+    "python": "3.13.1",
+    "numpy": "2.4.6",
+    "jax": "0.10.1",
+    "devices": "[CpuDevice(id=0)]",
+    "dof": 7,
+    "samples": 1,
+    "seed": 20260916,
+    "max_derivative": 4,
+    "gravity": [
+      0.3,
+      -0.4,
+      -9.81
+    ],
+    "git_head": "aad5cbe85cd904ad08d5e5149a490dc72fa49042",
+    "git_status": " M developer/README.md\n M developer/benchmarks/README.md\n M robokots/api/derivatives.py\n M robokots/api/rust_derivatives.py\n M robokots/api/state.py\n M robokots/contrib/polars/state_table.py\n M robokots/core/__init__.py\n M robokots/core/batch_shape.py\n M robokots/core/models/dynamics/dynamics.py\n M robokots/core/motion.py\n M robokots/core/outward_protocol.py\n M robokots/core/state_access.py\n M robokots/core/state_batch.py\n M robokots/core/state_cache.py\n M robokots/kots.py\n M robokots/outward/diff/dynamics_jax.py\n M robokots/outward/diff/outward_total_gradient.py\n M robokots/outward/diff/outward_transpose_matvec.py\n M robokots/outward/state.py\n M robokots/state_io/dictionary.py\n M tests/outward/test_dynamics_jax.py\n M tests/outward/test_outward_total_gradient.py\n M tests/test_kots.py\n?? developer/benchmarks/jacobian_accuracy_table.py\n?? developer/benchmarks/results/jacobian_accuracy_table.json\n?? developer/benchmarks/results/jacobian_accuracy_table.md\n?? tests/contrib/\n?? tests/test_jacobian_accuracy_table.py\n?? tests/test_state_contracts.py\n",
+    "numerical_method": "central",
+    "numerical_eps": 1e-08,
+    "dtype": "float64",
+    "autodiff": "jax.jacfwd and jax.jacrev, no JIT",
+    "motion_layout": "sample, dof, order"
+  },
+  "model": {
+    "schema_version": "0.0.2",
+    "links": [
+      {
+        "id": 0,
+        "name": "world"
+      },
+      {
+        "id": 1,
+        "name": "base",
+        "mass": 10.0,
+        "cog": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inertia": {
+          "ixx": 0.1,
+          "ixy": 0.0,
+          "ixz": 0.0,
+          "iyy": 0.1,
+          "iyz": 0.0,
+          "izz": 0.1
+        },
+        "geometry": "base_mesh.stl"
+      },
+      {
+        "id": 2,
+        "name": "arm1",
+        "mass": 5.0,
+        "cog": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inertia": {
+          "ixx": 0.05,
+          "ixy": 0.0,
+          "ixz": 0.0,
+          "iyy": 0.05,
+          "iyz": 0.0,
+          "izz": 0.02
+        },
+        "geometry": "arm_mesh.stl"
+      },
+      {
+        "id": 3,
+        "name": "arm2",
+        "mass": 5.0,
+        "cog": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inertia": {
+          "ixx": 0.05,
+          "ixy": 0.0,
+          "ixz": 0.0,
+          "iyy": 0.05,
+          "iyz": 0.0,
+          "izz": 0.02
+        },
+        "geometry": "arm_mesh.stl"
+      },
+      {
+        "id": 4,
+        "name": "arm3",
+        "mass": 5.0,
+        "cog": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inertia": {
+          "ixx": 0.05,
+          "ixy": 0.0,
+          "ixz": 0.0,
+          "iyy": 0.05,
+          "iyz": 0.0,
+          "izz": 0.02
+        },
+        "geometry": "arm_mesh.stl"
+      },
+      {
+        "id": 5,
+        "name": "arm4",
+        "mass": 5.0,
+        "cog": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inertia": {
+          "ixx": 0.05,
+          "ixy": 0.0,
+          "ixz": 0.0,
+          "iyy": 0.05,
+          "iyz": 0.0,
+          "izz": 0.02
+        },
+        "geometry": "arm_mesh.stl"
+      },
+      {
+        "id": 6,
+        "name": "arm5",
+        "mass": 5.0,
+        "cog": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inertia": {
+          "ixx": 0.05,
+          "ixy": 0.0,
+          "ixz": 0.0,
+          "iyy": 0.05,
+          "iyz": 0.0,
+          "izz": 0.02
+        },
+        "geometry": "arm_mesh.stl"
+      },
+      {
+        "id": 7,
+        "name": "arm6",
+        "mass": 5.0,
+        "cog": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inertia": {
+          "ixx": 0.05,
+          "ixy": 0.0,
+          "ixz": 0.0,
+          "iyy": 0.05,
+          "iyz": 0.0,
+          "izz": 0.02
+        },
+        "geometry": "arm_mesh.stl"
+      },
+      {
+        "id": 8,
+        "name": "arm7",
+        "mass": 5.0,
+        "cog": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "inertia": {
+          "ixx": 0.05,
+          "ixy": 0.0,
+          "ixz": 0.0,
+          "iyy": 0.05,
+          "iyz": 0.0,
+          "izz": 0.02
+        },
+        "geometry": "arm_mesh.stl"
+      }
+    ],
+    "joints": [
+      {
+        "id": 0,
+        "name": "root",
+        "type": "fixed",
+        "parent_link_id": 0,
+        "child_link_id": 1,
+        "origin": {
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "id": 1,
+        "name": "joint1",
+        "type": "revolute",
+        "parent_link_id": 1,
+        "child_link_id": 2,
+        "axis": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "limits": {
+          "min": -1.57,
+          "max": 1.57
+        },
+        "origin": {
+          "position": [
+            0.3,
+            0.2,
+            0.1
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "id": 2,
+        "name": "joint2",
+        "type": "revolute",
+        "parent_link_id": 2,
+        "child_link_id": 3,
+        "axis": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "limits": {
+          "min": -1.57,
+          "max": 1.57
+        },
+        "origin": {
+          "position": [
+            0.3,
+            0.2,
+            0.1
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "id": 3,
+        "name": "joint3",
+        "type": "revolute",
+        "parent_link_id": 3,
+        "child_link_id": 4,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "limits": {
+          "min": -1.57,
+          "max": 1.57
+        },
+        "origin": {
+          "position": [
+            0.3,
+            0.2,
+            0.1
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "id": 4,
+        "name": "joint4",
+        "type": "revolute",
+        "parent_link_id": 4,
+        "child_link_id": 5,
+        "axis": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "limits": {
+          "min": -1.57,
+          "max": 1.57
+        },
+        "origin": {
+          "position": [
+            0.3,
+            0.2,
+            0.1
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "id": 5,
+        "name": "joint5",
+        "type": "revolute",
+        "parent_link_id": 5,
+        "child_link_id": 6,
+        "axis": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "limits": {
+          "min": -1.57,
+          "max": 1.57
+        },
+        "origin": {
+          "position": [
+            0.3,
+            0.2,
+            0.1
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "id": 6,
+        "name": "joint6",
+        "type": "revolute",
+        "parent_link_id": 6,
+        "child_link_id": 7,
+        "axis": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "limits": {
+          "min": -1.57,
+          "max": 1.57
+        },
+        "origin": {
+          "position": [
+            0.3,
+            0.2,
+            0.1
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      {
+        "id": 7,
+        "name": "joint7",
+        "type": "revolute",
+        "parent_link_id": 7,
+        "child_link_id": 8,
+        "axis": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "limits": {
+          "min": -1.57,
+          "max": 1.57
+        },
+        "origin": {
+          "position": [
+            0.3,
+            0.2,
+            0.1
+          ],
+          "orientation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      }
+    ]
+  },
+  "motions": [
+    [
+      [
+        0.1175492396952817,
+        -0.5126039698684132,
+        0.014706568541060004,
+        -0.22109364286714384,
+        0.04004056368437533,
+        0.29972269703923565,
+        -0.23971051788651213
+      ],
+      [
+        0.6482378984172942,
+        -0.07806064625346243,
+        0.2900791045110376,
+        0.33198013078162075,
+        0.7079414199740359,
+        0.27041518031044276,
+        -0.22103461178078188
+      ],
+      [
+        -0.29909179112546,
+        0.14191534641048067,
+        -0.4419462794877269,
+        0.1731456109465904,
+        0.76901183875701,
+        0.2618533195087413,
+        -0.2924845963731716
+      ],
+      [
+        0.5196392352096371,
+        0.46776398374501627,
+        0.15880641747556218,
+        0.4021607978435907,
+        0.030907767079460604,
+        0.22020384595655063,
+        -0.9341022633570708
+      ],
+      [
+        0.6222412589449753,
+        -0.32593914953976366,
+        -0.14432375606266132,
+        -0.11951642740396728,
+        -0.6919306527334884,
+        -0.38508222372211165,
+        -0.3390960055660656
+      ],
+      [
+        0.3112872133835917,
+        0.07116720586676664,
+        -0.18837597972204334,
+        0.28331828455289754,
+        -0.24070545651936706,
+        -0.6712336280767842,
+        -0.603389817270183
+      ],
+      [
+        -0.06107928014829217,
+        -0.0938175423394641,
+        -0.32389571152009744,
+        0.08951585392935643,
+        -0.23003293461437557,
+        0.46769535850861993,
+        -0.2035117687390398
+      ]
+    ]
+  ],
+  "results": [
+    {
+      "row": "link velocity / local",
+      "k": 0,
+      "owner": "arm7",
+      "data_type": "vel",
+      "frame": "local",
+      "motion_order": 2,
+      "shape": [
+        6,
+        14
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 1.175754960058839e-08,
+          "relative_frobenius": 5.258569813628539e-09
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 3.608224830031759e-16,
+          "relative_frobenius": 2.5982490352859687e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 4.440892098500626e-16,
+          "relative_frobenius": 2.744638181914109e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 1.1757549656099542e-08,
+          "relative_frobenius": 5.258569843228592e-09
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 1.1757549656099542e-08,
+          "relative_frobenius": 5.258569857043517e-09
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 3.3306690738754696e-16,
+          "relative_frobenius": 1.3365236627025182e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "link momentum / local",
+      "k": 0,
+      "owner": "arm7",
+      "data_type": "momentum",
+      "frame": "local",
+      "motion_order": 2,
+      "shape": [
+        6,
+        14
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 2.889609440615004e-08,
+          "relative_frobenius": 3.749122063507584e-09
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 1.7763568394002505e-15,
+          "relative_frobenius": 3.1392084305124084e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 1.6653345369377348e-15,
+          "relative_frobenius": 2.778792489841763e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 2.889609396206083e-08,
+          "relative_frobenius": 3.749122100761433e-09
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 2.889609396206083e-08,
+          "relative_frobenius": 3.749122097159447e-09
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 8.881784197001252e-16,
+          "relative_frobenius": 1.498331635740971e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "link momentum / world",
+      "k": 0,
+      "owner": "arm7",
+      "data_type": "momentum",
+      "frame": "world",
+      "motion_order": 2,
+      "shape": [
+        6,
+        14
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 8.629814907124e-08,
+          "relative_frobenius": 5.016108945711795e-09
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 3.552713678800501e-15,
+          "relative_frobenius": 2.515760497769937e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 3.552713678800501e-15,
+          "relative_frobenius": 2.782157265548207e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 8.629814907124e-08,
+          "relative_frobenius": 5.016108944768163e-09
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 8.629815084759684e-08,
+          "relative_frobenius": 5.016108978197165e-09
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 3.552713678800501e-15,
+          "relative_frobenius": 1.7290553710763819e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "joint momentum / local",
+      "k": 0,
+      "owner": "joint1",
+      "data_type": "momentum",
+      "frame": "local",
+      "motion_order": 2,
+      "shape": [
+        6,
+        14
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 1.5572514664753678e-07,
+          "relative_frobenius": 6.093048079143827e-09
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 8.881784197001252e-15,
+          "relative_frobenius": 2.828767429474759e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 1.0658141036401503e-14,
+          "relative_frobenius": 2.3993322545022865e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 1.5572514824001293e-07,
+          "relative_frobenius": 6.0930481291223195e-09
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 1.5572514827644213e-07,
+          "relative_frobenius": 6.093048097241546e-09
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 7.105427357601002e-15,
+          "relative_frobenius": 2.1485468518514307e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "joint momentum / world",
+      "k": 0,
+      "owner": "joint1",
+      "data_type": "momentum",
+      "frame": "world",
+      "motion_order": 2,
+      "shape": [
+        6,
+        14
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 2.0053928295737933e-07,
+          "relative_frobenius": 5.872619961314945e-09
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 1.4210854715202004e-14,
+          "relative_frobenius": 2.7189141242089954e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 1.4210854715202004e-14,
+          "relative_frobenius": 3.1475008043874656e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 2.00539286510093e-07,
+          "relative_frobenius": 5.872620007288641e-09
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 2.0053927585195197e-07,
+          "relative_frobenius": 5.872619952193345e-09
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 1.4210854715202004e-14,
+          "relative_frobenius": 2.48235539720487e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "link force / local",
+      "k": 0,
+      "owner": "arm7",
+      "data_type": "force",
+      "frame": "local",
+      "motion_order": 3,
+      "shape": [
+        6,
+        21
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 8.904343111737489e-07,
+          "relative_frobenius": 1.74044919835067e-08
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 1.4210854715202004e-14,
+          "relative_frobenius": 2.3593956103857524e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 1.4210854715202004e-14,
+          "relative_frobenius": 2.5101379916963995e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 8.904343111737489e-07,
+          "relative_frobenius": 1.74044920136657e-08
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 8.904343005156079e-07,
+          "relative_frobenius": 1.740449190652037e-08
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 1.0658141036401503e-14,
+          "relative_frobenius": 2.1016098445247129e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "joint force / local",
+      "k": 0,
+      "owner": "joint1",
+      "data_type": "force",
+      "frame": "local",
+      "motion_order": 3,
+      "shape": [
+        6,
+        21
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 7.393930142485239e-06,
+          "relative_frobenius": 3.99054743473542e-08
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 5.684341886080802e-14,
+          "relative_frobenius": 2.710368398136545e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 5.684341886080802e-14,
+          "relative_frobenius": 2.8815070261586826e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 7.393930144705685e-06,
+          "relative_frobenius": 3.990547434632961e-08
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 7.3939301401537705e-06,
+          "relative_frobenius": 3.9905474404390706e-08
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 7.341349750333848e-14,
+          "relative_frobenius": 3.420750013453784e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "joint torque",
+      "k": 0,
+      "owner": "joint1",
+      "data_type": "torque",
+      "frame": "local",
+      "motion_order": 3,
+      "shape": [
+        1,
+        21
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 5.0532786204371405e-06,
+          "relative_frobenius": 4.3147137349644464e-08
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 5.684341886080802e-14,
+          "relative_frobenius": 3.9040413564629524e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 4.263256414560601e-14,
+          "relative_frobenius": 4.3750284419305543e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 5.053278613331713e-06,
+          "relative_frobenius": 4.3147137214037354e-08
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 5.053278584910004e-06,
+          "relative_frobenius": 4.3147137207989565e-08
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 3.552713678800501e-14,
+          "relative_frobenius": 3.379802924513291e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "link velocity / local",
+      "k": 1,
+      "owner": "arm7",
+      "data_type": "acc",
+      "frame": "local",
+      "motion_order": 3,
+      "shape": [
+        6,
+        21
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 8.201900825177688e-09,
+          "relative_frobenius": 7.0553113227114656e-09
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 7.216449660063518e-16,
+          "relative_frobenius": 4.294676068371752e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 7.216449660063518e-16,
+          "relative_frobenius": 4.244150780671901e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 8.201900103532722e-09,
+          "relative_frobenius": 7.055311284869792e-09
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 8.201900103532722e-09,
+          "relative_frobenius": 7.055311263986232e-09
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 4.440892098500626e-16,
+          "relative_frobenius": 1.6420488974715797e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "link momentum / local",
+      "k": 1,
+      "owner": "arm7",
+      "data_type": "momentum_diff1",
+      "frame": "local",
+      "motion_order": 3,
+      "shape": [
+        6,
+        21
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 5.766284949526579e-08,
+          "relative_frobenius": 8.285903246163816e-09
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 3.6637359812630166e-15,
+          "relative_frobenius": 5.364302025972603e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 3.552713678800501e-15,
+          "relative_frobenius": 5.029531757980211e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 5.766284583152981e-08,
+          "relative_frobenius": 8.285903150150756e-09
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 5.766284627561902e-08,
+          "relative_frobenius": 8.285903163652625e-09
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 1.3322676295501878e-15,
+          "relative_frobenius": 1.7105069207915453e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "link momentum / world",
+      "k": 1,
+      "owner": "arm7",
+      "data_type": "momentum_diff1",
+      "frame": "world",
+      "motion_order": 3,
+      "shape": [
+        6,
+        21
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 1.2342137445386925e-07,
+          "relative_frobenius": 9.552980142085525e-09
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 7.105427357601002e-15,
+          "relative_frobenius": 4.0172458253533265e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 6.217248937900877e-15,
+          "relative_frobenius": 4.0583700712869126e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 1.2342137445386925e-07,
+          "relative_frobenius": 9.55298010138306e-09
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 1.234213726775124e-07,
+          "relative_frobenius": 9.552980086481678e-09
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 3.552713678800501e-15,
+          "relative_frobenius": 1.8540449671199742e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "joint momentum / local",
+      "k": 1,
+      "owner": "joint1",
+      "data_type": "momentum_diff1",
+      "frame": "local",
+      "motion_order": 3,
+      "shape": [
+        6,
+        21
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 3.8882294106645787e-07,
+          "relative_frobenius": 1.6634686154499563e-08
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 1.4210854715202004e-14,
+          "relative_frobenius": 4.603152754640423e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 1.4210854715202004e-14,
+          "relative_frobenius": 4.106596854266361e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 3.8882293618147656e-07,
+          "relative_frobenius": 1.6634686122479825e-08
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 3.8882293451614203e-07,
+          "relative_frobenius": 1.6634686111430138e-08
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 7.105427357601002e-15,
+          "relative_frobenius": 2.562675705971995e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "joint momentum / world",
+      "k": 1,
+      "owner": "joint1",
+      "data_type": "momentum_diff1",
+      "frame": "world",
+      "motion_order": 3,
+      "shape": [
+        6,
+        21
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 6.516344779328165e-07,
+          "relative_frobenius": 1.4203642618164257e-08
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 1.4210854715202004e-14,
+          "relative_frobenius": 3.3067388214581536e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 1.4210854715202004e-14,
+          "relative_frobenius": 3.1409455053511266e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 6.516344761564596e-07,
+          "relative_frobenius": 1.4203642605159223e-08
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 6.516344761564596e-07,
+          "relative_frobenius": 1.4203642595080058e-08
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 1.4210854715202004e-14,
+          "relative_frobenius": 2.359305653941893e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "link force / local",
+      "k": 1,
+      "owner": "arm7",
+      "data_type": "force_diff1",
+      "frame": "local",
+      "motion_order": 4,
+      "shape": [
+        6,
+        28
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 4.208566508623335e-07,
+          "relative_frobenius": 8.215121568042974e-09
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 1.4210854715202004e-14,
+          "relative_frobenius": 2.975909205317715e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 1.4210854715202004e-14,
+          "relative_frobenius": 3.39288557906557e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 4.208566437569061e-07,
+          "relative_frobenius": 8.215121497142429e-09
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 4.2085665796776084e-07,
+          "relative_frobenius": 8.21512155542849e-09
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 1.4210854715202004e-14,
+          "relative_frobenius": 2.2784544632436994e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "joint force / local",
+      "k": 1,
+      "owner": "joint1",
+      "data_type": "force_diff1",
+      "frame": "local",
+      "motion_order": 4,
+      "shape": [
+        6,
+        28
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 3.390658370960864e-06,
+          "relative_frobenius": 1.6257422201315677e-08
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 1.7053025658242404e-13,
+          "relative_frobenius": 4.0013359979489187e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 1.1368683772161603e-13,
+          "relative_frobenius": 3.343233262133254e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 3.3906584206988555e-06,
+          "relative_frobenius": 1.625742218966108e-08
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 3.390658370960864e-06,
+          "relative_frobenius": 1.625742219449791e-08
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 6.772360450213455e-14,
+          "relative_frobenius": 3.1777511344959585e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "joint torque",
+      "k": 1,
+      "owner": "joint1",
+      "data_type": "torque_diff1",
+      "frame": "local",
+      "motion_order": 4,
+      "shape": [
+        1,
+        28
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 2.3674738791612526e-06,
+          "relative_frobenius": 1.7481963832180448e-08
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 2.842170943040401e-14,
+          "relative_frobenius": 2.5554876250760576e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 5.684341886080802e-14,
+          "relative_frobenius": 4.912473780901208e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 2.367473875608539e-06,
+          "relative_frobenius": 1.7481963822268743e-08
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 2.3674738685031116e-06,
+          "relative_frobenius": 1.7481963923291597e-08
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 3.197442310920451e-14,
+          "relative_frobenius": 3.153093972573826e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "link velocity / local",
+      "k": 2,
+      "owner": "arm7",
+      "data_type": "jerk",
+      "frame": "local",
+      "motion_order": 4,
+      "shape": [
+        6,
+        28
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 1.2829877382714017e-08,
+          "relative_frobenius": 7.3147756514574824e-09
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 1.6653345369377348e-15,
+          "relative_frobenius": 6.169273547840354e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 1.5543122344752192e-15,
+          "relative_frobenius": 6.16625569846236e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 1.2829877160669412e-08,
+          "relative_frobenius": 7.314775606440827e-09
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 1.2829877271691714e-08,
+          "relative_frobenius": 7.3147755954768185e-09
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 3.3306690738754696e-16,
+          "relative_frobenius": 1.4384836535870902e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "link momentum / local",
+      "k": 2,
+      "owner": "arm7",
+      "data_type": "momentum_diff2",
+      "frame": "local",
+      "motion_order": 4,
+      "shape": [
+        6,
+        28
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 8.080273250499204e-08,
+          "relative_frobenius": 8.227698679859197e-09
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 8.881784197001252e-15,
+          "relative_frobenius": 7.59458849198382e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 7.993605777301127e-15,
+          "relative_frobenius": 7.327731306056342e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 8.080273117272441e-08,
+          "relative_frobenius": 8.227698579184624e-09
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 8.080273117272441e-08,
+          "relative_frobenius": 8.22769860452105e-09
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 1.7763568394002505e-15,
+          "relative_frobenius": 2.0814405121972342e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "link momentum / world",
+      "k": 2,
+      "owner": "arm7",
+      "data_type": "momentum_diff2",
+      "frame": "world",
+      "motion_order": 4,
+      "shape": [
+        6,
+        28
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 1.8713812188764223e-07,
+          "relative_frobenius": 8.219870379161185e-09
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 1.7763568394002505e-14,
+          "relative_frobenius": 6.2926053565741715e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 1.5987211554602254e-14,
+          "relative_frobenius": 5.600790510171879e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 1.871381249962667e-07,
+          "relative_frobenius": 8.21987043256002e-09
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 1.8713812721671275e-07,
+          "relative_frobenius": 8.219870438013871e-09
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 8.881784197001252e-15,
+          "relative_frobenius": 2.458861686220874e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "joint momentum / local",
+      "k": 2,
+      "owner": "joint1",
+      "data_type": "momentum_diff2",
+      "frame": "local",
+      "motion_order": 4,
+      "shape": [
+        6,
+        28
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 5.151083373178267e-07,
+          "relative_frobenius": 1.810075611103748e-08
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 2.4868995751603507e-14,
+          "relative_frobenius": 7.471120786182621e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 3.552713678800501e-14,
+          "relative_frobenius": 7.2045242077568e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 5.151083368737375e-07,
+          "relative_frobenius": 1.8100755996406207e-08
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 5.151083346532914e-07,
+          "relative_frobenius": 1.8100755967333287e-08
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 1.0658141036401503e-14,
+          "relative_frobenius": 3.1871188409530533e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "joint momentum / world",
+      "k": 2,
+      "owner": "joint1",
+      "data_type": "momentum_diff2",
+      "frame": "world",
+      "motion_order": 4,
+      "shape": [
+        6,
+        28
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 9.541600610729617e-07,
+          "relative_frobenius": 1.291967838547253e-08
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 2.1316282072803006e-14,
+          "relative_frobenius": 4.225359712234212e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 2.842170943040401e-14,
+          "relative_frobenius": 4.446590350006962e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 9.54160062627274e-07,
+          "relative_frobenius": 1.2919678356359676e-08
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 9.541600594076272e-07,
+          "relative_frobenius": 1.2919678345241333e-08
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 2.842170943040401e-14,
+          "relative_frobenius": 3.054521228701274e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "link force / local",
+      "k": 2,
+      "owner": "arm7",
+      "data_type": "force_diff2",
+      "frame": "local",
+      "motion_order": 5,
+      "shape": [
+        6,
+        35
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 9.37000969258861e-07,
+          "relative_frobenius": 1.5397761129816455e-08
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 2.4868995751603507e-14,
+          "relative_frobenius": 3.682206223388526e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 1.9539925233402755e-14,
+          "relative_frobenius": 3.6316723251130585e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 9.370009816933589e-07,
+          "relative_frobenius": 1.53977611222847e-08
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 9.370009852460726e-07,
+          "relative_frobenius": 1.5397761146912217e-08
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 1.4210854715202004e-14,
+          "relative_frobenius": 2.3714742590644204e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "joint force / local",
+      "k": 2,
+      "owner": "joint1",
+      "data_type": "force_diff2",
+      "frame": "local",
+      "motion_order": 5,
+      "shape": [
+        6,
+        35
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 4.922998233070075e-06,
+          "relative_frobenius": 1.9197054002440008e-08
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 1.7053025658242404e-13,
+          "relative_frobenius": 4.56449026896882e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 1.1368683772161603e-13,
+          "relative_frobenius": 4.0038121323147723e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 4.9229981833320835e-06,
+          "relative_frobenius": 1.9197053923630507e-08
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 4.922998208201079e-06,
+          "relative_frobenius": 1.9197053992073645e-08
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 1.1368683772161603e-13,
+          "relative_frobenius": 4.176738681227635e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "joint torque",
+      "k": 2,
+      "owner": "joint1",
+      "data_type": "torque_diff2",
+      "frame": "local",
+      "motion_order": 5,
+      "shape": [
+        1,
+        35
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 2.552016326262674e-06,
+          "relative_frobenius": 1.7835480534690042e-08
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 5.684341886080802e-14,
+          "relative_frobenius": 3.6591030073554457e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 9.237055564881302e-14,
+          "relative_frobenius": 5.473173236381713e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 2.5520163191572465e-06,
+          "relative_frobenius": 1.783548047694941e-08
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 2.552016233892118e-06,
+          "relative_frobenius": 1.7835480404355438e-08
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 8.526512829121202e-14,
+          "relative_frobenius": 3.294680946652389e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "link velocity / local",
+      "k": 3,
+      "owner": "arm7",
+      "data_type": "snap",
+      "frame": "local",
+      "motion_order": 5,
+      "shape": [
+        6,
+        35
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 7.604838536678926e-08,
+          "relative_frobenius": 2.6149779490874143e-08
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 2.6575963651964685e-15,
+          "relative_frobenius": 8.828898542117229e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 2.886579864025407e-15,
+          "relative_frobenius": 8.764275658086644e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 7.604838625496768e-08,
+          "relative_frobenius": 2.614977953641958e-08
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 7.604838636598998e-08,
+          "relative_frobenius": 2.614977951607507e-08
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 8.881784197001252e-16,
+          "relative_frobenius": 2.3461240809431074e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "link momentum / local",
+      "k": 3,
+      "owner": "arm7",
+      "data_type": "momentum_diff3",
+      "frame": "local",
+      "motion_order": 5,
+      "shape": [
+        6,
+        35
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 3.913441570801979e-07,
+          "relative_frobenius": 2.857485402596093e-08
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 1.329492071988625e-14,
+          "relative_frobenius": 1.0842693682623387e-15
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 1.4099832412739488e-14,
+          "relative_frobenius": 1.0803623241858167e-15
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 3.9134416152108997e-07,
+          "relative_frobenius": 2.85748541222547e-08
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 3.9134416152108997e-07,
+          "relative_frobenius": 2.8574854104886097e-08
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 3.552713678800501e-15,
+          "relative_frobenius": 2.0844555999466493e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "link momentum / world",
+      "k": 3,
+      "owner": "arm7",
+      "data_type": "momentum_diff3",
+      "frame": "world",
+      "motion_order": 5,
+      "shape": [
+        6,
+        35
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 1.090250698609907e-06,
+          "relative_frobenius": 2.0013536854663633e-08
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 4.085620730620576e-14,
+          "relative_frobenius": 8.879575018229964e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 4.263256414560601e-14,
+          "relative_frobenius": 8.2518112279302e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 1.0902506915044796e-06,
+          "relative_frobenius": 2.001353689099059e-08
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 1.0902506915044796e-06,
+          "relative_frobenius": 2.0013536914516165e-08
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 1.4210854715202004e-14,
+          "relative_frobenius": 2.8401649867381494e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "joint momentum / local",
+      "k": 3,
+      "owner": "joint1",
+      "data_type": "momentum_diff3",
+      "frame": "local",
+      "motion_order": 5,
+      "shape": [
+        6,
+        35
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 1.5079947530693971e-06,
+          "relative_frobenius": 2.6334319153989103e-08
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 5.950795411990839e-14,
+          "relative_frobenius": 1.1708973312678794e-15
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 5.684341886080802e-14,
+          "relative_frobenius": 1.1298030277564612e-15
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 1.5079947601748245e-06,
+          "relative_frobenius": 2.6334319013879156e-08
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 1.5079947601748245e-06,
+          "relative_frobenius": 2.633431898575841e-08
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 3.019806626980426e-14,
+          "relative_frobenius": 3.6091628616143866e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "joint momentum / world",
+      "k": 3,
+      "owner": "joint1",
+      "data_type": "momentum_diff3",
+      "frame": "world",
+      "motion_order": 5,
+      "shape": [
+        6,
+        35
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 2.2764445759548835e-06,
+          "relative_frobenius": 1.806151385265948e-08
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 1.1457501614131615e-13,
+          "relative_frobenius": 8.595413432349544e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 8.881784197001252e-14,
+          "relative_frobenius": 7.892435204903818e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 2.2764445759548835e-06,
+          "relative_frobenius": 1.806151376636275e-08
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 2.2764445191114646e-06,
+          "relative_frobenius": 1.8061513694109957e-08
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 5.684341886080802e-14,
+          "relative_frobenius": 3.4451189580323805e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "link force / local",
+      "k": 3,
+      "owner": "arm7",
+      "data_type": "force_diff3",
+      "frame": "local",
+      "motion_order": 6,
+      "shape": [
+        6,
+        42
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 1.3010047013040094e-06,
+          "relative_frobenius": 1.1738446850040449e-08
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 7.105427357601002e-14,
+          "relative_frobenius": 5.589773083820415e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 7.105427357601002e-14,
+          "relative_frobenius": 5.891980099016054e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 1.301004683540441e-06,
+          "relative_frobenius": 1.1738446801005502e-08
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 1.3010046959749388e-06,
+          "relative_frobenius": 1.1738446835204472e-08
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 5.684341886080802e-14,
+          "relative_frobenius": 2.8806416274007343e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "joint force / local",
+      "k": 3,
+      "owner": "joint1",
+      "data_type": "force_diff3",
+      "frame": "local",
+      "motion_order": 6,
+      "shape": [
+        6,
+        42
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 1.1662591745675854e-05,
+          "relative_frobenius": 2.362334187356225e-08
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 3.979039320256561e-13,
+          "relative_frobenius": 7.379596260504762e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 4.547473508864641e-13,
+          "relative_frobenius": 7.488462154404678e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 1.166259170304329e-05,
+          "relative_frobenius": 2.3623341911034153e-08
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 1.1662591731465e-05,
+          "relative_frobenius": 2.3623341955164024e-08
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 2.2737367544323206e-13,
+          "relative_frobenius": 5.021365573365586e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "joint torque",
+      "k": 3,
+      "owner": "joint1",
+      "data_type": "torque_diff3",
+      "frame": "local",
+      "motion_order": 6,
+      "shape": [
+        1,
+        42
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 7.290928351721959e-06,
+          "relative_frobenius": 3.0419973665756506e-08
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 1.7053025658242404e-13,
+          "relative_frobenius": 5.61896164494825e-16
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 2.8421709430404007e-13,
+          "relative_frobenius": 7.231367813125548e-16
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 7.290928351721959e-06,
+          "relative_frobenius": 3.04199735491589e-08
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 7.290928465408797e-06,
+          "relative_frobenius": 3.041997350507369e-08
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 1.4210854715202004e-13,
+          "relative_frobenius": 5.404302428755539e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "link velocity / local",
+      "k": 4,
+      "owner": "arm7",
+      "data_type": "crackle",
+      "frame": "local",
+      "motion_order": 6,
+      "shape": [
+        6,
+        42
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 1.8979217175640883e-07,
+          "relative_frobenius": 2.875183937632493e-08
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 8.43769498715119e-15,
+          "relative_frobenius": 1.2055829005291498e-15
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 8.43769498715119e-15,
+          "relative_frobenius": 1.2280120857811658e-15
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 1.8979217131231962e-07,
+          "relative_frobenius": 2.8751839185418033e-08
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 1.897921704241412e-07,
+          "relative_frobenius": 2.8751839151470855e-08
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 1.7763568394002505e-15,
+          "relative_frobenius": 2.292175439224248e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "link momentum / local",
+      "k": 4,
+      "owner": "arm7",
+      "data_type": "momentum_diff4",
+      "frame": "local",
+      "motion_order": 6,
+      "shape": [
+        6,
+        42
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 9.045519373529487e-07,
+          "relative_frobenius": 3.118247911164883e-08
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 4.263256414560601e-14,
+          "relative_frobenius": 1.3677128795794119e-15
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 4.440892098500626e-14,
+          "relative_frobenius": 1.4166990738544812e-15
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 9.045519355765919e-07,
+          "relative_frobenius": 3.1182478829229196e-08
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 9.045519320238782e-07,
+          "relative_frobenius": 3.1182478839779196e-08
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 7.105427357601002e-15,
+          "relative_frobenius": 2.252829501975862e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "link momentum / world",
+      "k": 4,
+      "owner": "arm7",
+      "data_type": "momentum_diff4",
+      "frame": "world",
+      "motion_order": 6,
+      "shape": [
+        6,
+        42
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 2.625060133709667e-06,
+          "relative_frobenius": 2.5182252461645057e-08
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 1.4210854715202004e-13,
+          "relative_frobenius": 1.1655504273232268e-15
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 1.2789769243681803e-13,
+          "relative_frobenius": 1.1412793102888491e-15
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 2.625060119498812e-06,
+          "relative_frobenius": 2.5182252327365387e-08
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 2.62506009818253e-06,
+          "relative_frobenius": 2.5182252363485165e-08
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 3.552713678800501e-14,
+          "relative_frobenius": 3.562123815311621e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "joint momentum / local",
+      "k": 4,
+      "owner": "joint1",
+      "data_type": "momentum_diff4",
+      "frame": "local",
+      "motion_order": 6,
+      "shape": [
+        6,
+        42
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 5.786369362326127e-06,
+          "relative_frobenius": 3.111180325745406e-08
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 2.5579538487363607e-13,
+          "relative_frobenius": 1.7447298582648151e-15
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 2.5579538487363607e-13,
+          "relative_frobenius": 1.766513601999948e-15
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 5.7863693294635254e-06,
+          "relative_frobenius": 3.111180304301419e-08
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 5.7863693232462765e-06,
+          "relative_frobenius": 3.111180308740956e-08
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 5.684341886080802e-14,
+          "relative_frobenius": 4.182244677621539e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "joint momentum / world",
+      "k": 4,
+      "owner": "joint1",
+      "data_type": "momentum_diff4",
+      "frame": "world",
+      "motion_order": 6,
+      "shape": [
+        6,
+        42
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 4.673436052371471e-06,
+          "relative_frobenius": 2.2809773879920594e-08
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 3.268496584496461e-13,
+          "relative_frobenius": 1.2068163095738848e-15
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 2.913225216616411e-13,
+          "relative_frobenius": 1.2067292445036991e-15
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 4.673436066582326e-06,
+          "relative_frobenius": 2.280977390098398e-08
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 4.673436066582326e-06,
+          "relative_frobenius": 2.280977393672695e-08
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 7.638334409421077e-14,
+          "relative_frobenius": 3.5543444820657145e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "link force / local",
+      "k": 4,
+      "owner": "arm7",
+      "data_type": "force_diff4",
+      "frame": "local",
+      "motion_order": 7,
+      "shape": [
+        6,
+        49
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 4.223608385700572e-06,
+          "relative_frobenius": 2.0396532777044885e-08
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 3.907985046680551e-13,
+          "relative_frobenius": 1.1754511205916658e-15
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 3.694822225952521e-13,
+          "relative_frobenius": 1.1700938492097264e-15
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 4.223608470965701e-06,
+          "relative_frobenius": 2.039653285459132e-08
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 4.22360849938741e-06,
+          "relative_frobenius": 2.0396532885625833e-08
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 8.526512829121202e-14,
+          "relative_frobenius": 3.101222961051843e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "joint force / local",
+      "k": 4,
+      "owner": "joint1",
+      "data_type": "force_diff4",
+      "frame": "local",
+      "motion_order": 7,
+      "shape": [
+        6,
+        49
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 3.065906378196814e-05,
+          "relative_frobenius": 3.8443330130364096e-08
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 1.5560885913146194e-12,
+          "relative_frobenius": 1.5580213431718413e-15
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 1.5205614545266144e-12,
+          "relative_frobenius": 1.5785500409029436e-15
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 3.0659062701943185e-05,
+          "relative_frobenius": 3.844332982262548e-08
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 3.065906241772609e-05,
+          "relative_frobenius": 3.844332974186149e-08
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 3.694822225952521e-13,
+          "relative_frobenius": 5.73804492987633e-16
+        }
+      },
+      "sample": 0
+    },
+    {
+      "row": "joint torque",
+      "k": 4,
+      "owner": "joint1",
+      "data_type": "torque_diff4",
+      "frame": "local",
+      "motion_order": 7,
+      "shape": [
+        1,
+        49
+      ],
+      "errors": {
+        "numerical_vs_analytic": {
+          "max_abs": 2.0454667936320448e-05,
+          "relative_frobenius": 3.6869252738710667e-08
+        },
+        "autodiff_forward_vs_analytic": {
+          "max_abs": 7.815970093361102e-13,
+          "relative_frobenius": 1.138338875217745e-15
+        },
+        "autodiff_reverse_vs_analytic": {
+          "max_abs": 5.826450433232822e-13,
+          "relative_frobenius": 1.1522818021247741e-15
+        },
+        "numerical_vs_autodiff_forward": {
+          "max_abs": 2.045466743538782e-05,
+          "relative_frobenius": 3.686925276312022e-08
+        },
+        "numerical_vs_autodiff_reverse": {
+          "max_abs": 2.045466752420566e-05,
+          "relative_frobenius": 3.686925282834612e-08
+        },
+        "autodiff_reverse_vs_autodiff_forward": {
+          "max_abs": 2.2737367544323206e-13,
+          "relative_frobenius": 5.065073604760524e-16
+        }
+      },
+      "sample": 0
+    }
+  ]
+}

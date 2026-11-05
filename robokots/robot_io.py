@@ -5,11 +5,13 @@
 import json
 from typing import Dict
 
+from .core.robot import validate_model_data
 from .urdf_io import load_urdf_file, urdf_root_to_model_data, urdf_xml_to_model_data
 
 __all__ = [
     "load_json_file",
     "save_json_file",
+    "validate_model_data",
     "load_urdf_file",
     "urdf_root_to_model_data",
     "urdf_xml_to_model_data",

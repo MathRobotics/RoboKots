@@ -1,0 +1,171 @@
+{
+  "environment": {
+    "platform": "macOS-15.7.4-arm64-arm-64bit-Mach-O",
+    "python": "3.13.1",
+    "numpy": "2.4.6"
+  },
+  "seed": 192,
+  "warmup": 3,
+  "samples": 9,
+  "calls_per_sample": 3,
+  "model": "tests/test_model/branched_fixed.urdf",
+  "dtype": "float64",
+  "gravity": [
+    0.2,
+    -0.3,
+    -9.81
+  ],
+  "scope": "same-build NumPy vs Rust; all state/primal computation and input/output conversion included; model construction excluded; no cached state or Python fallback on Rust path",
+  "rows": [
+    {
+      "batch_shape": [],
+      "operation": "energy",
+      "median_ms": {
+        "rust": 0.007694666666666667,
+        "numpy": 0.259139
+      },
+      "first_call_ms": {
+        "rust": 0.037542,
+        "numpy": 9.365209
+      },
+      "max_abs": 1.3877787807814457e-17,
+      "relative_frobenius": 3.7353904974950903e-16
+    },
+    {
+      "batch_shape": [],
+      "operation": "energy_jvp",
+      "median_ms": {
+        "rust": 0.008791666666666666,
+        "numpy": 1.4516526666666667
+      },
+      "first_call_ms": {
+        "rust": 0.050541,
+        "numpy": 1.822417
+      },
+      "max_abs": 0.0,
+      "relative_frobenius": 0.0
+    },
+    {
+      "batch_shape": [],
+      "operation": "energy_vjp",
+      "median_ms": {
+        "rust": 0.008514,
+        "numpy": 1.4109583333333333
+      },
+      "first_call_ms": {
+        "rust": 0.037792,
+        "numpy": 1.437625
+      },
+      "max_abs": 5.551115123125783e-17,
+      "relative_frobenius": 3.2464503815947615e-16
+    },
+    {
+      "batch_shape": [],
+      "operation": "inverse_dynamics",
+      "median_ms": {
+        "rust": 0.006569333333333333,
+        "numpy": 1.577014
+      },
+      "first_call_ms": {
+        "rust": 0.03,
+        "numpy": 5.182542
+      },
+      "max_abs": 5.551115123125783e-17,
+      "relative_frobenius": 8.984096792051372e-18
+    },
+    {
+      "batch_shape": [],
+      "operation": "forward_dynamics",
+      "median_ms": {
+        "rust": 0.008180666666666668,
+        "numpy": 3.2130416666666664
+      },
+      "first_call_ms": {
+        "rust": 0.031458,
+        "numpy": 3.422333
+      },
+      "max_abs": 9.71445146547012e-16,
+      "relative_frobenius": 1.3478405407749192e-14
+    },
+    {
+      "batch_shape": [
+        6
+      ],
+      "operation": "energy",
+      "median_ms": {
+        "rust": 0.024125,
+        "numpy": 0.6516526666666667
+      },
+      "first_call_ms": {
+        "rust": 0.064459,
+        "numpy": 0.730709
+      },
+      "max_abs": 1.0408340855860843e-17,
+      "relative_frobenius": 3.167866875136234e-16
+    },
+    {
+      "batch_shape": [
+        6
+      ],
+      "operation": "energy_jvp",
+      "median_ms": {
+        "rust": 0.025972333333333333,
+        "numpy": 2.1985416666666664
+      },
+      "first_call_ms": {
+        "rust": 0.0735,
+        "numpy": 2.398459
+      },
+      "max_abs": 3.3306690738754696e-16,
+      "relative_frobenius": 1.134883493027357e-15
+    },
+    {
+      "batch_shape": [
+        6
+      ],
+      "operation": "energy_vjp",
+      "median_ms": {
+        "rust": 0.025194333333333332,
+        "numpy": 2.1973473333333335
+      },
+      "first_call_ms": {
+        "rust": 0.08525,
+        "numpy": 2.300375
+      },
+      "max_abs": 6.938893903907228e-17,
+      "relative_frobenius": 4.031244347600166e-16
+    },
+    {
+      "batch_shape": [
+        6
+      ],
+      "operation": "inverse_dynamics",
+      "median_ms": {
+        "rust": 0.007847,
+        "numpy": 2.2024443333333337
+      },
+      "first_call_ms": {
+        "rust": 0.025917,
+        "numpy": 2.319917
+      },
+      "max_abs": 2.6645352591003757e-15,
+      "relative_frobenius": 2.7622057731345375e-16
+    },
+    {
+      "batch_shape": [
+        6
+      ],
+      "operation": "forward_dynamics",
+      "median_ms": {
+        "rust": 0.012416666666666666,
+        "numpy": 19.094902666666666
+      },
+      "first_call_ms": {
+        "rust": 0.038708,
+        "numpy": 19.657625
+      },
+      "max_abs": 6.925016116099414e-15,
+      "relative_frobenius": 1.2809518482545879e-14
+    }
+  ]
+}

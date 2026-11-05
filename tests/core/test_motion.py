@@ -238,3 +238,24 @@ def test_robot_motions_dof_order_roundtrip():
 
     np.testing.assert_allclose(motions.motions, np.array([1, 2, 3, 4, 5, 6, 7, 8, 9], dtype=float))
     np.testing.assert_allclose(motions.to_dof_order(), dof_order)
+
+
+def test_setters_own_input_and_advance_revision():
+    import pytest
+
+    motions = RobotMotions(3)
+    values = np.arange(18., dtype=float)[::2]
+    initial = values.copy()
+    revision = motions.revision()
+    motions.set_motion(values)
+    assert motions.revision() == revision + 1
+    values[...] = -1
+    np.testing.assert_array_equal(motions.to_vector(), initial)
+    with pytest.raises(ValueError):
+        motions.set_motion(np.zeros(8))
+    assert motions.revision() == revision + 1
+    np.testing.assert_array_equal(motions.to_vector(), initial)
+    motions.set_aliases(["coord", "veloc"])
+    assert motions.revision() == revision + 2
+    motions.set_dof_order(np.zeros((3, 2)))
+    assert motions.revision() == revision + 3

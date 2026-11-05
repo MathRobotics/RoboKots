@@ -7,10 +7,17 @@ from __future__ import annotations
 import numpy as np
 
 import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import List, Dict
 
 warnings.simplefilter("always", UserWarning)
+
+MODEL_SCHEMA_VERSION = "0.0.2"
+SUPPORTED_LINK_TYPES = frozenset({"rigid", "soft"})
+SUPPORTED_JOINT_TYPES = frozenset({"fixed", "revolute", "prismatic", "spherical", "floating"})
+SUPPORTED_Q_REPRESENTATIONS = frozenset({"rotation_vector", "expmap"})
+INERTIA_KEYS = ("ixx", "ixy", "ixz", "iyy", "iyz", "izz")
 
 
 def _array_module(lib: str):
@@ -22,10 +29,360 @@ def _array_module(lib: str):
   raise ValueError(f"Unsupported library: {lib}. Use 'jax' or 'numpy'.")
 
 
+def _require_list3(value, field_name: str) -> list[float]:
+  if not isinstance(value, (list, tuple)) or len(value) != 3:
+    raise ValueError(f"{field_name} must be a list of 3 numbers.")
+  try:
+    result = [float(v) for v in value]
+  except (TypeError, ValueError) as exc:
+    raise ValueError(f"{field_name} must be a list of 3 numbers.") from exc
+  if not np.all(np.isfinite(result)):
+    raise ValueError(f"{field_name} must contain only finite numbers.")
+  return result
+
+
+def _require_list4(value, field_name: str) -> list[float]:
+  if not isinstance(value, (list, tuple)) or len(value) != 4:
+    raise ValueError(f"{field_name} must be a list of 4 numbers in [w, x, y, z] order.")
+  try:
+    result = [float(v) for v in value]
+  except (TypeError, ValueError) as exc:
+    raise ValueError(f"{field_name} must be a list of 4 numbers in [w, x, y, z] order.") from exc
+  if not np.all(np.isfinite(result)):
+    raise ValueError(f"{field_name} must contain only finite numbers.")
+  norm = np.linalg.norm(result)
+  if not np.isfinite(norm) or norm <= 0.0:
+    raise ValueError(f"{field_name} must have a finite, non-zero norm.")
+  return result
+
+
+def _unit_quaternion(value):
+  # Model constants are normalized before conversion to the requested array library.
+  quaternion = np.asarray(value, dtype=float)
+  return quaternion / np.linalg.norm(quaternion)
+
+
+def _require_matrix(value, field_name: str, shape: tuple[int, int]) -> list[list[float]]:
+  rows, cols = shape
+  if not isinstance(value, (list, tuple)) or len(value) != rows:
+    raise ValueError(f"{field_name} must be a {rows}x{cols} matrix of numbers.")
+  result = []
+  for row_index, row in enumerate(value):
+    if not isinstance(row, (list, tuple)) or len(row) != cols:
+      raise ValueError(f"{field_name}[{row_index}] must be a list of {cols} numbers.")
+    try:
+      result.append([float(v) for v in row])
+    except (TypeError, ValueError) as exc:
+      raise ValueError(f"{field_name}[{row_index}] must be a list of {cols} numbers.") from exc
+  if not np.all(np.isfinite(result)):
+    raise ValueError(f"{field_name} must contain only finite numbers.")
+  return result
+
+
+def _joint_axis_value(joint: dict):
+  axis = joint.get("axis")
+  if joint.get("type") == "spherical" and isinstance(axis, dict):
+    return axis.get("angular", np.eye(3).tolist())
+  return axis
+
+
+def _joint_axis_to_dict(joint: "JointStruct"):
+  if joint.type == "spherical":
+    return {"angular": joint.axis.tolist() if hasattr(joint.axis, "tolist") else joint.axis}
+  return joint.axis.tolist() if hasattr(joint.axis, "tolist") else joint.axis
+
+
+def inertia_dict_to_vector(inertia: dict | None) -> list[float]:
+  if inertia is None:
+    return [1.0, 1.0, 1.0, 0.0, 0.0, 0.0]
+  if not isinstance(inertia, dict):
+    raise ValueError("inertia must be a dictionary with keys ixx, ixy, ixz, iyy, iyz, izz.")
+  missing = [key for key in INERTIA_KEYS if key not in inertia]
+  extra = [key for key in inertia if key not in INERTIA_KEYS]
+  if missing:
+    raise ValueError("inertia is missing required keys: " + ", ".join(missing))
+  if extra:
+    raise ValueError("inertia contains unsupported keys: " + ", ".join(extra))
+  try:
+    values = {key: float(inertia[key]) for key in INERTIA_KEYS}
+  except (TypeError, ValueError) as exc:
+    raise ValueError("inertia values must be numbers.") from exc
+  if not np.all(np.isfinite(list(values.values()))):
+    raise ValueError("inertia values must be finite numbers.")
+  return [values["ixx"], values["iyy"], values["izz"], values["ixy"], values["ixz"], values["iyz"]]
+
+
+def inertia_vector_to_dict(inertia) -> dict[str, float]:
+  if inertia is None:
+    values = [1.0, 1.0, 1.0, 0.0, 0.0, 0.0]
+  else:
+    values = inertia.tolist() if hasattr(inertia, "tolist") else list(inertia)
+    if len(values) != 6:
+      values = [1.0, 1.0, 1.0, 0.0, 0.0, 0.0]
+  return {
+    "ixx": float(values[0]),
+    "ixy": float(values[3]),
+    "ixz": float(values[4]),
+    "iyy": float(values[1]),
+    "iyz": float(values[5]),
+    "izz": float(values[2]),
+  }
+
+
+def _validate_id_set(items: list[dict], item_type: str) -> None:
+  ids: list[int] = []
+  for i, item in enumerate(items):
+    if not isinstance(item, dict):
+      raise ValueError(f"{item_type}[{i}] must be a dictionary.")
+    item_id = item.get("id")
+    if not isinstance(item_id, int):
+      raise ValueError(f"{item_type}[{i}].id must be an integer.")
+    ids.append(item_id)
+  expected = list(range(len(items)))
+  if sorted(ids) != expected:
+    raise ValueError(f"{item_type}.id values must be unique contiguous integers 0..{len(items) - 1}.")
+
+
+def _validate_unique_names(items: list[dict], item_type: str) -> None:
+  seen: set[str] = set()
+  for i, item in enumerate(items):
+    name = item.get("name")
+    if not isinstance(name, str) or name == "":
+      raise ValueError(f"{item_type}[{i}].name must be a non-empty string.")
+    if name in seen:
+      raise ValueError(f"Duplicate {item_type} name: '{name}'.")
+    seen.add(name)
+
+
+def _validate_joint_link_references(links: list[dict], joints: list[dict]) -> None:
+  link_num = len(links)
+  for joint in joints:
+    joint_name = joint["name"]
+    parent = joint.get("parent_link_id")
+    child = joint.get("child_link_id")
+    if not isinstance(parent, int) or not 0 <= parent < link_num:
+      raise ValueError(f"Joint '{joint_name}' has invalid parent_link_id: {parent}.")
+    if not isinstance(child, int) or not 0 <= child < link_num:
+      raise ValueError(f"Joint '{joint_name}' has invalid child_link_id: {child}.")
+    if parent == child:
+      raise ValueError(f"Joint '{joint_name}' cannot connect a link to itself.")
+
+
+def _validate_robotstruct_supported_topology(links: list[dict], joints: list[dict]) -> None:
+  link_num = len(links)
+  children_by_link = [[] for _ in range(link_num)]
+  parent_joint_by_child: dict[int, str] = {}
+
+  for joint in joints:
+    joint_name = joint["name"]
+    parent = joint["parent_link_id"]
+    child = joint["child_link_id"]
+    if child in parent_joint_by_child:
+      raise NotImplementedError(
+        "RobotStruct currently supports only tree topology; "
+        f"link id {child} is attached by both '{parent_joint_by_child[child]}' and '{joint_name}'."
+      )
+    parent_joint_by_child[child] = joint_name
+    children_by_link[parent].append(child)
+
+  world_ids = [link["id"] for link in links if link["name"] == "world"]
+  if world_ids:
+    roots = world_ids
+  else:
+    roots = [link["id"] for link in links if link["id"] not in parent_joint_by_child]
+    if len(roots) != 1:
+      raise NotImplementedError("RobotStruct currently supports only tree topology with exactly one root link.")
+
+  visiting: set[int] = set()
+  visited: set[int] = set()
+
+  def visit(link_id: int) -> None:
+    if link_id in visiting:
+      raise NotImplementedError("RobotStruct currently supports only acyclic tree topology.")
+    if link_id in visited:
+      return
+    visiting.add(link_id)
+    for child_id in children_by_link[link_id]:
+      visit(child_id)
+    visiting.remove(link_id)
+    visited.add(link_id)
+
+  for root in roots:
+    visit(root)
+
+  if len(visited) != link_num:
+    unreachable = [link["name"] for link in links if link["id"] not in visited]
+    if world_ids:
+      raise NotImplementedError(
+        "RobotStruct currently supports only topologies reachable from the 'world' link; "
+        "unreachable links: " + ", ".join(unreachable)
+      )
+    raise NotImplementedError(
+      "RobotStruct currently supports only topologies reachable from the root link; "
+      "unreachable links: " + ", ".join(unreachable)
+    )
+
+
+def validate_model_data(data: Dict) -> None:
+  """Validate canonical RoboKots model JSON data."""
+  schema_version = data.get("schema_version")
+  if schema_version != MODEL_SCHEMA_VERSION:
+    raise ValueError(
+      f"model_data.schema_version must be '{MODEL_SCHEMA_VERSION}', got {schema_version!r}."
+    )
+
+  links = data.get("links")
+  joints = data.get("joints")
+  if not isinstance(links, list) or len(links) == 0:
+    raise ValueError("model_data.links must be a non-empty list.")
+  if not isinstance(joints, list):
+    raise ValueError("model_data.joints must be a list.")
+
+  _validate_id_set(links, "links")
+  _validate_id_set(joints, "joints")
+  _validate_unique_names(links, "link")
+  _validate_unique_names(joints, "joint")
+
+  for link in links:
+    link_type = link.get("type", "rigid")
+    if link_type not in SUPPORTED_LINK_TYPES:
+      raise ValueError(f"Unsupported link type '{link_type}' for link '{link['name']}'.")
+    if "cog" in link:
+      _require_list3(link["cog"], f"link '{link['name']}'.cog")
+    if "inertia" in link:
+      try:
+        inertia_dict_to_vector(link["inertia"])
+      except ValueError as exc:
+        raise ValueError(f"link '{link['name']}'.{exc}") from exc
+
+  for joint in joints:
+    joint_type = joint.get("type")
+    joint_name = joint["name"]
+    if joint_type == "fix":
+      raise ValueError(f"Unsupported joint type 'fix' for joint '{joint_name}'. Use 'fixed' instead.")
+    if joint_type not in SUPPORTED_JOINT_TYPES:
+      raise ValueError(f"Unsupported joint type '{joint_type}' for joint '{joint_name}'.")
+    expected_dof_by_type = {
+      "fixed": 0,
+      "revolute": 1,
+      "prismatic": 1,
+      "spherical": 3,
+      "floating": 6,
+    }
+    if "dof" in joint and joint["dof"] != expected_dof_by_type[joint_type]:
+      raise ValueError(
+        f"joint '{joint_name}'.dof must be {expected_dof_by_type[joint_type]} for {joint_type} joints."
+      )
+    q_representation = joint.get("q_representation")
+    if joint_type == "spherical":
+      if q_representation != "rotation_vector":
+        raise ValueError(
+          f"joint '{joint_name}'.q_representation must be 'rotation_vector' for spherical joints."
+        )
+    elif joint_type == "floating":
+      if q_representation != "expmap":
+        raise ValueError(
+          f"joint '{joint_name}'.q_representation must be 'expmap' for floating joints."
+        )
+    elif q_representation is not None and q_representation not in SUPPORTED_Q_REPRESENTATIONS:
+      raise ValueError(f"Unsupported q_representation '{q_representation}' for joint '{joint_name}'.")
+    if joint_type in ("revolute", "prismatic"):
+      if "axis" not in joint:
+        raise ValueError(f"joint '{joint_name}'.axis is required for {joint_type} joints.")
+      axis = _require_list3(joint["axis"], f"joint '{joint_name}'.axis")
+      if np.linalg.norm(axis) <= 0.0:
+        raise ValueError(f"joint '{joint_name}'.axis must be non-zero.")
+    if joint_type == "spherical" and "axis" in joint:
+      axis = joint["axis"]
+      if not isinstance(axis, dict):
+        raise ValueError(f"joint '{joint_name}'.axis must be a dictionary for spherical joints.")
+      extra = [key for key in axis if key != "angular"]
+      if extra:
+        raise ValueError(f"joint '{joint_name}'.axis contains unsupported keys: " + ", ".join(extra))
+      angular = _require_matrix(axis.get("angular"), f"joint '{joint_name}'.axis.angular", (3, 3))
+      if np.linalg.matrix_rank(np.asarray(angular, dtype=float)) < 3:
+        raise ValueError(f"joint '{joint_name}'.axis.angular must be full rank.")
+    origin = joint.get("origin", {})
+    if origin is not None:
+      if not isinstance(origin, dict):
+        raise ValueError(f"joint '{joint_name}'.origin must be a dictionary.")
+      if "position" in origin:
+        _require_list3(origin["position"], f"joint '{joint_name}'.origin.position")
+      if "orientation" in origin:
+        _require_list4(origin["orientation"], f"joint '{joint_name}'.origin.orientation")
+
+  _validate_joint_link_references(links, joints)
+
+
 @dataclass(frozen=True)
 class MotionOwner:
   dof: int
   dof_index: int
+
+
+@dataclass(frozen=True)
+class ModelLinkInfo:
+  id: int
+  name: str
+  dof: int = 0
+
+
+@dataclass(frozen=True)
+class ModelJointInfo:
+  id: int
+  name: str
+  type: str
+  dof: int
+  dof_index: int
+  parent_link_id: int
+  child_link_id: int
+
+
+@dataclass(frozen=True)
+class RobotModelInfo:
+  """Immutable indexing metadata; owns no inertia, SE3 or joint model arrays."""
+  dof: int
+  links: tuple[ModelLinkInfo, ...]
+  joints: tuple[ModelJointInfo, ...]
+  supports_cmtm: bool
+  _links: object = field(init=False, repr=False, compare=False)
+  _joints: object = field(init=False, repr=False, compare=False)
+
+  def __post_init__(self):
+    object.__setattr__(self, "_links", MappingProxyType({x.name: x for x in self.links}))
+    object.__setattr__(self, "_joints", MappingProxyType({x.name: x for x in self.joints}))
+
+  @classmethod
+  def from_native(cls, compiled):
+    dof, links, joints, supports_cmtm = compiled.model_info()
+    return cls(dof, tuple(ModelLinkInfo(i, name) for i, name in enumerate(links)),
+               tuple(ModelJointInfo(i, *values) for i, values in enumerate(joints)),
+               supports_cmtm)
+
+  @property
+  def link_names(self):
+    return tuple(x.name for x in self.links)
+
+  @property
+  def joint_names(self):
+    return tuple(x.name for x in self.joints)
+
+  @property
+  def link_num(self):
+    return len(self.links)
+
+  @property
+  def joint_num(self):
+    return len(self.joints)
+
+  def link(self, name):
+    return self._links.get(name)
+
+  def joint(self, name):
+    return self._joints.get(name)
+
+  def motion_owners(self):
+    return tuple(MotionOwner(j.dof, j.dof_index) for j in self.joints if j.dof > 0)
 
 
 class RobotStruct:
@@ -125,6 +482,10 @@ class RobotStruct:
 
     if not isinstance(data, dict):
         raise ValueError("Input data must be a dictionary.")
+    validate_model_data(data)
+    _validate_robotstruct_supported_topology(data["links"], data["joints"])
+    sorted_links = sorted(data["links"], key=lambda link: link["id"])
+    sorted_joints = sorted(data["joints"], key=lambda joint: joint["id"])
     
     joints = []
     links = []
@@ -136,26 +497,27 @@ class RobotStruct:
         name=link["name"],
         cog=xp.array(link.get("cog", [0., 0., 0.])),
         mass=float(link.get("mass", 0.)),
-        inertia=xp.array(link.get("inertia", [1.0, 1.0, 1.0, 0.0, 0.0, 0.0])),
+        inertia=xp.array(inertia_dict_to_vector(link.get("inertia"))),
         type=link.get("type", "rigid"),
         length=float(link.get("length", 0.0)),
         lib=lib
-    ) for link in data["links"]]
+    ) for link in sorted_links]
 
     joints = [JointStruct(
         id=joint["id"],
         name=joint["name"],
         type=joint["type"],
-        axis=xp.array(joint.get("axis", [0., 0., 0.])),
+        axis=xp.array(_joint_axis_value(joint) if _joint_axis_value(joint) is not None else [0., 0., 0.]),
         parent_link_id=joint["parent_link_id"],
         child_link_id=joint["child_link_id"],
+        q_representation=joint.get("q_representation"),
         origin=SE3.set_pos_quaternion(
           xp.array(joint.get("origin", {}).get("position", [0., 0., 0.])),
-          xp.array(joint.get("origin", {}).get("orientation", [1., 0., 0., 0.])),
+          xp.array(_unit_quaternion(joint.get("origin", {}).get("orientation", [1., 0., 0., 0.]))),
           LIB=lib
         ),
         lib=lib
-    ) for joint in data["joints"]]
+    ) for joint in sorted_joints]
 
     return RobotStruct(links, joints)
   
@@ -170,11 +532,7 @@ class RobotStruct:
         link_dict["mass"] = float(link.mass)
         link_dict["cog"] = link.cog.tolist() if link.cog is not None else [0.0, 0.0, 0.0]
 
-        if link.inertia is not None and link.inertia.shape == (6,):
-            inertia_list = link.inertia.tolist()
-        else:
-            inertia_list = [1,1,1,0,0,0]
-        link_dict["inertia"] = inertia_list
+        link_dict["inertia"] = inertia_vector_to_dict(link.inertia)
         link_dict["length"] = float(link.length) if link.length is not None else 0.0
 
         link_dict["geometry"] = None
@@ -187,22 +545,27 @@ class RobotStruct:
         joint_dict["id"] = joint.id
         joint_dict["name"] = joint.name
         joint_dict["type"] = joint.type
+        joint_dict["dof"] = joint.dof
+        if joint.q_representation is not None:
+            joint_dict["q_representation"] = joint.q_representation
 
-        joint_dict["axis"] = joint.axis.tolist()
+        if joint.type in ("revolute", "prismatic", "spherical"):
+            joint_dict["axis"] = _joint_axis_to_dict(joint)
 
         joint_dict["parent_link_id"] = joint.parent_link_id
         joint_dict["child_link_id"] = joint.child_link_id
 
         pos, quat = joint.origin.pos_quaternion()
         origin_dict = {
-            "position": pos,
-            "orientation": quat
+            "position": pos.tolist() if hasattr(pos, "tolist") else list(pos),
+            "orientation": quat.tolist() if hasattr(quat, "tolist") else list(quat),
         }
         joint_dict["origin"] = origin_dict
 
         joints_array.append(joint_dict)
 
     return {
+        "schema_version": MODEL_SCHEMA_VERSION,
         "links": links_array,
         "joints": joints_array
     }
@@ -277,17 +640,47 @@ class LinkStruct:
 
 class JointStruct:
     dof_index : int = 0
-    def __init__(self, id: int, name: str, type: str, axis: np.ndarray, parent_link_id: int, child_link_id: int, origin: SE3, lib: str = "numpy"):
+    def __init__(
+        self,
+        id: int,
+        name: str,
+        type: str,
+        axis: np.ndarray,
+        parent_link_id: int,
+        child_link_id: int,
+        origin: SE3,
+        q_representation: str | None = None,
+        lib: str = "numpy",
+    ):
         xp = _array_module(lib)
+        if type == "fix":
+            raise ValueError(
+                f"Unsupported joint type 'fix' for joint '{name}'. "
+                "Use 'fixed' instead."
+            )
         self.id = id
         self.name = name
         self.type = type
-        self.axis = axis if xp.linalg.norm(axis) > 0 else xp.array([1, 0, 0])
+        self.q_representation = q_representation
+        if type == "spherical":
+            if q_representation != "rotation_vector":
+                raise ValueError(
+                    f"joint '{name}'.q_representation must be 'rotation_vector' for spherical joints."
+                )
+        elif type == "floating":
+            if q_representation != "expmap":
+                raise ValueError(
+                    f"joint '{name}'.q_representation must be 'expmap' for floating joints."
+                )
+        elif q_representation is not None and q_representation not in SUPPORTED_Q_REPRESENTATIONS:
+            raise ValueError(f"Unsupported q_representation '{q_representation}' for joint '{name}'.")
+        self.axis = self._normalize_axis_value(type, axis, lib)
         self.parent_link_id = parent_link_id
         self.child_link_id = child_link_id
         self.dof = self._joint_dof(self.type)
         self.select_mat = self._select_mat(self.type, self.axis, lib)
-        self.select_indeces = xp.argmax(self.select_mat, axis=0)
+        self.select_indeces = xp.array([], dtype=int) if self.dof == 0 else xp.argmax(self.select_mat, axis=0)
+        self.select_indices = self.select_indeces
         self.origin = origin
         
     def set_dof_index(self, n : int):
@@ -301,47 +694,73 @@ class JointStruct:
             return 1
         elif type == "prismatic":
             return 1
-        elif type == "fix":
+        elif type == "fixed":
             return 0
+        elif type == "spherical":
+            return 3
+        elif type == "floating":
+            return 6
         else:
             warnings.warn(f"Unsupported joint type: {type}", UserWarning)
             return 0
 
-    #specific for 1 DOF joint or fix joint
+    #specific for 1 DOF joint or fixed joint
+    @staticmethod
+    def _normalize_axis_value(type: str, axis: np.ndarray, lib: str = "numpy") -> np.ndarray:
+        xp = _array_module(lib)
+        if type == "spherical":
+            if getattr(axis, "shape", None) == (3, 3):
+                if np.linalg.matrix_rank(np.asarray(axis, dtype=float)) < 3:
+                    raise ValueError("spherical joint axis angular basis must be full rank.")
+                return axis
+            if xp.linalg.norm(axis) <= 0:
+                return xp.eye(3)
+            raise ValueError("spherical joint axis must be a 3x3 angular basis.")
+        if type == "floating":
+            return xp.eye(6)
+        if type in ("revolute", "prismatic"):
+            norm = xp.linalg.norm(axis)
+            return axis / norm if norm > 0 else xp.array([1, 0, 0])
+        return axis if xp.linalg.norm(axis) > 0 else xp.array([1, 0, 0])
+
     @staticmethod
     def _select_mat(type: str, axis: np.ndarray, lib: str = "numpy") -> np.ndarray:
         xp = _array_module(lib)
-        mat = xp.zeros((6, 1))
-
-        if type == "fix":
-            return mat
+        if type == "fixed":
+            return xp.zeros((6, 0))
         elif type == "revolute":
+            mat = xp.zeros((6, 1))
             if lib == "jax":
                 mat = mat.at[0:3, 0].set(axis)
             elif lib == "numpy":
                 mat[0:3, 0] = axis
             return mat
         elif type == "prismatic":
+            mat = xp.zeros((6, 1))
             if lib == "jax":
                 mat = mat.at[3:6, 0].set(axis)
             elif lib == "numpy":
                 mat[3:6, 0] = axis
             return mat
+        elif type == "spherical":
+            mat = xp.zeros((6, 3))
+            if lib == "jax":
+                mat = mat.at[0:3, 0:3].set(axis)
+            elif lib == "numpy":
+                mat[0:3, 0:3] = axis
+            return mat
+        elif type == "floating":
+            return xp.eye(6)
         else:
             raise warnings.warn(f"Unsupported joint type: {type}", UserWarning)
         
     def selector(self, mat: np.ndarray) -> np.ndarray:
-        return mat[:, self.select_indeces]
+        return mat @ self.select_mat
     
     #specific for 3D space (magic number 6)
     def scatter(self, mat: np.ndarray) -> np.ndarray:
-        result = np.zeros((6, mat.shape[1]))
-        if mat.shape[1] != self.dof:
-            raise ValueError(f"Invalid input vector length: {len(mat)}")
-        for i in range(self.dof):
-            row = self.select_indeces[i]
-            print(f"row: {row}")
-            result[row] += mat[i]
-        return result
+        if mat.shape[0] != self.dof:
+            raise ValueError(f"Invalid input vector length: {mat.shape[0]}")
+        return self.select_mat @ mat
 
         

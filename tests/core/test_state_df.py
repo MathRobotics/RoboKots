@@ -4,10 +4,7 @@ import pytest
 
 pytest.importorskip("polars")
 
-from robokots.core import RobotDF as CoreRobotDF, RobotState as CoreRobotState
-from robokots.core.dataframe import RobotDF as DataframeRobotDF, RobotState as DataframeRobotState
-from robokots.core.state_table import RobotDF as CompatRobotDF, RobotState as CompatRobotState
-from robokots.contrib.polars.state_table import RobotDF, RobotState
+from robokots.contrib.polars import RobotDF, RobotState
 
 '''
 Test data for RobotDF
@@ -123,12 +120,3 @@ def test_robot_state_extract_link_pos_traj():
     assert traj.shape == (2, 2, 3)
     assert np.array_equal(traj[0, 0], test_robot_data["link1_link_pos"])
     assert np.array_equal(traj[1, 1], test_robot_data["link2_link_pos"])
-
-
-def test_dataframe_alias_exports_same_symbols():
-    assert DataframeRobotDF is RobotDF
-    assert DataframeRobotState is RobotState
-    assert CompatRobotDF is RobotDF
-    assert CompatRobotState is RobotState
-    assert CoreRobotDF is RobotDF
-    assert CoreRobotState is RobotState

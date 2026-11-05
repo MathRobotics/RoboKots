@@ -1,6 +1,6 @@
 import numpy as np
 
-from robokots.core.state_tensor import JacobianTensor, StateTensor
+from robokots.core.state.tensor import JacobianTensor, StateTensor
 
 
 def test_state_tensor_from_array_assigns_batch_and_state_axes():

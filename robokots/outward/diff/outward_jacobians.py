@@ -4,21 +4,23 @@ from mathrobo import SE3, CMTM, numerical_grad
 
 from robokots.core.robot import RobotStruct, LinkStruct, JointStruct
 from robokots.core.motion import RobotMotions
-from robokots.core.state import data_type_to_sub_func, StateType
+from robokots.core.state.spec import data_type_to_sub_func, StateType
 
-from robokots.core.state_dict import state_dict_to_rel_frame, state_dict_to_rel_cmtm, state_dict_to_cmtm
-from robokots.core.models.kinematics.base import convert_joint_to_data, convert_link_to_data
-from robokots.core.models.kinematics.kinematics import part_link_jacob, part_link_cmtm_tan_jacob
-from robokots.core.models.kinematics.kinematics_soft_link import part_soft_link_jacob, part_soft_link_cmtm_tan_jacob, calc_local_tan_mat
+from robokots.core.state.access import state_rel_frame, state_rel_cmtm, state_cmtm
+from robokots.core.kernels.joint import convert_joint_to_data
+from robokots.core.kernels.soft_link import convert_link_to_data
+from robokots.core.kernels.joint import part_link_jacob, part_link_cmtm_tan_jacob
+from robokots.core.kernels.soft_link import part_soft_link_jacob, part_soft_link_cmtm_tan_jacob, calc_local_tan_mat
 
 from robokots.outward.values import compute_outward_value
 
-def __target_link_part_joint_jacob(target_link : LinkStruct, joint : JointStruct, rel_frame : SE3) -> np.ndarray:
+def __target_link_part_joint_jacob(target_link : LinkStruct, joint : JointStruct, joint_coord : np.ndarray, rel_frame : SE3) -> np.ndarray:
   if target_link.id == joint.child_link_id:
-    mat = joint.select_mat
+    joint_data = convert_joint_to_data(joint)
+    mat = part_link_jacob(joint_data, SE3(), joint_coord)
   else:
     joint_data = convert_joint_to_data(joint)
-    mat = part_link_jacob(joint_data, rel_frame)  
+    mat = part_link_jacob(joint_data, rel_frame, joint_coord)  
   return mat
 
 def __target_link_part_link_jacob(target_link : LinkStruct, link : LinkStruct, link_coord : np.ndarray, rel_frame : SE3) -> np.ndarray:
@@ -43,7 +45,9 @@ def __target_link_part_joint_cmtm_tan_jacob(target_link : LinkStruct, joint : Jo
   if target_link.id == joint.child_link_id:
     tmp = joint_cmtm.tangent_mat()
     for i in range(rel_cmtm._n):
-      mat[i*6:(i+1)*6, i*joint.dof:(i+1)*joint.dof] = (tmp[i*6:(i+1)*6, i*6:(i+1)*6])[:, joint.select_indeces]
+      mat[i*6:(i+1)*6, i*joint.dof:(i+1)*joint.dof] = (
+        tmp[i*6:(i+1)*6, i*6:(i+1)*6] @ joint.select_mat
+      )
   else:
     joint_data = convert_joint_to_data(joint)
     mat = part_link_cmtm_tan_jacob(joint_data, rel_cmtm, joint_cmtm)
@@ -78,8 +82,9 @@ def __link_jacobian(robot : RobotStruct, motions: RobotMotions, state : dict, ta
     joint = robot.joints[j]
     if joint.dof < 1:
       continue
-    rel_frame = state_dict_to_rel_frame(state, robot.links[joint.child_link_id].name, target_link.name)
-    mat = __target_link_part_joint_jacob(target_link, joint, rel_frame)
+    joint_coord = np.asarray(motions.joint_motions(joint.dof, joint.dof_index, 1)).reshape(-1)
+    rel_frame = state_rel_frame(state, robot.links[joint.child_link_id].name, target_link.name)
+    mat = __target_link_part_joint_jacob(target_link, joint, joint_coord, rel_frame)
     jacob[:,joint.dof_index:joint.dof_index+joint.dof] = mat
     
   for l in link_route:
@@ -87,7 +92,7 @@ def __link_jacobian(robot : RobotStruct, motions: RobotMotions, state : dict, ta
     if link.dof < 1:
       continue
     link_motion = motions.link_motions(link.dof, link.dof_index, 1)
-    rel_frame = state_dict_to_rel_frame(state, link.name, target_link.name)
+    rel_frame = state_rel_frame(state, link.name, target_link.name)
     mat = __target_link_part_link_jacob(target_link, link, link_motion, rel_frame)
     jacob[:,link.dof_index:link.dof_index+link.dof] = mat
     
@@ -102,9 +107,9 @@ def __link_cmtm_tan_jacobian(robot : RobotStruct, motions: RobotMotions, state :
   for j in joint_route:
     joint = robot.joints[j]
     if joint.dof > 0:
-      rel_cmtm = state_dict_to_rel_cmtm(state, robot.links[joint.child_link_id].name, target_link.name, "link", order)
+      rel_cmtm = state_rel_cmtm(state, robot.links[joint.child_link_id].name, target_link.name, "link", order)
 
-      joint_cmtm = state_dict_to_cmtm(state, joint.name, "joint", order)
+      joint_cmtm = state_cmtm(state, joint.name, "joint", order)
       mat = __target_link_part_joint_cmtm_tan_jacob(target_link, joint, rel_cmtm, joint_cmtm)
         
       for i in range(order):
@@ -114,9 +119,9 @@ def __link_cmtm_tan_jacobian(robot : RobotStruct, motions: RobotMotions, state :
   for l in link_route:
     link = robot.links[l]
     if link.dof > 0:
-      rel_cmtm = state_dict_to_rel_cmtm(state, link.name, target_link.name, "link", order)
+      rel_cmtm = state_rel_cmtm(state, link.name, target_link.name, "link", order)
 
-      link_cmtm = state_dict_to_cmtm(state, link.name, "link", order)
+      link_cmtm = state_cmtm(state, link.name, "link", order)
       mat = __target_link_part_link_cmtm_tan_jacob(target_link, link, motions.link_motions(link.dof, link.dof_index, order), rel_cmtm, link_cmtm)
 
       for i in range(order):
@@ -138,14 +143,23 @@ def link_cmtm_jacobian(robot : RobotStruct, motions : RobotMotions, state : dict
   links = robot.link_list(link_name_list)
   jacobs = np.zeros((6*order*len(links),robot.dof*order))
   for i in range(len(links)):
-    link_cmtm = state_dict_to_cmtm(state, link_name_list[i], "link", order)
+    link_cmtm = state_cmtm(state, link_name_list[i], "link", order)
     jacobs[6*order*i:6*order*(i+1),:] = link_cmtm.tangent_mat_inv() @ __link_cmtm_tan_jacobian(robot, motions, state, links[i], order)      
 
   return jacobs
 
-def jacobian_numerical(robot : RobotStruct, motions : RobotMotions, state_type : StateType, input_motion_order = None) -> np.ndarray:
+def jacobian_numerical(
+  robot : RobotStruct,
+  motions : RobotMotions,
+  state_type : StateType,
+  input_motion_order = None,
+  gravity=(0.0, 0.0, 0.0),
+  eps=1e-8,
+) -> np.ndarray:
   def func(x):
-    return compute_outward_value(robot, x, state_type, input_order = input_motion_order)
+    return compute_outward_value(
+      robot, x, state_type, input_order=input_motion_order, gravity=gravity
+    )
 
   if input_motion_order is None:
     motion = np.zeros(robot.dof * state_type.time_order)
@@ -162,7 +176,28 @@ def jacobian_numerical(robot : RobotStruct, motions : RobotMotions, state_type :
       m = motions.link_motions(link.dof, link.dof_index, order)
       motion[link.dof_index*order:link.dof_index*order+link.dof*order] = m.flatten()
 
+  if state_type.data_type in ("pos", "rot", "frame"):
+    # Pose Jacobians use 3/6 tangent rows, not flattened matrix entries.
+    # Keep the base frame fixed while differencing, as in the analytic API.
+    from robokots.outward.state import build_kinematics_outward_state
+    def pose(x):
+      state = build_kinematics_outward_state(robot, x, order)
+      return np.asarray(state.cmtm(state_type.owner_type, state_type.owner_name, 1).elem_mat())
+    base = pose(motion)
+    inv = np.linalg.inv(base)
+    def pose_coordinates(x):
+      value = pose(x)
+      tangent = value @ inv if state_type.frame_name == "world" else inv @ value
+      angular = np.array([tangent[2,1]-tangent[1,2], tangent[0,2]-tangent[2,0], tangent[1,0]-tangent[0,1]]) / 2
+      if state_type.data_type == "pos":
+        return value[:3,3] if state_type.frame_name == "world" else tangent[:3,3]
+      if state_type.data_type == "rot":
+        return angular
+      return np.concatenate([angular, tangent[:3,3]])
+    return numerical_grad(x=motion, func=pose_coordinates, eps=eps)
+
   return numerical_grad(
             x = motion, 
             func = func, 
-            sub_func = data_type_to_sub_func(state_type.data_type))
+            sub_func = data_type_to_sub_func(state_type.data_type),
+            eps=eps)

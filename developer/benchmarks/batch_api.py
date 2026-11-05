@@ -6,7 +6,7 @@ from typing import Callable
 
 import numpy as np
 
-from robokots.core.state import StateType
+from robokots.core.state.spec import StateType
 from robokots.kots import Kots
 
 
@@ -163,7 +163,7 @@ def _operation_call(kots: Kots, op_name: str, states: list[StateType], vec: np.n
     if op_name.endswith("matvec"):
         if vec is None:
             raise ValueError(f"{op_name} requires vec")
-        return kots.jacobian_matvec(states, vec)
+        return kots.jacobian_mul(states, vec)
     raise ValueError(f"Invalid op_name: {op_name}")
 
 

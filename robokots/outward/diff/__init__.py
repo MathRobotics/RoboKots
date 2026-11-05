@@ -6,6 +6,7 @@ optional heavy dependencies remain deferred until requested.
 """
 
 __all__ = [
+    "dynamics_jax",
     "numerical_diff",
     "outward_jacobians",
     "outward_jax",

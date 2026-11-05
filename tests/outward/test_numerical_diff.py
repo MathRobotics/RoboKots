@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from robokots.kots import Kots
-from robokots.core.state import StateType, data_type_to_sub_func
+from robokots.core.state.spec import StateType, data_type_to_sub_func
 from robokots.outward.diff.numerical_diff import (
     _make_lifted_update_func,
     diff_outward_numerical,
@@ -67,7 +67,7 @@ def test_diff_outward_numerical_soft_link_matches_manual_fd():
     assert np.linalg.norm(actual) > 1e-8
 
 
-@pytest.mark.parametrize("data_type", ["pos", "frame"])
+@pytest.mark.parametrize("data_type", ["pos", "rot", "frame"])
 def test_link_diff_kinematics_numerical_multi_link_matches_single(data_type: str):
     rng = np.random.default_rng(1)
     kots = Kots.from_json_file(str(MODEL_PATH), order=3)
