@@ -381,7 +381,8 @@ class DerivativesMixin:
       return applied
     sizes = [self._jacobian_output_dim([state]) for state in state_type_list]
     offsets = np.cumsum([0] + sizes)
-    return [applied[..., offsets[i]:offsets[i + 1], ...] for i in range(len(sizes))]
+    return [applied[..., offsets[i]:offsets[i + 1], :] if rhs_is_matrix
+            else applied[..., offsets[i]:offsets[i + 1]] for i in range(len(sizes))]
 
   def _jacobian_mul_from_state(self, state, state_type_list, max_order : int, rhs, batch_shape : tuple, rhs_is_matrix : bool, list_output : bool = False):
     if not rhs_is_matrix:
@@ -707,13 +708,16 @@ class DerivativesMixin:
       for st in state_type_list:
         source_order = StateType.max_time_order([st])
         part_rhs = self._select_motion_order_rhs(rhs, source_order, max_order, rhs_is_matrix)
+        # Public methods validate against the original motion batch axes.
+        part_rhs = part_rhs.reshape(batch_shape + part_rhs.shape[-(2 if rhs_is_matrix else 1):])
         parts.append(self.jacobian_mul(st, part_rhs, numerical=numerical, eps=eps))
       return parts if list_output else np.concatenate(parts, axis=-2 if rhs_is_matrix else -1)
 
     if state_type_list and all(self._is_total_body_kinetic_energy(st) for st in state_type_list):
       if numerical:
         raise NotImplementedError("numerical Jacobian is not implemented for total_body kinetic_energy")
-      value = self.kinetic_energy_jacobian_mul(rhs)
+      public_rhs = rhs.reshape(batch_shape + rhs.shape[-(2 if rhs_is_matrix else 1):])
+      value = self.kinetic_energy_jacobian_mul(public_rhs)
       parts = [value for _ in state_type_list]
       if list_output:
         return parts
@@ -740,7 +744,10 @@ class DerivativesMixin:
     rhs, rhs_is_matrix = batch_shapes.broadcast_feature_rhs(rhs, batch_shape, output_dim, name="rhs")
 
     if any(self._is_total_body_kinetic_energy(st) for st in state_type_list) and not all(self._is_total_body_kinetic_energy(st) for st in state_type_list):
-      out = np.zeros(rhs.shape[:-(2 if rhs_is_matrix else 1)] + (self._model_metadata.dof * max_order,) + ((rhs.shape[-1],) if rhs_is_matrix else ()), dtype=rhs.dtype)
+      # Recursive public calls and their accumulator retain all batch axes.
+      rhs = rhs.reshape(batch_shape + rhs.shape[-(2 if rhs_is_matrix else 1):])
+      out_shape = batch_shape + (self._model_metadata.dof * max_order,) + ((rhs.shape[-1],) if rhs_is_matrix else ())
+      out = np.zeros(out_shape, dtype=rhs.dtype)
       row = 0
       for st in state_type_list:
         width = self._jacobian_output_dim([st])
@@ -755,6 +762,7 @@ class DerivativesMixin:
       if numerical:
         raise NotImplementedError("numerical Jacobian is not implemented for total_body kinetic_energy")
       energy_rhs = np.sum(rhs, axis=-2 if rhs_is_matrix else -1, keepdims=True)
+      energy_rhs = energy_rhs.reshape(batch_shape + energy_rhs.shape[-(2 if rhs_is_matrix else 1):])
       return self.kinetic_energy_jacobian_transpose_mul(energy_rhs)
 
     if numerical:
@@ -833,7 +841,8 @@ class DerivativesMixin:
       energy_rhs = np.sum(np.stack(energy_rhs_parts, axis=0), axis=0)
 
     if not state_type_list:
-      energy_vjp = self.kinetic_energy_jacobian_transpose_mul(energy_rhs)
+      public_rhs = energy_rhs.reshape(batch_shape + energy_rhs.shape[-(2 if rhs_is_matrix else 1):])
+      energy_vjp = self.kinetic_energy_jacobian_transpose_mul(public_rhs)
       return self._embed_motion_order_rhs(np.asarray(energy_vjp), 2, max_order, rhs_is_matrix)
 
     fused_rhs = np.concatenate(rhs_parts, axis=-2 if rhs_is_matrix else -1)
@@ -850,7 +859,8 @@ class DerivativesMixin:
     )
     if energy_rhs is None:
       return dynamics_vjp
-    energy_vjp = self.kinetic_energy_jacobian_transpose_mul(energy_rhs)
+    public_rhs = energy_rhs.reshape(batch_shape + energy_rhs.shape[-(2 if rhs_is_matrix else 1):])
+    energy_vjp = self.kinetic_energy_jacobian_transpose_mul(public_rhs)
     return dynamics_vjp + self._embed_motion_order_rhs(
       np.asarray(energy_vjp), 2, max_order, rhs_is_matrix,
     )
@@ -872,6 +882,7 @@ class DerivativesMixin:
     power_rhs, rhs_is_matrix = batch_shapes.broadcast_feature_rhs(
       power_rhs, batch_shape, 1, name="power_rhs",
     )
+    power_rhs = power_rhs.reshape(batch_shape + power_rhs.shape[-(2 if rhs_is_matrix else 1):])
     tau = np.asarray(self.state_info(torque_state) if torque_value is None else torque_value, dtype=float)
     if tau.shape != batch_shape + (self._model_metadata.dof,):
       raise ValueError(f"torque_value must have shape {batch_shape + (self._model_metadata.dof,)}, got {tau.shape}")

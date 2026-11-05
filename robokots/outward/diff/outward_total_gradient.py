@@ -2794,6 +2794,8 @@ def outward_jacobian(robot : RobotStruct, state : dict, state_type_list : list[S
 
 
 def outward_jacobian_matvec(robot : RobotStruct, state : dict, state_type_list : list[StateType], vec : np.ndarray, max_time_order = None, dim : int = 3, list_output : bool = False) -> np.ndarray:
+    vec = np.asarray(vec)
+    vec = vec.astype(np.result_type(vec.dtype, float), copy=False)
     if dim == 3 and needs_spatial_selection(state_type_list):
         selected_order = max_time_order or StateType.max_time_order(state_type_list)
         result = selected_apply(robot, state, state_type_list, selected_order, np.asarray(vec)[..., None],
@@ -2937,6 +2939,8 @@ def outward_jacobian_matvec(robot : RobotStruct, state : dict, state_type_list :
 
 
 def outward_jacobian_matmul_rhs(robot : RobotStruct, state : dict, state_type_list : list[StateType], rhs : np.ndarray, max_time_order = None, dim : int = 3, list_output : bool = False) -> np.ndarray:
+    rhs = np.asarray(rhs)
+    rhs = rhs.astype(np.result_type(rhs.dtype, float), copy=False)
     if dim == 3 and needs_spatial_selection(state_type_list):
         selected_order = max_time_order or StateType.max_time_order(state_type_list)
         result = selected_apply(robot, state, state_type_list, selected_order, np.asarray(rhs),
