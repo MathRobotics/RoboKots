@@ -53,8 +53,8 @@ def _operators(robot, state, s, order):
     frame_name = s.owner_name if s.owner_type == 'link' else robot.links[robot.joint(s.owner_name).child_link_id].name
     frame_owner = ('link', frame_name)
     frame = state_cmtm(state, frame_name, 'link', n)
-    vectors = np.asarray(c.vecs())[..., :n, :]
-    arb = CMVector(vectors)
+    coefficients = np.asarray(c.cmvecs().cm_vecs())[..., :n, :]
+    arb = CMVector.set_cmvecs(coefficients)
     factors = np.repeat([factorial(i) for i in range(n)], 6)
     adj = np.asarray(frame.mat_adj()) * factors[:, None] / factors[None, :]
     op[..., :, 6:6*(n+1)] = adj[..., -6:, :]
@@ -171,7 +171,7 @@ def _world_force_apply(robot, state, states, order, rhs, transpose, dynamics_app
         force = state_cmvec(state, s.owner_name, s.owner_type, 'force', n)
         factors = np.repeat([factorial(i) for i in range(n)], 6)
         adj = np.asarray(wrench.mat_adj()) * factors[:,None] / factors[None,:]
-        var = factors[:,None] * np.asarray(wrench.mat_var_x_arb_vec_jacob(CMVector(np.asarray(force.vecs())), frame='bframe')) @ np.asarray(frame.tangent_mat())
+        var = factors[:,None] * np.asarray(wrench.mat_var_x_arb_vec_jacob(force, frame='bframe')) @ np.asarray(frame.tangent_mat())
         blocks.append(np.concatenate([adj[..., -6:, :], var[..., -6:, :]], axis=-1))
         expanded.extend(StateType(s.owner_type,s.owner_name,'force' if i == 0 else f'force_diff{i}') for i in range(n))
         expanded.extend(StateType('link',link,spatial[i]) for i in range(n))

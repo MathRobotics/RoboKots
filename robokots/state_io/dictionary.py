@@ -4,11 +4,12 @@
 import re
 import numpy as np
 from mathrobo import CMVector
-from mathrobo import SE3, SE3wrench, CMTM, CMTM, SO3, Factorial
+from mathrobo import SE3, SE3wrench, CMTM, SO3
 
 from ..core.state.spec import keys, keys_order, keys_time_order, state_dict_key
 from ..core.state.batch import StateBatch
 from ..core.state.protocol import OutwardDataView
+from ..core.kernels.cmtm_apply import world_cmvector_value
 
 
 _STATE_MEMO_KEY = "__robokots_state_memo__"
@@ -498,7 +499,7 @@ def state_dict_to_cmvec(state : dict, owner_name : str, owner_type : str, data_t
     '''
     if hasattr(state, "cmvec"):
         cmvec = state.cmvec(owner_type, owner_name, data_type)
-        if order > cmvec._n:
+        if order < 1 or order > cmvec._n:
             raise ValueError(
                 f"Invalid order: requested {order}, but source order is {cmvec._n} for "
                 f"{owner_name}_{owner_type}_{data_type}."
@@ -508,7 +509,7 @@ def state_dict_to_cmvec(state : dict, owner_name : str, owner_type : str, data_t
         truncate = getattr(cmvec, "truncate", None)
         if truncate is not None:
             return truncate(order)
-        return CMVector(cmvec.vecs()[..., :order, :])
+        return CMVector.set_cmvecs(cmvec.cm_vecs()[..., :order, :])
 
     vecs = _collect_state_vecs_fast(state, owner_name, owner_type, data_type, order=order)
     if vecs is None:
@@ -550,16 +551,14 @@ def extract_dict_link_info(state : dict, data_type : str, link_name : str, frame
         return state_dict_to_cmtm(state, link_name, "link")
     elif "momentum" in data_type:
         if frame == 'world':
-            local_momentum = state_dict_to_cmvec(state, link_name, "link", "momentum", order).cm_vec()
-            world_momentum = CMVector(( Factorial.mat(order, dim=6) @ cmtm_wrench.mat_adj() @ local_momentum).reshape(-1,6)).vecs()
-            return world_momentum[-1]
+            local_momentum = state_dict_to_cmvec(state, link_name, "link", "momentum", order)
+            return world_cmvector_value(local_momentum, cmtm_wrench, order)
         else:
             return np.array(state[state_dict_key("link", link_name, data_type)])
     elif "force" in data_type:
         if frame == 'world':
-            local_force = state_dict_to_cmvec(state, link_name, "link", "force", order).cm_vec()
-            world_force = CMVector((Factorial.mat(order, dim=6) @ cmtm_wrench.mat_adj() @ local_force).reshape(-1,6)).vecs()
-            return world_force[-1]
+            local_force = state_dict_to_cmvec(state, link_name, "link", "force", order)
+            return world_cmvector_value(local_force, cmtm_wrench, order)
         else:
             return np.array(state[state_dict_key("link", link_name, data_type)])
     else:
@@ -578,16 +577,14 @@ def extract_dict_joint_info(state : dict, data_type : str, joint_name : str, fra
         return state_dict_to_cmtm(state, joint_name, "joint")
     elif "momentum" in data_type:
         if frame == 'world':
-            local_momentum = state_dict_to_cmvec(state, joint_name, "joint", "momentum", order).cm_vec()
-            world_momentum = CMVector((Factorial.mat(order, dim=6) @ cmtm_wrench.mat_adj() @ local_momentum).reshape(-1,6)).vecs()
-            return world_momentum[-1]
+            local_momentum = state_dict_to_cmvec(state, joint_name, "joint", "momentum", order)
+            return world_cmvector_value(local_momentum, cmtm_wrench, order)
         else:
             return np.array(state[state_dict_key("joint", joint_name, data_type)])
     elif "force" in data_type:
         if frame == 'world':
-            local_force = state_dict_to_cmvec(state, joint_name, "joint", "force", order).cm_vec()
-            world_force = CMVector((Factorial.mat(order, dim=6) @ cmtm_wrench.mat_adj() @ local_force).reshape(-1,6)).vecs()
-            return world_force[-1]
+            local_force = state_dict_to_cmvec(state, joint_name, "joint", "force", order)
+            return world_cmvector_value(local_force, cmtm_wrench, order)
         else:
             return np.array(state[state_dict_key("joint", joint_name, data_type)])
     elif "torque" in data_type:

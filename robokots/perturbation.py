@@ -7,9 +7,13 @@ import math
 import numbers
 from dataclasses import dataclass, field, fields
 from pathlib import Path
-import tomllib
 from types import MappingProxyType
 from typing import Mapping, Sequence
+
+try:
+  import tomllib
+except ModuleNotFoundError:  # Python 3.10
+  import tomli as tomllib
 
 import numpy as np
 

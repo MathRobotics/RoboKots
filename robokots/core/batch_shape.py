@@ -105,7 +105,9 @@ def broadcast_feature_vector(vec, batch_shape: tuple[int, ...], feature_shape: t
 
 
 def broadcast_feature_rhs(rhs, batch_shape: tuple[int, ...], row_count: int, name: str = "rhs"):
+  """Validate/broadcast derivative RHS, promoting to at least float64 precision."""
   arr = np.asarray(rhs)
+  arr = arr.astype(np.result_type(arr.dtype, float), copy=False)
   vector_shape = (row_count,)
 
   if not batch_shape:

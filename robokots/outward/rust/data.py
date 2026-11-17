@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
-from mathrobo import SE3
+from mathrobo import CMVector, SE3
 
 from ...core import batch_shape as batch_shapes
 from ...core.robot import RobotStruct, RobotModelInfo
@@ -139,45 +139,23 @@ def _lower_tri_blocks(blocks: np.ndarray, col_scales: np.ndarray | None = None) 
       out[..., size * i:size * (i + 1), size * j:size * (j + 1)] = block
   return out
 
-class _RustCMVectorView:
-  """CMVector-compatible view over arrays owned by a Rust outward state."""
+class _RustCMVectorView(CMVector):
+  """CM-backed vector with the same ownership and conversion rules as NumPy."""
 
   def __init__(self, vecs: np.ndarray):
-    self._vecs = np.asarray(vecs, dtype=float)
-    self._n = self._vecs.shape[-2]
-    self._dim = self._vecs.shape[-1]
-    self._len = self._n * self._dim
-    fact = _factorial(self._n, self._vecs.dtype)
-    self._cm_vecs = self._vecs / fact.reshape((1,) * (self._vecs.ndim - 2) + (self._n, 1))
+    super().__init__(np.asarray(vecs, dtype=float))
 
-  @staticmethod
-  def set_cmvecs(cm_vecs: np.ndarray) -> "_RustCMVectorView":
-    cm_vecs = np.asarray(cm_vecs, dtype=float)
-    fact = _factorial(cm_vecs.shape[-2], cm_vecs.dtype)
-    return _RustCMVectorView(cm_vecs * fact.reshape((1,) * (cm_vecs.ndim - 2) + (cm_vecs.shape[-2], 1)))
-
-  def vecs(self) -> np.ndarray:
-    return self._vecs
-
-  def cm_vecs(self) -> np.ndarray:
-    return self._cm_vecs
-
-  def vec(self) -> np.ndarray:
-    return _flatten_last2(self._vecs)
-
-  def cm_vec(self) -> np.ndarray:
-    return _flatten_last2(self._cm_vecs)
-
-  def truncate(self, order: int) -> "_RustCMVectorView":
-    return _RustCMVectorView(self._vecs[..., :order, :])
+  @classmethod
+  def set_cmvecs(cls, cm_vecs: np.ndarray) -> "_RustCMVectorView":
+    return super().set_cmvecs(np.asarray(cm_vecs, dtype=float))
 
 def _as_rust_cmvector(value) -> _RustCMVectorView:
   if isinstance(value, _RustCMVectorView):
     return value
-  if hasattr(value, "vecs"):
-    return _RustCMVectorView(value.vecs())
   if hasattr(value, "cm_vecs"):
     return _RustCMVectorView.set_cmvecs(value.cm_vecs())
+  if hasattr(value, "vecs"):
+    return _RustCMVectorView(value.vecs())
   return _RustCMVectorView(value)
 
 def _hat_cm_commute_adj(vec: _RustCMVectorView, wrench: bool) -> np.ndarray:
@@ -209,8 +187,8 @@ class _RustCMTMView:
 
   def __init__(self, mat: np.ndarray, vecs: np.ndarray, wrench: bool = False, rust_wrench_kernel=None):
     self._mat = np.asarray(mat, dtype=float)
-    self._vecs = np.asarray(vecs, dtype=float)
-    self._n = self._vecs.shape[-2] + 1
+    self._cm_vecs = (vecs.cm_vecs() if hasattr(vecs, "cm_vecs") else _RustCMVectorView(np.asarray(vecs, dtype=float)).cm_vecs())
+    self._n = self._cm_vecs.shape[-2] + 1
     self._dof = 6
     self._mat_adj_size = 6
     self._wrench = bool(wrench)
@@ -223,11 +201,11 @@ class _RustCMTMView:
   def elem_vecs(self, i: int) -> np.ndarray:
     if i < 0 or i >= self._n - 1:
       return None
-    return self._vecs[..., i, :]
+    return self._cm_vecs[..., i, :] * _factorial(i + 1, self._cm_vecs.dtype)[i]
 
   def vecs(self, output_order=None) -> np.ndarray:
     output_order = self._check_order(output_order)
-    return self._vecs[..., : output_order - 1, :]
+    return self.cmvecs().truncate(output_order - 1).vecs()
 
   def mat(self, output_order=None) -> np.ndarray:
     output_order = self._check_order(output_order)
@@ -284,10 +262,10 @@ class _RustCMTMView:
     )
 
   def as_wrench(self) -> "_RustCMTMView":
-    return _RustCMTMView(self._mat, self._vecs, wrench=True, rust_wrench_kernel=self._rust_wrench_kernel)
+    return _RustCMTMView(self._mat, self.cmvecs(), wrench=True, rust_wrench_kernel=self._rust_wrench_kernel)
 
   def cmvecs(self) -> _RustCMVectorView:
-    return _RustCMVectorView(self._vecs)
+    return _RustCMVectorView.set_cmvecs(self._cm_vecs)
 
   def mat_var_x_arb_vec_jacob(self, arb_vec, frame: str = "bframe") -> np.ndarray:
     arb_vec = _as_rust_cmvector(arb_vec)
@@ -366,7 +344,7 @@ class _RustCMTMView:
     mat = blocks[..., 0, :, :]
     vecs = np.zeros(blocks.shape[:-3] + (max(order - 1, 0), 6), dtype=blocks.dtype)
     if order <= 1:
-      return _RustCMTMView(mat, vecs, wrench=wrench, rust_wrench_kernel=rust_wrench_kernel)
+      return _RustCMTMView(mat, _RustCMVectorView.set_cmvecs(vecs), wrench=wrench, rust_wrench_kernel=rust_wrench_kernel)
     fact = _factorial(order, blocks.dtype)
     inv_mat = _mat4_inv_se3(mat)
     hats = []
@@ -375,10 +353,10 @@ class _RustCMTMView:
       for j in range(i):
         tmp = tmp + blocks[..., i - j, :, :] @ hats[j]
       delta = inv_mat @ (blocks[..., i + 1, :, :] * (i + 1) - tmp)
-      raw = _vee_se3(delta) * fact[i]
-      vecs[..., i, :] = raw
-      hats.append(_hat_se3(raw / fact[i]))
-    return _RustCMTMView(mat, vecs, wrench=wrench, rust_wrench_kernel=rust_wrench_kernel)
+      coefficient = _vee_se3(delta)
+      vecs[..., i, :] = coefficient
+      hats.append(_hat_se3(coefficient))
+    return _RustCMTMView(mat, _RustCMVectorView.set_cmvecs(vecs), wrench=wrench, rust_wrench_kernel=rust_wrench_kernel)
 
   def _rust_wrench_var_jacob_matvec(
     self,
@@ -393,33 +371,35 @@ class _RustCMTMView:
     vec = np.asarray(vec, dtype=float)
     if arb_vec._n != self._n or vec.shape[-1] != self._n * self._mat_adj_size:
       return None
-    if vec.ndim == 1 and self._mat.ndim == 2 and self._vecs.ndim == 2 and arb_vec.cm_vecs().ndim == 2:
+    if vec.ndim == 1 and self._mat.ndim == 2 and self._cm_vecs.ndim == 2 and arb_vec.cm_vecs().ndim == 2:
       return np.asarray(
         self._rust_wrench_kernel(
           np.ascontiguousarray(self._mat),
-          np.ascontiguousarray(self._vecs),
+          np.ascontiguousarray(self._cm_vecs),
           np.ascontiguousarray(arb_vec.cm_vecs()),
           np.ascontiguousarray(vec),
           bool(inverse),
           bool(transpose),
+          cm_coefficients=True,
         )
       )
     if (
       vec.ndim == 2
       and self._mat.ndim == 3
-      and self._vecs.ndim == 3
+      and self._cm_vecs.ndim == 3
       and arb_vec.cm_vecs().ndim == 3
-      and vec.shape[:-1] == self._mat.shape[:-2] == self._vecs.shape[:-2] == arb_vec.cm_vecs().shape[:-2]
+      and vec.shape[:-1] == self._mat.shape[:-2] == self._cm_vecs.shape[:-2] == arb_vec.cm_vecs().shape[:-2]
     ):
       flat_shape = (-1, self._n * self._mat_adj_size)
       flat = np.asarray(
         self._rust_wrench_kernel(
           np.ascontiguousarray(self._mat.reshape((-1, 4, 4))),
-          np.ascontiguousarray(self._vecs.reshape((-1, self._n - 1, 6))),
+          np.ascontiguousarray(self._cm_vecs.reshape((-1, self._n - 1, 6))),
           np.ascontiguousarray(arb_vec.cm_vecs().reshape((-1, self._n, 6))),
           np.ascontiguousarray(vec.reshape(flat_shape)),
           bool(inverse),
           bool(transpose),
+          cm_coefficients=True,
         )
       )
       return flat.reshape(vec.shape)
@@ -435,30 +415,32 @@ class _RustCMTMView:
     rhs = np.asarray(rhs, dtype=float)
     if arb_vec._n != self._n or rhs.ndim < 2 or rhs.shape[-2] != self._n * self._mat_adj_size:
       return None
-    if rhs.ndim == 2 and self._mat.ndim == 2 and self._vecs.ndim == 2 and arb_vec.cm_vecs().ndim == 2:
+    if rhs.ndim == 2 and self._mat.ndim == 2 and self._cm_vecs.ndim == 2 and arb_vec.cm_vecs().ndim == 2:
       return np.asarray(
         kernel(
           np.ascontiguousarray(self._mat),
-          np.ascontiguousarray(self._vecs),
+          np.ascontiguousarray(self._cm_vecs),
           np.ascontiguousarray(arb_vec.cm_vecs()),
           np.ascontiguousarray(rhs),
           bool(inverse),
+          cm_coefficients=True,
         )
       )
     if (
       rhs.ndim == 3
       and self._mat.ndim == 3
-      and self._vecs.ndim == 3
+      and self._cm_vecs.ndim == 3
       and arb_vec.cm_vecs().ndim == 3
-      and rhs.shape[:-2] == self._mat.shape[:-2] == self._vecs.shape[:-2] == arb_vec.cm_vecs().shape[:-2]
+      and rhs.shape[:-2] == self._mat.shape[:-2] == self._cm_vecs.shape[:-2] == arb_vec.cm_vecs().shape[:-2]
     ):
       flat = np.asarray(
         kernel(
           np.ascontiguousarray(self._mat.reshape((-1, 4, 4))),
-          np.ascontiguousarray(self._vecs.reshape((-1, self._n - 1, 6))),
+          np.ascontiguousarray(self._cm_vecs.reshape((-1, self._n - 1, 6))),
           np.ascontiguousarray(arb_vec.cm_vecs().reshape((-1, self._n, 6))),
           np.ascontiguousarray(rhs.reshape((-1, self._n * self._mat_adj_size, rhs.shape[-1]))),
           bool(inverse),
+          cm_coefficients=True,
         )
       )
       return flat.reshape(rhs.shape)
@@ -485,7 +467,7 @@ class _RustCMTMView:
     for k in range(1, output_order):
       acc = np.zeros(self._mat.shape[:-2] + (4, 4), dtype=self._mat.dtype)
       for i in range(k):
-        acc = acc + blocks[..., k - i - 1, :, :] @ _hat_se3(self._vecs[..., i, :] / fact[i])
+        acc = acc + blocks[..., k - i - 1, :, :] @ _hat_se3(self._cm_vecs[..., i, :])
       blocks[..., k, :, :] = acc / k
     self._cache[key] = blocks
     return blocks
@@ -501,7 +483,7 @@ class _RustCMTMView:
     for k in range(1, output_order):
       acc = np.zeros(self._mat.shape[:-2] + (4, 4), dtype=self._mat.dtype)
       for i in range(k):
-        acc = acc - _hat_se3(self._vecs[..., i, :] / fact[i]) @ blocks[..., k - i - 1, :, :]
+        acc = acc - _hat_se3(self._cm_vecs[..., i, :]) @ blocks[..., k - i - 1, :, :]
       blocks[..., k, :, :] = acc / k
     self._cache[key] = blocks
     return blocks
@@ -521,7 +503,7 @@ class _RustCMTMView:
     for k in range(1, output_order):
       acc = np.zeros(self._mat.shape[:-2] + (6, 6), dtype=self._mat.dtype)
       for i in range(k):
-        hat = _hat_adj(self._vecs[..., i, :] / fact[i], self._wrench)
+        hat = _hat_adj(self._cm_vecs[..., i, :], self._wrench)
         if inverse:
           acc = acc - hat @ blocks[..., k - i - 1, :, :]
         else:
@@ -545,7 +527,7 @@ class _RustCMTMView:
       for j in range(i):
         acc = np.zeros(self._mat.shape[:-2] + (6, 6), dtype=self._mat.dtype)
         for k in range(i - j):
-          acc = acc - _hat_adj(self._vecs[..., k, :] / fact[k], self._wrench) @ table[..., i - k - 1, j, :, :]
+          acc = acc - _hat_adj(self._cm_vecs[..., k, :], self._wrench) @ table[..., i - k - 1, j, :, :]
         table[..., i, j, :, :] = acc / i
     self._cache[key] = table
     return table
@@ -699,7 +681,10 @@ class RustOutwardState:
     cache_key = ("cmtm", owner_type, owner_name, order)
     if cache_key not in self._cache:
       mat = self._mat(owner_type, owner_name)
-      vecs = self._vecs(owner_type, owner_name, order)
+      owner_id = self._link_id(owner_name) if owner_type == "link" else self._joint_id(owner_name)
+      coefficients = np.asarray(getattr(self.raw_data, f"{owner_type}_vecs_cm")(owner_id))
+      coefficients = coefficients.reshape(getattr(self, "batch_shape", ()) + (self.order - 1, 6))
+      vecs = _RustCMVectorView.set_cmvecs(coefficients[..., :order - 1, :])
       self._cache[cache_key] = _RustCMTMView(
         mat,
         vecs,
@@ -754,20 +739,23 @@ class RustOutwardState:
     if cache_key not in self._cache:
       if data_type == "momentum":
         order = self.order - 1
-        getter = self._momentum
-      elif data_type == "force":
+      elif data_type in ("force", "torque"):
         order = self.order - 2
-        getter = self._force
       else:
         raise KeyError((owner_type, owner_name, data_type))
       if order < 1:
         raise ValueError(f"{data_type} is not available for order={self.order}")
-      self._cache[cache_key] = _RustCMVectorView(
-        np.stack(
-          [getter(owner_type, owner_name, key_order) for key_order in range(1, order + 1)],
-          axis=-2,
-        )
-      )
+      if owner_type == "link":
+        owner_id = self._link_id(owner_name)
+      elif owner_type == "joint":
+        owner_id = self._joint_id(owner_name)
+      else:
+        raise KeyError(owner_type)
+      coefficients = np.asarray(getattr(self.raw_data, f"{owner_type}_{data_type}_cm")(owner_id))
+      coefficients = coefficients.reshape(getattr(self, "batch_shape", ()) + (order, 1 if data_type == "torque" else 6))
+      if data_type == "torque":
+        coefficients = coefficients[..., :self.joint_dofs[owner_id]]
+      self._cache[cache_key] = _RustCMVectorView.set_cmvecs(coefficients)
     return self._cache[cache_key]
 
   def state_value(self, state_type):
@@ -824,16 +812,6 @@ class RustOutwardState:
     if owner_type == "link":
       return self.link_vec(name, key_order)
     return self.joint_vec(name, key_order)
-
-  def _vecs(self, owner_type: str, name, order: int) -> np.ndarray:
-    if order < 1 or order > self.order:
-      raise ValueError(f"Invalid order: {order}. Must be in 1..={self.order}.")
-    if order == 1:
-      return np.zeros(self._mat(owner_type, name).shape[:-2] + (0, 6), dtype=float)
-    return np.stack(
-      [self._vec(owner_type, name, key_order) for key_order in range(2, order + 1)],
-      axis=-2,
-    )
 
   def _momentum(self, owner_type: str, name, key_order: int) -> np.ndarray:
     if owner_type == "link":

@@ -3,11 +3,12 @@
 # 2025.09.22 Created by T.Ishigaki
 # kinematics module (JAX version)
 
+import math
 from typing import List
 
 import jax
 import jax.numpy as jnp
-from mathrobo import SE3, CMTM
+from mathrobo import SE3, CMTM, CMVector
 from robokots.core.kernels.joint import JointData
 
 # Joint-space twist calculation with proper JAX conditional
@@ -37,9 +38,9 @@ def local_cmtm(select_mat: jnp.ndarray, joint_motions: jnp.ndarray,
     if order == 1:
         vecs = jnp.zeros((0, 6))
     else:
-        vecs = jax.vmap(lambda x: local_tan_vec(select_mat, x))(motion[1:])
+        vecs = jax.vmap(lambda x: local_tan_vec(select_mat, x))(motion[1:] / jnp.asarray([math.factorial(i) for i in range(order - 1)], dtype=motion.dtype)[:, None])
 
-    return CMTM[SE3](frame, vecs)
+    return CMTM[SE3](frame, CMVector.set_cmvecs(vecs))
 
 # Joint-specific wrappers
 
@@ -67,8 +68,8 @@ def joint_rel_cmtm(joint: JointData, joint_motions: jnp.ndarray, order: int = 3)
     if order == 1:
         vecs = jnp.zeros((0, 6))
     else:
-        vecs = jax.vmap(lambda x: local_tan_vec(joint.select_mat, x))(motion[1:])
-    return CMTM[SE3](frame, vecs)
+        vecs = jax.vmap(lambda x: local_tan_vec(joint.select_mat, x))(motion[1:] / jnp.asarray([math.factorial(i) for i in range(order - 1)], dtype=motion.dtype)[:, None])
+    return CMTM[SE3](frame, CMVector.set_cmvecs(vecs))
 
 # Kinematic transforms
 

@@ -44,7 +44,7 @@ def state_cmvec(state: OutwardDataView, owner_name, owner_type, data_type, order
         return value
     if hasattr(value, "truncate"):
         return value.truncate(order)
-    return CMVector(value.vecs()[..., :order, :])
+    return CMVector.set_cmvecs(value.cm_vecs()[..., :order, :])
 
 
 def total_link_cmvec(state: OutwardDataView, link_names, data_type, order):

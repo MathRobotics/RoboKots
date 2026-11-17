@@ -5,8 +5,9 @@
 
 from dataclasses import dataclass
 
+import math
 import numpy as np
-from mathrobo import SE3, CMTM
+from mathrobo import SE3, CMTM, CMVector
 
 from robokots.core.robot import JointStruct
 
@@ -74,9 +75,9 @@ def local_cmtm(select_mat : np.ndarray, joint_motions : np.ndarray, dof : int = 
   vecs = np.zeros((order-1, 6))
 
   for i in range(order-1):
-    vecs[i] = local_tan_vec(select_mat, joint_motions[(i+1)*dof:(i+2)*dof].flatten())
+    vecs[i] = local_tan_vec(select_mat, joint_motions[(i+1)*dof:(i+2)*dof].flatten()) / math.factorial(i)
 
-  m = CMTM[SE3](frame, vecs)
+  m = CMTM[SE3](frame, CMVector.set_cmvecs(vecs))
   return m
 
 def joint_local_frame(joint : JointData, joint_coord : np.ndarray) -> SE3:  
@@ -110,8 +111,8 @@ def joint_local_cmtm(joint : JointData, joint_motions : np.ndarray, order = 3) -
     accel = joint_motions[2*dof:3*dof].flatten()
     vecs[1] = joint_local_acc(joint, coord, veloc, accel)
   for i in range(2, order-1):
-    vecs[i] = local_tan_vec(joint.select_mat, joint_motions[(i+1)*dof:(i+2)*dof].flatten())
-  return CMTM[SE3](frame, vecs)
+    vecs[i] = local_tan_vec(joint.select_mat, joint_motions[(i+1)*dof:(i+2)*dof].flatten()) / math.factorial(i)
+  return CMTM[SE3](frame, CMVector.set_cmvecs(vecs))
 
 def joint_rel_frame(joint : JointData, joint_coord : np.ndarray) -> SE3:
   rel_frame =  joint.origin @ joint_local_frame(joint, joint_coord)
@@ -126,8 +127,8 @@ def joint_rel_cmtm(joint : JointData, joint_motions : np.ndarray, order = 3) -> 
     frame = joint_rel_frame(joint, joint_motions[:dof].flatten())
     vecs = np.zeros((order-1, 6))
     for i in range(order-1):
-      vecs[i] = local_tan_vec(joint.select_mat, joint_motions[(i+1)*dof:(i+2)*dof].flatten())
-    return CMTM[SE3](frame, vecs)
+      vecs[i] = local_tan_vec(joint.select_mat, joint_motions[(i+1)*dof:(i+2)*dof].flatten()) / math.factorial(i)
+    return CMTM[SE3](frame, CMVector.set_cmvecs(vecs))
 
   frame = joint_rel_frame(joint, joint_motions[:dof].flatten())
   vecs = np.zeros((order-1, 6))
@@ -139,9 +140,9 @@ def joint_rel_cmtm(joint : JointData, joint_motions : np.ndarray, order = 3) -> 
     accel = joint_motions[2*dof:3*dof].flatten()
     vecs[1] = joint_local_acc(joint, coord, veloc, accel)
   for i in range(2, order-1):
-    vecs[i] = local_tan_vec(joint.select_mat, joint_motions[(i+1)*dof:(i+2)*dof].flatten())
+    vecs[i] = local_tan_vec(joint.select_mat, joint_motions[(i+1)*dof:(i+2)*dof].flatten()) / math.factorial(i)
 
-  m = CMTM[SE3](frame, vecs)
+  m = CMTM[SE3](frame, CMVector.set_cmvecs(vecs))
   return m
 
 def kinematics(joint : JointData, p_link_frame : SE3, joint_coord : np.ndarray) -> SE3:

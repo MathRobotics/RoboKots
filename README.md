@@ -2,21 +2,29 @@
 
 Utilities based on the Kots framework for robotic system modeling, kinematics, and dynamics analysis.
 
+Python 3.11 or later is recommended. Python 3.10 is supported as a deprecated
+compatibility target for existing environments such as ROS 2 Humble. New
+deployments should use Python 3.11 or later. Python 3.9 is not supported.
+Python 3.10 resolves older compatible versions of dependencies such as JAX,
+NumPy, and SciPy. The optional Rust backend requires a native wheel built for
+the selected Python version and platform.
+
 Clone RoboKots
 ```
 git clone https://github.com/MathRobotics/RoboKots
 ```
 
-Install RoboKots
-```
+Install the Python package (no Rust compiler or native source checkout required):
+
+```bash
 pip install .
 ```
 
-This builds the Python package and the experimental Rust backend extension.
-With uv, RoboKots can also be added directly from Git:
-```
-uv add "robokots @ git+https://github.com/MathRobotics/RoboKots.git"
-```
+Use `backend="numpy"` for Python/NumPy computation. To use `backend="rust"`,
+install a compatible, separately supplied `robokots-native` wheel into the same
+Python environment. RoboKots checks native API version 1 before loading it.
+An absent or incompatible extension raises an explicit error; it does not
+silently switch backends. See [optional native backend](docs/RUST_CORE_SEPARATION.md).
 
 Install optional table support for Polars-backed state tables:
 ```
@@ -40,6 +48,37 @@ python -m examples.simple_example.main
 
 Developer-only benchmarks live under `developer/benchmarks`; see
 `developer/README.md` for setup and commands.
+
+## Tests by Python version
+
+Run the portable core, API, NumPy/JAX, TOML and visualization tests in a
+separate environment for each Python version, using `uv.lock` and the
+`test`/`viz` extras:
+
+```bash
+./scripts/test-python.sh                         # 3.10, 3.11, 3.12, 3.13
+./scripts/test-python.sh 3.10 3.13               # Selected versions
+./scripts/test-python.sh 3.10 -- tests/test_perturbation_toml.py -q
+```
+
+Python 3.10 is a deprecated compatibility target. The script can run from any
+directory and creates `.venv-py<VERSION>` without changing `.venv`. `uv` may
+download interpreters and dependencies. A failed version does not stop the
+remaining versions; the final summary reports each result, and any failure
+returns a nonzero exit code. Pytest's default configuration excludes `slow` tests.
+
+Arguments after `--` replace the default test selection. The default selection
+excludes Rust integration tests and local developer experiments. To run the full
+suite, first install a matching `robokots-native` wheel in each version's
+environment, then run:
+
+```bash
+./scripts/test-python.sh 3.13 -- tests
+```
+
+The script preserves separately installed packages such as the native extension.
+The full suite may include optional tests or local experiments whose additional
+dependencies must be prepared separately. See `./scripts/test-python.sh --help`.
 
 ## Batch Shapes and Axis-Aware Data
 
@@ -156,6 +195,37 @@ comparison and validation. `jacobian_mul()` applies the gravity CMTM variation
 directly for vector and matrix right-hand sides, without assembling the dense
 gravity Jacobian.
 
+NumPy dynamics keeps momentum, force, gravity corrections, and subtree
+accumulation in factorial-normalized CM coefficients. For momentum coefficients
+`p_bar[k] = p^(k) / k!`, the force derivative term is `(k + 1) * p_bar[k + 1]`.
+Joint torques are also stored as CM coefficients. Ordinary derivatives are
+reconstructed only when requested through public state outputs; output units
+and derivative conventions are unchanged.
+
+Rust stores kinematic motion, momentum, force, moving-frame gravity, and joint torque as CM
+coefficients throughout the persistent dynamics workspace. Tangent/reverse
+kernels read those coefficients directly; their public Jacobians and products
+retain ordinary physical-output units. Ordinary result values are reconstructed
+only by public output getters, including the legacy bulk-array APIs. Native CM
+series getters feed the Python Rust-vector adapter without an ordinary-value
+round trip. `truncate()` shares a coefficient prefix and `vecs()` reconstructs a
+detached ordinary-derivative array. Native world getters transform CM coefficients
+and reconstruct only the requested derivative row. The specialized low-order
+fast paths remain in use, where the relevant factorial factors are all one.
+
+CMTM objects and Rust CMTM adapters retain only normalized motion coefficients.
+Array-backed states also retain CM series; their ordinary array properties
+reconstruct detached output arrays. Batch sample selection shares coefficient
+slices directly, including torque, without ordinary-value serialization.
+NumPy torque mappings reconstruct ordinary arrays on read and normalize arrays
+assigned by callers. Native bulk APIs keep their existing ordinary output default;
+`cm_coefficients=True` lets internal array-state builders transfer CM data directly.
+
+World-frame state queries transform normalized coefficients and reconstruct only
+the requested derivative row. Spatial Jacobian and direct-product operators reuse
+the same CM series without converting through ordinary derivatives. Dictionary
+world-frame outputs follow the same conversion path and preserve batch axes.
+
 ## JAX Automatic Differentiation of Dynamics
 
 `jacobian_autodiff()` computes dynamics Jacobians independently with JAX
@@ -229,3 +299,8 @@ from robokots.robot_io import load_json_file, validate_model_data
 model_data = load_json_file("robot.json")
 validate_model_data(model_data)
 ```
+
+### Optional native backend
+
+Native compilation is managed separately from this Python repository.
+See [installation and compatibility](docs/RUST_CORE_SEPARATION.md).

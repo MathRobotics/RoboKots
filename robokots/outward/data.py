@@ -2,10 +2,38 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from collections.abc import MutableMapping
+
 import numpy as np
 from mathrobo import CMTM, CMVector, SE3, SE3wrench
 
 
+
+
+class CMSeriesMapping(MutableMapping):
+    """Ordinary-array mapping interface backed exclusively by CMVector values."""
+    def __init__(self, values=()):
+        self._coefficients = {}
+        for name, value in dict(values).items():
+            self[name] = value
+
+    def __getitem__(self, name):
+        return self._coefficients[name].vecs()
+
+    def __setitem__(self, name, value):
+        self._coefficients[name] = value if isinstance(value, CMVector) else CMVector(np.asarray(value))
+
+    def __delitem__(self, name):
+        del self._coefficients[name]
+
+    def __iter__(self):
+        return iter(self._coefficients)
+
+    def __len__(self):
+        return len(self._coefficients)
+
+    def cmvector(self, name):
+        return self._coefficients[name]
 
 
 def _truncate_cmtm_order(cmtm: CMTM, order: int) -> CMTM:
@@ -15,7 +43,7 @@ def _truncate_cmtm_order(cmtm: CMTM, order: int) -> CMTM:
         raise ValueError(f"Invalid order: {order}. Must be <= source order {cmtm._n}.")
     if order == cmtm._n:
         return cmtm
-    return CMTM[SE3](SE3.set_mat(cmtm.elem_mat()), cmtm.vecs()[..., : order - 1, :])
+    return CMTM[SE3](SE3.set_mat(cmtm.elem_mat()), cmtm.cmvecs().truncate(order - 1))
 
 
 @dataclass
@@ -30,6 +58,9 @@ class OutwardState:
     joint_force: dict[str, CMVector] = field(default_factory=dict)
     joint_torque: dict[str, np.ndarray] = field(default_factory=dict)
     _cache: dict[tuple, object] = field(default_factory=dict, init=False, repr=False)
+
+    def __post_init__(self):
+        self.joint_torque = CMSeriesMapping(self.joint_torque)
 
     def cmtm(self, owner_type: str, owner_name: str, order: int | None = None) -> CMTM:
         source = self.link_cmtm if owner_type == "link" else self.joint_cmtm
@@ -81,6 +112,8 @@ class OutwardState:
         return self._cache[cache_key]
 
     def cmvec(self, owner_type: str, owner_name: str, data_type: str) -> CMVector:
+        if data_type == "torque" and owner_type == "joint":
+            return self.joint_torque.cmvector(owner_name)
         source_by_type = {
             ("link", "momentum"): self.link_momentum,
             ("joint", "momentum"): self.joint_momentum,
@@ -92,7 +125,7 @@ class OutwardState:
     def quantity_series(self, owner_type: str, owner_name: str, data_type: str) -> np.ndarray:
         """Read stored derivatives with shape (..., order, dimension).
 
-        Missing quantities raise KeyError. The returned array is not a snapshot.
+        Missing quantities raise KeyError. Ordinary arrays are reconstructed on read.
         """
         if data_type == "torque":
             if owner_type != "joint":
@@ -101,40 +134,66 @@ class OutwardState:
         return self.cmvec(owner_type, owner_name, data_type).vecs()
 
 
-@dataclass
 class ArrayOutwardState:
-    order: int
-    link_names: tuple[str, ...]
-    joint_names: tuple[str, ...]
-    joint_dofs: tuple[int, ...]
-    link_mat: np.ndarray
-    link_vecs: np.ndarray
-    joint_mat: np.ndarray
-    joint_vecs: np.ndarray
-    link_momentum_array: np.ndarray | None = None
-    link_force_array: np.ndarray | None = None
-    joint_momentum_array: np.ndarray | None = None
-    joint_force_array: np.ndarray | None = None
-    joint_torque_array: np.ndarray | None = None
-    _cache: dict[tuple, object] = field(default_factory=dict, init=False, repr=False)
+    """Array-backed state. Public array attributes reconstruct detached ordinary values."""
+    def __init__(self, order, link_names, joint_names, joint_dofs, link_mat, link_vecs,
+                 joint_mat, joint_vecs, link_momentum_array=None, link_force_array=None,
+                 joint_momentum_array=None, joint_force_array=None, joint_torque_array=None,
+                 *, cm_storage=False):
+        self.order = order
+        self.link_names, self.joint_names, self.joint_dofs = link_names, joint_names, joint_dofs
+        self.link_mat, self.joint_mat = np.asarray(link_mat), np.asarray(joint_mat)
+        self._series_cm = {}
+        for name, value in {
+            "link_vecs": link_vecs,
+            "joint_vecs": joint_vecs,
+            "link_momentum_array": link_momentum_array,
+            "link_force_array": link_force_array,
+            "joint_momentum_array": joint_momentum_array,
+            "joint_force_array": joint_force_array,
+            "joint_torque_array": joint_torque_array,
+        }.items():
+            if value is not None:
+                values = np.asarray(value)
+                self._series_cm[name] = CMVector.set_cmvecs(values) if cm_storage else CMVector(values)
+        self._cache = {}
+        self._link_index = {name: i for i, name in enumerate(link_names)}
+        self._joint_index = {name: i for i, name in enumerate(joint_names)}
 
-    def __post_init__(self) -> None:
-        self.link_mat = np.asarray(self.link_mat)
-        self.link_vecs = np.asarray(self.link_vecs)
-        self.joint_mat = np.asarray(self.joint_mat)
-        self.joint_vecs = np.asarray(self.joint_vecs)
-        if self.link_momentum_array is not None:
-            self.link_momentum_array = np.asarray(self.link_momentum_array)
-        if self.link_force_array is not None:
-            self.link_force_array = np.asarray(self.link_force_array)
-        if self.joint_momentum_array is not None:
-            self.joint_momentum_array = np.asarray(self.joint_momentum_array)
-        if self.joint_force_array is not None:
-            self.joint_force_array = np.asarray(self.joint_force_array)
-        if self.joint_torque_array is not None:
-            self.joint_torque_array = np.asarray(self.joint_torque_array)
-        self._link_index = {name: i for i, name in enumerate(self.link_names)}
-        self._joint_index = {name: i for i, name in enumerate(self.joint_names)}
+    @property
+    def link_vecs(self):
+        value = self._series_cm.get("link_vecs")
+        return None if value is None else value.vecs()
+
+    @property
+    def joint_vecs(self):
+        value = self._series_cm.get("joint_vecs")
+        return None if value is None else value.vecs()
+
+    @property
+    def link_momentum_array(self):
+        value = self._series_cm.get("link_momentum_array")
+        return None if value is None else value.vecs()
+
+    @property
+    def link_force_array(self):
+        value = self._series_cm.get("link_force_array")
+        return None if value is None else value.vecs()
+
+    @property
+    def joint_momentum_array(self):
+        value = self._series_cm.get("joint_momentum_array")
+        return None if value is None else value.vecs()
+
+    @property
+    def joint_force_array(self):
+        value = self._series_cm.get("joint_force_array")
+        return None if value is None else value.vecs()
+
+    @property
+    def joint_torque_array(self):
+        value = self._series_cm.get("joint_torque_array")
+        return None if value is None else value.vecs()
 
     @property
     def link_cmtm(self) -> dict[str, CMTM]:
@@ -161,18 +220,10 @@ class ArrayOutwardState:
         return self._cmvec_dict("joint", "force")
 
     @property
-    def joint_torque(self) -> dict[str, np.ndarray]:
-        cache_key = ("joint_torque_dict",)
-        if cache_key not in self._cache:
-            if self.joint_torque_array is None:
-                self._cache[cache_key] = {}
-            else:
-                self._cache[cache_key] = {
-                    name: self.joint_torque_array[..., i, :, :dof]
-                    for i, (name, dof) in enumerate(zip(self.joint_names, self.joint_dofs))
-                    if dof > 0
-                }
-        return self._cache[cache_key]
+    def joint_torque(self):
+        return {name: self.cmvec("joint", name, "torque").vecs()
+                for name, dof in zip(self.joint_names, self.joint_dofs)
+                if dof > 0 and "joint_torque_array" in self._series_cm}
 
     def cmtm(self, owner_type: str, owner_name: str, order: int | None = None) -> CMTM:
         if order is None:
@@ -183,12 +234,12 @@ class ArrayOutwardState:
         cache_key = ("cmtm", owner_type, owner_name, order)
         if cache_key not in self._cache:
             mat, vecs = self._cmtm_arrays(owner_type, owner_name)
-            source_order = vecs.shape[-2] + 1
+            source_order = vecs._n + 1
             if order > source_order:
                 raise ValueError(f"Invalid order: {order}. Must be <= source order {source_order}.")
             self._cache[cache_key] = CMTM[SE3](
                 SE3.set_mat(mat),
-                vecs[..., : order - 1, :],
+                vecs.truncate(order - 1),
             )
         return self._cache[cache_key]
 
@@ -231,40 +282,37 @@ class ArrayOutwardState:
             )
         return self._cache[cache_key]
 
-    def cmvec(self, owner_type: str, owner_name: str, data_type: str) -> CMVector:
+    def cmvec(self, owner_type, owner_name, data_type):
         cache_key = ("cmvec", owner_type, owner_name, data_type)
         if cache_key not in self._cache:
-            arrays = {
-                ("link", "momentum"): self.link_momentum_array,
-                ("link", "force"): self.link_force_array,
-                ("joint", "momentum"): self.joint_momentum_array,
-                ("joint", "force"): self.joint_force_array,
-            }
-            array = arrays[(owner_type, data_type)]
-            if array is None:
+            name = f"{owner_type}_{data_type}_array"
+            if name not in self._series_cm:
                 raise KeyError((owner_type, owner_name, data_type))
             idx = self._index(owner_type, owner_name)
-            self._cache[cache_key] = CMVector(array[..., idx, :, :])
+            coefficients = self._series_cm[name].cm_vecs()[..., idx, :, :]
+            if data_type == "torque":
+                coefficients = coefficients[..., :self.joint_dofs[idx]]
+            self._cache[cache_key] = CMVector.set_cmvecs(coefficients)
         return self._cache[cache_key]
 
     def quantity_series(self, owner_type: str, owner_name: str, data_type: str) -> np.ndarray:
         """Read stored derivatives with shape (..., order, dimension).
 
-        Missing quantities raise KeyError. The returned array is not a snapshot.
+        Missing quantities raise KeyError. Ordinary arrays are reconstructed on read.
         """
         if data_type == "torque":
-            if owner_type != "joint" or self.joint_torque_array is None:
+            if owner_type != "joint" or "joint_torque_array" not in self._series_cm:
                 raise KeyError((owner_type, owner_name, data_type))
             idx = self._index(owner_type, owner_name)
-            return self.joint_torque_array[..., idx, :, :self.joint_dofs[idx]]
+            return self.cmvec("joint", owner_name, "torque").vecs()
         return self.cmvec(owner_type, owner_name, data_type).vecs()
 
     def _cmtm_arrays(self, owner_type: str, owner_name: str) -> tuple[np.ndarray, np.ndarray]:
         idx = self._index(owner_type, owner_name)
         if owner_type == "link":
-            return self.link_mat[..., idx, :, :], self.link_vecs[..., idx, :, :]
+            return self.link_mat[..., idx, :, :], CMVector.set_cmvecs(self._series_cm["link_vecs"].cm_vecs()[..., idx, :, :])
         if owner_type == "joint":
-            return self.joint_mat[..., idx, :, :], self.joint_vecs[..., idx, :, :]
+            return self.joint_mat[..., idx, :, :], CMVector.set_cmvecs(self._series_cm["joint_vecs"].cm_vecs()[..., idx, :, :])
         raise KeyError(owner_type)
 
     def _index(self, owner_type: str, owner_name: str) -> int:
@@ -274,23 +322,12 @@ class ArrayOutwardState:
             return self._joint_index[owner_name]
         raise KeyError(owner_type)
 
-    def _cmvec_dict(self, owner_type: str, data_type: str) -> dict[str, CMVector]:
+    def _cmvec_dict(self, owner_type, data_type):
         cache_key = ("cmvec_dict", owner_type, data_type)
         if cache_key not in self._cache:
-            arrays = {
-                ("link", "momentum"): self.link_momentum_array,
-                ("link", "force"): self.link_force_array,
-                ("joint", "momentum"): self.joint_momentum_array,
-                ("joint", "force"): self.joint_force_array,
-            }
-            if arrays[(owner_type, data_type)] is None:
-                self._cache[cache_key] = {}
-                return self._cache[cache_key]
             names = self.link_names if owner_type == "link" else self.joint_names
-            self._cache[cache_key] = {
-                name: self.cmvec(owner_type, name, data_type)
-                for name in names
-            }
+            self._cache[cache_key] = ({name: self.cmvec(owner_type, name, data_type) for name in names}
+                if f"{owner_type}_{data_type}_array" in self._series_cm else {})
         return self._cache[cache_key]
 
 
@@ -305,7 +342,7 @@ def state_sample(robot, state, index):
             value = state.cmtm(owner_type, owner.name)
             result[owner.name] = CMTM[SE3](
                 SE3.set_mat(np.asarray(value.elem_mat())[index]),
-                np.asarray(value.vecs())[index],
+                CMVector.set_cmvecs(np.asarray(value.cmvecs().cm_vecs())[index]),
             )
         return result
 
@@ -316,10 +353,10 @@ def state_sample(robot, state, index):
             families = ("momentum", "force", "torque") if owner_type == "joint" and owner.dof else ("momentum", "force")
             for family in families:
                 try:
-                    series = state.quantity_series(owner_type, owner.name, family)[index]
+                    coefficients = state.cmvec(owner_type, owner.name, family).cm_vecs()[index]
                 except KeyError:
                     continue
-                if series.shape[-2]:
+                if coefficients.shape[-2]:
                     getattr(sample, f"{owner_type}_{family}")[owner.name] = (
-                        series if family == "torque" else CMVector(series))
+                        CMVector.set_cmvecs(coefficients))
     return sample
